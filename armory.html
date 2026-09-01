@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Armory &amp; Loaner Audit</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground: #eaedf1; --surface: #ffffff; --surface-2: #f4f6f9;
+    --ink: #14202b; --muted: #5c6d7e; --faint: #8b9aa8;
+    --line: #d3dae1; --line-strong: #b8c3cd;
+    --accent: #a3512a; --accent-ink: #ffffff; --accent-soft: #f2ded4;
+    --good: #1c7355; --good-soft: #dfeee8;
+    --warn: #8c6210; --warn-soft: #f6ecd6;
+    --bad: #a12f2a; --bad-soft: #f6dedc;
+    --shadow: 0 1px 2px rgba(20,32,43,.06), 0 8px 24px rgba(20,32,43,.06);
+    --display: 'Saira Condensed','Arial Narrow',Helvetica,sans-serif;
+    --body: 'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
+    --mono: 'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+      --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+      --line: #26313b; --line-strong: #35434f;
+      --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+      --good: #46a583; --good-soft: #172a24;
+      --warn: #cc9f3f; --warn-soft: #2a2417;
+      --bad: #dd6a61; --bad-soft: #2c1b1a;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+    --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+    --line: #26313b; --line-strong: #35434f;
+    --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+    --good: #46a583; --good-soft: #172a24;
+    --warn: #cc9f3f; --warn-soft: #2a2417;
+    --bad: #dd6a61; --bad-soft: #2c1b1a;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--body); font-size: 15px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 28px 20px 72px; display: flex; flex-direction: column; gap: 22px; }
+
+  .backbar a {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+    text-decoration: none; border: 1px solid var(--line-strong);
+    border-radius: 3px; padding: 7px 12px; display: inline-block;
+  }
+  .backbar a:hover { color: var(--accent); border-color: var(--accent); }
+  .backbar a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .masthead {
+    display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between;
+    gap: 12px 24px; padding-bottom: 18px; border-bottom: 2px solid var(--line-strong);
+  }
+  h1 { font-family: var(--display); font-weight: 700; font-size: clamp(30px,5vw,42px); line-height: 1.02; margin: 0; }
+  .masthead p { margin: 6px 0 0; color: var(--muted); max-width: 58ch; }
+  .stamp {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .13em; text-transform: uppercase; color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 2px; padding: 5px 10px; white-space: nowrap;
+  }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; box-shadow: var(--shadow); }
+  .panel-head {
+    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+    gap: 8px 16px; padding: 14px 18px; border-bottom: 1px solid var(--line);
+  }
+  .panel-head h2 {
+    font-family: var(--display); font-weight: 600; font-size: 19px;
+    letter-spacing: .04em; text-transform: uppercase; margin: 0;
+  }
+  .panel-head .hint { color: var(--faint); font-size: 13px; margin: 0; }
+  .panel-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+
+  label.lbl {
+    font-family: var(--display); font-weight: 600; font-size: 12px;
+    letter-spacing: .11em; text-transform: uppercase; color: var(--muted);
+    display: block; margin-bottom: 6px;
+  }
+
+  input[type="password"], input[type="text"] {
+    font-family: var(--mono); font-size: 15px; color: var(--ink);
+    background: var(--surface-2); border: 1px solid var(--line-strong);
+    border-radius: 3px; padding: 9px 11px; width: 100%; min-width: 0;
+  }
+  input:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .btn {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .08em; text-transform: uppercase;
+    background: var(--surface-2); color: var(--ink);
+    border: 1px solid var(--line-strong); border-radius: 3px;
+    padding: 9px 15px; cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn.primary:hover { color: var(--accent-ink); filter: brightness(1.06); }
+  .btn[disabled] { opacity: .55; cursor: default; filter: none; }
+  .btn.quiet { background: transparent; border-color: transparent; color: var(--faint); }
+  .btn.quiet:hover { color: var(--bad); border-color: var(--line); }
+
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .grow { flex: 1 1 200px; min-width: 0; }
+
+  .msg { font-size: 14px; border-radius: 3px; padding: 11px 13px; margin: 0; }
+  .msg.err { background: var(--bad-soft); color: var(--bad); }
+  .msg.ok { background: var(--good-soft); color: var(--good); }
+  .msg[hidden] { display: none; }
+
+  .figures {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1px; background: var(--line); border: 1px solid var(--line);
+    border-radius: 4px; overflow: hidden;
+  }
+  .figure { background: var(--surface); padding: 15px 17px; display: flex; flex-direction: column; gap: 3px; }
+  .figure .k {
+    font-family: var(--display); font-weight: 600; font-size: 12px;
+    letter-spacing: .11em; text-transform: uppercase; color: var(--muted);
+  }
+  .figure .v { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 500; font-size: 24px; line-height: 1.2; }
+  .figure.alert .v { color: var(--warn); }
+  .figure .sub { font-size: 12px; color: var(--faint); }
+
+  .borrower { border-bottom: 1px solid var(--line); padding: 14px 18px; display: flex; flex-direction: column; gap: 8px; }
+  .borrower:last-child { border-bottom: 0; }
+  .borrower .who {
+    font-family: var(--display); font-weight: 700; font-size: 20px; letter-spacing: .01em;
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px;
+  }
+  .borrower .who .n { font-family: var(--mono); font-size: 12px; font-weight: 500; color: var(--faint); }
+  .borrower ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; }
+  .borrower li { font-size: 14px; }
+  .borrower li .cat {
+    font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+    color: var(--faint); margin-left: 6px;
+  }
+
+  .table-scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; min-width: 520px; }
+  th {
+    font-family: var(--display); font-weight: 600; font-size: 12px;
+    letter-spacing: .11em; text-transform: uppercase; color: var(--muted);
+    text-align: left; background: var(--surface-2);
+    border-bottom: 1px solid var(--line-strong); padding: 11px 14px;
+  }
+  th.right, td.num { text-align: right; }
+  td { padding: 9px 14px; border-bottom: 1px solid var(--line); }
+  td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  td .cat { font-family: var(--mono); font-size: 11px; text-transform: uppercase; color: var(--faint); }
+
+  .logline { padding: 9px 18px; border-bottom: 1px solid var(--line); font-size: 14px; display: flex; gap: 12px; }
+  .logline:last-child { border-bottom: 0; }
+  .logline time { font-family: var(--mono); font-size: 12px; color: var(--faint); white-space: nowrap; flex: none; }
+
+  .empty { padding: 30px 18px; text-align: center; color: var(--faint); }
+
+  details { border-top: 1px solid var(--line); }
+  summary {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+    padding: 13px 18px; cursor: pointer;
+  }
+  summary:hover { color: var(--accent); }
+  details dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 14px; }
+  details dt { font-weight: 600; color: var(--muted); }
+  details dd { margin: 0; }
+
+  footer { border-top: 1px solid var(--line); padding-top: 16px; color: var(--faint); font-size: 13px; }
+  footer p { margin: 0 0 6px; max-width: 72ch; }
+
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav class="backbar"><a href="./">&larr; All tools</a></nav>
+
+  <header class="masthead">
+    <div>
+      <h1>Armory &amp; Loaner Audit</h1>
+      <p>Who is holding faction property right now, what is still in the armory, and what has been
+        taken out lately.</p>
+    </div>
+    <span class="stamp">PoIitically Incorrect &middot; 48039</span>
+  </header>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Run the audit</h2>
+      <p class="hint">Reads only. Nothing is returned or claimed for you.</p>
+    </div>
+    <div class="panel-body">
+      <div>
+        <label class="lbl" for="apiKey">Torn Custom API Key</label>
+        <div class="toolbar">
+          <input type="password" id="apiKey" class="grow" autocomplete="off" spellcheck="false"
+                 placeholder="Paste your key">
+          <button type="button" class="btn" id="toggleKey" aria-pressed="false">Show</button>
+          <button type="button" class="btn primary" id="runBtn">Run audit</button>
+          <button type="button" class="btn quiet" id="forgetKey">Forget key</button>
+        </div>
+      </div>
+      <p class="msg err" id="errorBox" role="alert" hidden></p>
+      <p class="msg ok" id="okBox" role="status" hidden></p>
+    </div>
+
+    <details>
+      <summary>Which key selections this needs</summary>
+      <div class="panel-body">
+        <dl>
+          <dt>Selections</dt>
+          <dd>faction → <strong>inventory</strong> and faction → <strong>news</strong>. Error 16
+            means one is missing — a tick box, not a broken key.</dd>
+          <dt>What it reads</dt>
+          <dd>The armory contents in all nine categories, plus the recent armory action log.</dd>
+          <dt>Storage</dt>
+          <dd>Your key stays in this browser. No server, no account.</dd>
+          <dt>Writes</dt>
+          <dd>None. It cannot return an item or message anyone.</dd>
+        </dl>
+      </div>
+    </details>
+  </section>
+
+  <section class="figures" id="figures" hidden aria-label="Summary">
+    <div class="figure alert"><span class="k">Out on loan</span><span class="v" id="figLoaned">0</span><span class="sub">items held by members</span></div>
+    <div class="figure"><span class="k">Holders</span><span class="v" id="figHolders">0</span><span class="sub">members with faction property</span></div>
+    <div class="figure"><span class="k">In the armory</span><span class="v" id="figStock">0</span><span class="sub">items available</span></div>
+    <div class="figure"><span class="k">Distinct items</span><span class="v" id="figKinds">0</span><span class="sub">across all categories</span></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Out on loan</h2>
+      <p class="hint" id="loanHint">Not run yet</p>
+    </div>
+    <div id="loans"></div>
+    <p class="empty" id="loansEmpty">Paste a key and press Run audit.</p>
+    <div class="panel-body" id="loanActions" hidden>
+      <div class="toolbar">
+        <button type="button" class="btn" id="copyLoans">Copy the list</button>
+        <span class="msg ok" id="copyToast" role="status" hidden></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Still in the armory</h2>
+      <p class="hint">What is available to loan out.</p>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th><button type="button" class="sr">Item</button>Item</th>
+            <th>Category</th>
+            <th class="right">In armory</th>
+            <th class="right">On loan</th>
+          </tr>
+        </thead>
+        <tbody id="stockBody"></tbody>
+      </table>
+    </div>
+    <p class="empty" id="stockEmpty">Nothing loaded.</p>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Recent armory activity</h2>
+      <p class="hint">Newest first, straight from Torn's own log.</p>
+    </div>
+    <div id="log"></div>
+    <p class="empty" id="logEmpty">Nothing loaded.</p>
+  </section>
+
+  <footer>
+    <p><strong>What "on loan" means here.</strong> Torn's own armory data marks an item with the
+      member currently holding it. This page reports exactly that, so a name on the list is Torn's
+      record, not a guess from reading the log.</p>
+    <p><strong>Manual refresh only.</strong> One press, one read. The page never polls in the
+      background and never acts inside Torn.</p>
+  </footer>
+</div>
+
+<script>
+  (function () {
+    'use strict';
+
+    var KEY_STORE = 'ks-leader-board-key';
+    var CATEGORIES = ['weapons', 'armor', 'temporary', 'medical', 'consumables',
+                      'drugs', 'boosters', 'utilities', 'loot'];
+
+    var el = {};
+    ['apiKey','toggleKey','runBtn','forgetKey','errorBox','okBox','figures','figLoaned',
+     'figHolders','figStock','figKinds','loans','loansEmpty','loanHint','loanActions','copyLoans',
+     'copyToast','stockBody','stockEmpty','log','logEmpty']
+      .forEach(function (id) { el[id] = document.getElementById(id); });
+
+    var loans = [];
+
+    function show(box, message) { box.textContent = message; box.hidden = false; }
+    function hide(box) { box.textContent = ''; box.hidden = true; }
+
+    function readKey() { try { return localStorage.getItem(KEY_STORE) || ''; } catch (e) { return ''; } }
+    function storeKey(v) {
+      try { if (v) localStorage.setItem(KEY_STORE, v); else localStorage.removeItem(KEY_STORE); }
+      catch (e) { /* storage blocked */ }
+    }
+
+    function describeError(code) {
+      if (code === 2) return 'Torn rejected the key. Check it was copied whole.';
+      if (code === 16) return 'The key is missing a selection. Enable faction → inventory and faction → news on the Custom Key.';
+      if (code === 13) return 'This key is disabled after seven days of account inactivity.';
+      if (code === 10) return 'The key owner is in federal jail, so the key cannot be used.';
+      if (code === 18) return 'This key has been paused by its owner.';
+      if (code === 5) return 'Too many calls in the last minute. Wait a moment and run it again.';
+      if (code === 9) return 'Torn’s API is temporarily unavailable. Try again shortly.';
+      if (code === 17) return 'Torn is in a backend update. Try again in a minute.';
+      return 'Torn returned error ' + code + '.';
+    }
+
+    async function tornGet(path) {
+      var key = el.apiKey.value.trim();
+      var joiner = path.indexOf('?') === -1 ? '?' : '&';
+      var response = await fetch('https://api.torn.com/v2' + path + joiner + 'comment=KSArmoryAudit',
+        { headers: { Authorization: 'ApiKey ' + key } });
+      var payload = await response.json();
+      if (payload && payload.error) {
+        if ([2, 10, 13, 18].indexOf(payload.error.code) !== -1) { storeKey(''); el.apiKey.value = ''; }
+        throw new Error(describeError(payload.error.code));
+      }
+      return payload;
+    }
+
+    function timeText(unix) {
+      return new Date(unix * 1000).toLocaleString(undefined,
+        { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+
+    function renderLoans() {
+      el.loans.textContent = '';
+      var byHolder = new Map();
+      loans.forEach(function (row) {
+        var list = byHolder.get(row.holder) || [];
+        list.push(row);
+        byHolder.set(row.holder, list);
+      });
+
+      var holders = [...byHolder.entries()].sort(function (a, b) {
+        if (b[1].length !== a[1].length) return b[1].length - a[1].length;
+        return a[0].localeCompare(b[0], 'en', { sensitivity: 'base' });
+      });
+
+      holders.forEach(function (entry) {
+        var block = document.createElement('div');
+        block.className = 'borrower';
+
+        var who = document.createElement('div');
+        who.className = 'who';
+        who.textContent = entry[0];
+        var n = document.createElement('span');
+        n.className = 'n';
+        n.textContent = entry[1].length + (entry[1].length === 1 ? ' item' : ' items');
+        who.appendChild(n);
+        block.appendChild(who);
+
+        var ul = document.createElement('ul');
+        entry[1].forEach(function (row) {
+          var li = document.createElement('li');
+          li.textContent = row.item;
+          var cat = document.createElement('span');
+          cat.className = 'cat';
+          cat.textContent = row.category;
+          li.appendChild(cat);
+          ul.appendChild(li);
+        });
+        block.appendChild(ul);
+        el.loans.appendChild(block);
+      });
+
+      el.loansEmpty.hidden = loans.length > 0;
+      if (loans.length === 0) {
+        el.loansEmpty.textContent = 'Nothing is out on loan. The armory is whole.';
+      }
+      el.loanActions.hidden = loans.length === 0;
+      el.loanHint.textContent = loans.length === 0
+        ? 'Nothing outstanding'
+        : loans.length + ' items with ' + holders.length +
+          (holders.length === 1 ? ' member' : ' members');
+    }
+
+    function renderStock(stock) {
+      el.stockBody.textContent = '';
+      var rows = [...stock.values()].sort(function (a, b) {
+        if (b.loaned !== a.loaned) return b.loaned - a.loaned;
+        return a.name.localeCompare(b.name, 'en', { sensitivity: 'base' });
+      });
+      rows.forEach(function (row) {
+        var tr = document.createElement('tr');
+
+        var name = document.createElement('td');
+        name.textContent = row.name;
+        tr.appendChild(name);
+
+        var cat = document.createElement('td');
+        var span = document.createElement('span');
+        span.className = 'cat';
+        span.textContent = row.category;
+        cat.appendChild(span);
+        tr.appendChild(cat);
+
+        var avail = document.createElement('td');
+        avail.className = 'num';
+        avail.textContent = String(row.available);
+        tr.appendChild(avail);
+
+        var out = document.createElement('td');
+        out.className = 'num';
+        out.textContent = row.loaned > 0 ? String(row.loaned) : '—';
+        tr.appendChild(out);
+
+        el.stockBody.appendChild(tr);
+      });
+      el.stockEmpty.hidden = rows.length > 0;
+    }
+
+    function renderLog(news) {
+      el.log.textContent = '';
+      news.forEach(function (entry) {
+        var line = document.createElement('div');
+        line.className = 'logline';
+        var when = document.createElement('time');
+        when.textContent = timeText(entry.timestamp);
+        line.appendChild(when);
+        var text = document.createElement('span');
+        text.textContent = entry.text;
+        line.appendChild(text);
+        el.log.appendChild(line);
+      });
+      el.logEmpty.hidden = news.length > 0;
+    }
+
+    async function runAudit() {
+      hide(el.errorBox);
+      hide(el.okBox);
+      if (!el.apiKey.value.trim()) { show(el.errorBox, 'Paste your Custom API Key first.'); return; }
+
+      el.runBtn.disabled = true;
+      el.runBtn.textContent = 'Reading';
+
+      try {
+        loans = [];
+        var stock = new Map();
+
+        for (var i = 0; i < CATEGORIES.length; i += 1) {
+          var category = CATEGORIES[i];
+          var payload = await tornGet('/faction/inventory?cat=' + category + '&limit=1000');
+          var items = Array.isArray(payload.inventory) ? payload.inventory : [];
+          items.forEach(function (item) {
+            var name = typeof item.name === 'string' ? item.name : 'Item ' + item.id;
+            var amount = typeof item.amount === 'number' ? item.amount : 1;
+            var holder = item.loaned && typeof item.loaned.name === 'string' ? item.loaned.name : null;
+
+            var key = category + '|' + name;
+            var row = stock.get(key) || { name: name, category: category, available: 0, loaned: 0 };
+            if (holder) {
+              row.loaned += amount;
+              for (var n = 0; n < amount; n += 1) {
+                loans.push({ holder: holder, item: name, category: category });
+              }
+            } else {
+              row.available += amount;
+            }
+            stock.set(key, row);
+          });
+        }
+
+        var newsPayload = await tornGet('/faction/news?cat=armoryAction&limit=50&sort=DESC&striptags=true');
+        var news = Array.isArray(newsPayload.news) ? newsPayload.news : [];
+
+        renderLoans();
+        renderStock(stock);
+        renderLog(news);
+
+        var holders = new Set(loans.map(function (l) { return l.holder; }));
+        var available = [...stock.values()].reduce(function (sum, r) { return sum + r.available; }, 0);
+        el.figures.hidden = false;
+        el.figLoaned.textContent = String(loans.length);
+        el.figHolders.textContent = String(holders.size);
+        el.figStock.textContent = available.toLocaleString('en-US');
+        el.figKinds.textContent = String(stock.size);
+
+        storeKey(el.apiKey.value.trim());
+        show(el.okBox, 'Audit complete. ' + stock.size + ' distinct items checked.');
+      } catch (err) {
+        show(el.errorBox, err.message);
+      } finally {
+        el.runBtn.disabled = false;
+        el.runBtn.textContent = 'Run audit';
+      }
+    }
+
+    el.toggleKey.addEventListener('click', function () {
+      var showing = el.apiKey.type === 'text';
+      el.apiKey.type = showing ? 'password' : 'text';
+      el.toggleKey.textContent = showing ? 'Show' : 'Hide';
+      el.toggleKey.setAttribute('aria-pressed', String(!showing));
+    });
+
+    el.forgetKey.addEventListener('click', function () {
+      storeKey(''); el.apiKey.value = '';
+      hide(el.errorBox); show(el.okBox, 'Key removed from this browser.');
+    });
+
+    el.runBtn.addEventListener('click', function () { void runAudit(); });
+
+    el.copyLoans.addEventListener('click', function () {
+      var byHolder = new Map();
+      loans.forEach(function (row) {
+        var list = byHolder.get(row.holder) || [];
+        list.push(row.item);
+        byHolder.set(row.holder, list);
+      });
+      var lines = ['FACTION ARMORY — OUT ON LOAN', ''];
+      [...byHolder.entries()]
+        .sort(function (a, b) { return b[1].length - a[1].length; })
+        .forEach(function (entry) {
+          lines.push(entry[0] + ': ' + entry[1].join(', '));
+        });
+      lines.push('');
+      lines.push(loans.length + ' items with ' + byHolder.size + ' members.');
+      var text = lines.join('\n');
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () {
+          el.copyToast.className = 'msg ok';
+          show(el.copyToast, 'Copied.');
+        }, function () {
+          el.copyToast.className = 'msg err';
+          show(el.copyToast, 'Could not copy. Select the list and copy by hand.');
+        });
+      } else {
+        el.copyToast.className = 'msg err';
+        show(el.copyToast, 'Clipboard unavailable in this browser.');
+      }
+    });
+
+    el.apiKey.value = readKey();
+  })();
+</script>
+</body>
+</html>
