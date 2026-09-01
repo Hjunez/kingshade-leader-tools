@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OC Roster Board</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground: #eaedf1; --surface: #ffffff; --surface-2: #f4f6f9;
+    --ink: #14202b; --muted: #5c6d7e; --faint: #8b9aa8;
+    --line: #d3dae1; --line-strong: #b8c3cd;
+    --accent: #a3512a; --accent-ink: #ffffff; --accent-soft: #f2ded4;
+    --good: #1c7355; --good-soft: #dfeee8;
+    --warn: #8c6210; --warn-soft: #f6ecd6;
+    --bad: #a12f2a; --bad-soft: #f6dedc;
+    --shadow: 0 1px 2px rgba(20,32,43,.06), 0 8px 24px rgba(20,32,43,.06);
+    --display: 'Saira Condensed','Arial Narrow',Helvetica,sans-serif;
+    --body: 'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
+    --mono: 'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+      --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+      --line: #26313b; --line-strong: #35434f;
+      --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+      --good: #46a583; --good-soft: #172a24;
+      --warn: #cc9f3f; --warn-soft: #2a2417;
+      --bad: #dd6a61; --bad-soft: #2c1b1a;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+    --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+    --line: #26313b; --line-strong: #35434f;
+    --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+    --good: #46a583; --good-soft: #172a24;
+    --warn: #cc9f3f; --warn-soft: #2a2417;
+    --bad: #dd6a61; --bad-soft: #2c1b1a;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--body); font-size: 15px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 20px 72px; display: flex; flex-direction: column; gap: 22px; }
+
+  .backbar a {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+    text-decoration: none; border: 1px solid var(--line-strong);
+    border-radius: 3px; padding: 7px 12px; display: inline-block;
+  }
+  .backbar a:hover { color: var(--accent); border-color: var(--accent); }
+  .backbar a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .masthead {
+    display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between;
+    gap: 12px 24px; padding-bottom: 18px; border-bottom: 2px solid var(--line-strong);
+  }
+  h1 { font-family: var(--display); font-weight: 700; font-size: clamp(30px,5vw,42px); line-height: 1.02; margin: 0; }
+  .masthead p { margin: 6px 0 0; color: var(--muted); max-width: 58ch; }
+  .stamp {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .13em; text-transform: uppercase; color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 2px; padding: 5px 10px; white-space: nowrap;
+  }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; box-shadow: var(--shadow); }
+  .panel-head {
+    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+    gap: 8px 16px; padding: 14px 18px; border-bottom: 1px solid var(--line);
+  }
+  .panel-head h2 {
+    font-family: var(--display); font-weight: 600; font-size: 19px;
+    letter-spacing: .04em; text-transform: uppercase; margin: 0;
+  }
+  .panel-head .hint { color: var(--faint); font-size: 13px; margin: 0; }
+  .panel-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+
+  label.lbl {
+    font-family: var(--display); font-weight: 600; font-size: 12px;
+    letter-spacing: .11em; text-transform: uppercase; color: var(--muted);
+    display: block; margin-bottom: 6px;
+  }
+
+  input[type="password"], input[type="text"] {
+    font-family: var(--mono); font-size: 15px; color: var(--ink);
+    background: var(--surface-2); border: 1px solid var(--line-strong);
+    border-radius: 3px; padding: 9px 11px; width: 100%; min-width: 0;
+  }
+  input:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .btn {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .08em; text-transform: uppercase;
+    background: var(--surface-2); color: var(--ink);
+    border: 1px solid var(--line-strong); border-radius: 3px;
+    padding: 9px 15px; cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn.primary:hover { color: var(--accent-ink); filter: brightness(1.06); }
+  .btn[disabled] { opacity: .55; cursor: default; filter: none; }
+  .btn.quiet { background: transparent; border-color: transparent; color: var(--faint); }
+  .btn.quiet:hover { color: var(--bad); border-color: var(--line); }
+
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .grow { flex: 1 1 200px; min-width: 0; }
+
+  .msg { font-size: 14px; border-radius: 3px; padding: 11px 13px; margin: 0; }
+  .msg.err { background: var(--bad-soft); color: var(--bad); user-select: all; font-family: var(--mono); font-size: 13px; }
+  .msg.ok { background: var(--good-soft); color: var(--good); }
+  .msg[hidden] { display: none; }
+
+  .figures {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px; background: var(--line); border: 1px solid var(--line);
+    border-radius: 4px; overflow: hidden;
+  }
+  .figure { background: var(--surface); padding: 15px 17px; display: flex; flex-direction: column; gap: 3px; }
+  .figure .k {
+    font-family: var(--display); font-weight: 600; font-size: 12px;
+    letter-spacing: .11em; text-transform: uppercase; color: var(--muted);
+  }
+  .figure .v { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 500; font-size: 24px; line-height: 1.2; }
+  .figure.alert .v { color: var(--warn); }
+  .figure .sub { font-size: 12px; color: var(--faint); }
+
+  .crime { border-bottom: 1px solid var(--line); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+  .crime:last-child { border-bottom: 0; }
+
+  .crime-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 14px; }
+  .crime-head .name { font-family: var(--display); font-weight: 700; font-size: 22px; letter-spacing: .01em; }
+
+  .pill {
+    font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: .04em;
+    padding: 3px 8px; border-radius: 2px; white-space: nowrap;
+    background: var(--surface-2); color: var(--muted);
+  }
+  .pill.good { background: var(--good-soft); color: var(--good); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.bad { background: var(--bad-soft); color: var(--bad); }
+  .pill.accent { background: var(--accent-soft); color: var(--accent); }
+
+  .slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 10px; }
+
+  .slot {
+    border: 1px solid var(--line); border-radius: 3px;
+    background: var(--surface-2); padding: 11px 13px;
+    display: flex; flex-direction: column; gap: 5px;
+  }
+  .slot.open { border-style: dashed; border-color: var(--accent); background: var(--accent-soft); }
+  .slot.below { border-color: var(--warn); }
+
+  .slot .role {
+    font-family: var(--display); font-weight: 600; font-size: 12px;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+  }
+  .slot .who { font-weight: 500; }
+  .slot .who.vacant { color: var(--accent); font-family: var(--display); font-size: 18px; letter-spacing: .02em; }
+  .slot .meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .slot .bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+  .slot .bar i { display: block; height: 100%; background: var(--good); }
+
+  .free { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0 0; }
+
+  .empty { padding: 30px 18px; text-align: center; color: var(--faint); }
+
+  details { border-top: 1px solid var(--line); }
+  summary {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+    padding: 13px 18px; cursor: pointer;
+  }
+  summary:hover { color: var(--accent); }
+  details dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 14px; }
+  details dt { font-weight: 600; color: var(--muted); }
+  details dd { margin: 0; }
+
+  footer { border-top: 1px solid var(--line); padding-top: 16px; color: var(--faint); font-size: 13px; }
+  footer p { margin: 0 0 6px; max-width: 72ch; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav class="backbar"><a href="./">&larr; All tools</a></nav>
+
+  <header class="masthead">
+    <div>
+      <h1>OC Roster Board</h1>
+      <p>Every organised crime in progress, who sits in which seat, which seats are empty and who is
+        free to fill one.</p>
+    </div>
+    <span class="stamp">PoIitically Incorrect &middot; 48039</span>
+  </header>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Load the board</h2>
+      <p class="hint">Reads only. It cannot join, leave or start a crime.</p>
+    </div>
+    <div class="panel-body">
+      <div>
+        <label class="lbl" for="apiKey">Torn Custom API Key</label>
+        <div class="toolbar">
+          <input type="password" id="apiKey" class="grow" autocomplete="off" spellcheck="false"
+                 placeholder="Paste your key">
+          <button type="button" class="btn" id="toggleKey" aria-pressed="false">Show</button>
+          <button type="button" class="btn primary" id="loadBtn">Load board</button>
+          <button type="button" class="btn quiet" id="forgetKey">Forget key</button>
+        </div>
+      </div>
+      <p class="msg err" id="errorBox" role="alert" hidden></p>
+      <p class="msg ok" id="okBox" role="status" hidden></p>
+    </div>
+
+    <details>
+      <summary>What this needs, and what the numbers mean</summary>
+      <div class="panel-body">
+        <dl>
+          <dt>Key</dt>
+          <dd>faction → <strong>crimes</strong> and faction → <strong>members</strong>, plus faction
+            API access on your position.</dd>
+          <dt>CPR</dt>
+          <dd>The pass rate Torn reports for that seat. On a filled seat it is the member's rate. On
+            an <strong>empty</strong> seat it is <em>your own</em> rate for that role — so an empty
+            seat tells you whether you should take it.</dd>
+          <dt>The minimum CPR line</dt>
+          <dd>Your faction's own admission rule: <strong>level 1 needs 50%</strong>,
+            <strong>level 2 needs 60%</strong>, <strong>levels 3 and 4 need 65%</strong>. Anything
+            above level 4 is held to the same 65% until you say otherwise. Each crime shows the line
+            it has to clear, and seats under it are marked. This is a faction decision, not a Torn
+            mechanic.</dd>
+          <dt>Item</dt>
+          <dd>Seats that need an item say so, and whether the person holding the seat actually has
+            it.</dd>
+        </dl>
+      </div>
+    </details>
+  </section>
+
+  <section class="figures" id="figures" hidden aria-label="Summary">
+    <div class="figure"><span class="k">Active crimes</span><span class="v" id="figCrimes">0</span><span class="sub">recruiting or planning</span></div>
+    <div class="figure alert"><span class="k">Empty seats</span><span class="v" id="figOpen">0</span><span class="sub">waiting to be filled</span></div>
+    <div class="figure"><span class="k">Free members</span><span class="v" id="figFree">0</span><span class="sub">not in any crime</span></div>
+    <div class="figure alert"><span class="k">Below the line</span><span class="v" id="figBelow">0</span><span class="sub">seats under the level minimum</span></div>
+    <div class="figure"><span class="k">Missing items</span><span class="v" id="figItems">0</span><span class="sub">seats without the item</span></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Crimes in progress</h2>
+      <p class="hint" id="crimesHint">Not loaded yet</p>
+    </div>
+    <div id="crimes"></div>
+    <p class="empty" id="crimesEmpty">Paste a key and press Load board.</p>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Free members</h2>
+      <p class="hint">Not sitting in any crime right now.</p>
+    </div>
+    <div class="panel-body">
+      <div class="free" id="free"></div>
+      <p class="empty" id="freeEmpty" style="padding:6px 0">Nothing loaded.</p>
+      <div class="toolbar">
+        <button type="button" class="btn" id="copyGaps">Copy the gaps</button>
+        <span class="msg ok" id="copyToast" role="status" hidden></span>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p><strong>Manual refresh only.</strong> One press, one read. The page never polls in the
+      background and never acts inside Torn.</p>
+    <p><strong>On CPR.</strong> Torn reports it per seat, so these are its numbers, not an estimate.
+      What raises it is not published — treat the figure as a fact and any explanation of it as a
+      guess.</p>
+  </footer>
+</div>
+
+<script>
+  (function () {
+    'use strict';
+
+    var KEY_STORE = 'ks-leader-board-key';
+    // Faction policy, not a Torn mechanic. Levels above 4 carry the level 3-4 floor forward.
+    var CPR_FLOORS = { 1: 50, 2: 60, 3: 65, 4: 65 };
+    var CPR_FLOOR_DEFAULT = 65;
+
+    function floorFor(difficulty) {
+      return CPR_FLOORS[difficulty] || CPR_FLOOR_DEFAULT;
+    }
+
+    var el = {};
+    ['apiKey','toggleKey','loadBtn','forgetKey','errorBox','okBox','figures','figCrimes','figOpen',
+     'figFree','figBelow','figItems','crimes','crimesEmpty','crimesHint','free','freeEmpty',
+     'copyGaps','copyToast']
+      .forEach(function (id) { el[id] = document.getElementById(id); });
+
+    var gaps = [];
+
+    function show(box, message) { box.textContent = message; box.hidden = false; }
+    function hide(box) { box.textContent = ''; box.hidden = true; }
+
+    function readKey() { try { return localStorage.getItem(KEY_STORE) || ''; } catch (e) { return ''; } }
+    function storeKey(v) {
+      try { if (v) localStorage.setItem(KEY_STORE, v); else localStorage.removeItem(KEY_STORE); }
+      catch (e) { /* storage blocked */ }
+    }
+
+    function describeError(code) {
+      if (code === 2) return 'Torn rejected the key. Check it was copied whole.';
+      if (code === 7) return 'Your faction position is not allowed to see this. It is a faction permission, not a key setting.';
+      if (code === 16) return 'The key is missing a selection for this call.';
+      if (code === 13) return 'This key is disabled after seven days of account inactivity.';
+      if (code === 10) return 'The key owner is in federal jail, so the key cannot be used.';
+      if (code === 18) return 'This key has been paused by its owner.';
+      if (code === 5) return 'Too many calls in the last minute. Wait a moment and try again.';
+      if (code === 9) return 'Torn’s API is temporarily unavailable. Try again shortly.';
+      if (code === 17) return 'Torn is in a backend update. Try again in a minute.';
+      return 'Torn returned error ' + code + '.';
+    }
+
+    async function tornGet(path) {
+      var key = el.apiKey.value.trim();
+      var joiner = path.indexOf('?') === -1 ? '?' : '&';
+      var response;
+      try {
+        response = await fetch('https://api.torn.com/v2' + path + joiner + 'comment=KSOCBoard',
+          { headers: { Authorization: 'ApiKey ' + key } });
+      } catch (networkFailure) {
+        throw new Error('Could not reach Torn.  [GET /v2' + path + ' — network or CORS failure]');
+      }
+      var payload = await response.json();
+      if (payload && payload.error) {
+        if ([2, 10, 13, 18].indexOf(payload.error.code) !== -1) { storeKey(''); el.apiKey.value = ''; }
+        var error = new Error(describeError(payload.error.code) + '  [GET /v2' + path +
+          ' → Torn error ' + payload.error.code +
+          (payload.error.error ? ' (' + payload.error.error + ')' : '') + ']');
+        error.tornCode = payload.error.code;
+        throw error;
+      }
+      return payload;
+    }
+
+    function countdown(unix) {
+      if (!unix) return '';
+      var left = unix - Math.floor(Date.now() / 1000);
+      if (left <= 0) return 'ready';
+      if (left < 3600) return Math.ceil(left / 60) + ' min';
+      if (left < 86400) return Math.floor(left / 3600) + ' h';
+      return Math.floor(left / 86400) + ' d';
+    }
+
+    function pill(text, tone) {
+      var span = document.createElement('span');
+      span.className = 'pill' + (tone ? ' ' + tone : '');
+      span.textContent = text;
+      return span;
+    }
+
+    function renderCrime(crime, names) {
+      var block = document.createElement('div');
+      block.className = 'crime';
+
+      var head = document.createElement('div');
+      head.className = 'crime-head';
+
+      var name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = crime.name;
+      head.appendChild(name);
+
+      head.appendChild(pill('level ' + crime.difficulty, 'accent'));
+      head.appendChild(pill('needs ' + floorFor(crime.difficulty) + '%'));
+      head.appendChild(pill(crime.status,
+        crime.status === 'Planning' ? 'good' : crime.status === 'Recruiting' ? 'warn' : ''));
+
+      var when = crime.status === 'Planning' ? crime.ready_at : crime.expired_at;
+      var label = crime.status === 'Planning' ? 'ready in ' : 'expires in ';
+      var timing = countdown(when);
+      if (timing) head.appendChild(pill(label + timing));
+
+      block.appendChild(head);
+
+      var slots = document.createElement('div');
+      slots.className = 'slots';
+
+      (crime.slots || []).forEach(function (slot) {
+        var box = document.createElement('div');
+        box.className = 'slot';
+
+        var role = document.createElement('span');
+        role.className = 'role';
+        var info = slot.position_info || {};
+        role.textContent = slot.position + (info.label ? ' ' + info.label : '');
+        box.appendChild(role);
+
+        var who = document.createElement('span');
+        who.className = 'who';
+        var cpr = typeof slot.checkpoint_pass_rate === 'number' ? slot.checkpoint_pass_rate : null;
+        var floor = floorFor(crime.difficulty);
+        var below = cpr !== null && cpr < floor;
+
+        if (slot.user && slot.user.id) {
+          who.textContent = names[slot.user.id] || ('Player ' + slot.user.id);
+          if (below) box.className += ' below';
+        } else {
+          who.className = 'who vacant';
+          who.textContent = 'Seat open';
+          box.className += ' open';
+          gaps.push({
+            crime: crime.name, difficulty: crime.difficulty,
+            position: role.textContent, cpr: cpr
+          });
+        }
+        box.appendChild(who);
+
+        var meta = document.createElement('div');
+        meta.className = 'meta';
+        if (cpr !== null) {
+          meta.appendChild(pill(cpr + '% CPR', below ? 'warn' : 'good'));
+        }
+        var item = slot.item_requirement;
+        if (item) {
+          meta.appendChild(pill(item.is_available ? 'item ok' : 'item missing',
+            item.is_available ? 'good' : 'bad'));
+        }
+        box.appendChild(meta);
+
+        if (slot.user && typeof slot.user.progress === 'number' && crime.status === 'Planning') {
+          var bar = document.createElement('div');
+          bar.className = 'bar';
+          var fill = document.createElement('i');
+          fill.style.width = Math.max(0, Math.min(100, slot.user.progress)) + '%';
+          bar.appendChild(fill);
+          box.appendChild(bar);
+        }
+
+        slots.appendChild(box);
+      });
+
+      block.appendChild(slots);
+      return block;
+    }
+
+    async function loadBoard() {
+      hide(el.errorBox);
+      hide(el.okBox);
+      if (!el.apiKey.value.trim()) { show(el.errorBox, 'Paste your Custom API Key first.'); return; }
+
+      el.loadBtn.disabled = true;
+      el.loadBtn.textContent = 'Loading';
+      gaps = [];
+
+      try {
+        var memberPayload = await tornGet('/faction/members?striptags=true');
+        var members = Array.isArray(memberPayload.members) ? memberPayload.members : [];
+        var names = {};
+        members.forEach(function (m) { names[m.id] = m.name; });
+
+        var recruiting = await tornGet('/faction/crimes?cat=recruiting&limit=100');
+        var planning = await tornGet('/faction/crimes?cat=planning&limit=100');
+        var crimes = []
+          .concat(Array.isArray(recruiting.crimes) ? recruiting.crimes : [])
+          .concat(Array.isArray(planning.crimes) ? planning.crimes : []);
+
+        crimes.sort(function (a, b) {
+          if (b.difficulty !== a.difficulty) return b.difficulty - a.difficulty;
+          return (a.name || '').localeCompare(b.name || '', 'en');
+        });
+
+        el.crimes.textContent = '';
+        crimes.forEach(function (crime) { el.crimes.appendChild(renderCrime(crime, names)); });
+        el.crimesEmpty.hidden = crimes.length > 0;
+        if (crimes.length === 0) {
+          el.crimesEmpty.textContent = 'No crimes are recruiting or planning right now.';
+        }
+
+        var busy = new Set();
+        crimes.forEach(function (crime) {
+          (crime.slots || []).forEach(function (slot) {
+            if (slot.user && slot.user.id) busy.add(slot.user.id);
+          });
+        });
+        var free = members.filter(function (m) { return !busy.has(m.id) && m.is_in_oc !== true; });
+
+        el.free.textContent = '';
+        free.slice().sort(function (a, b) {
+          return a.name.localeCompare(b.name, 'en', { sensitivity: 'base' });
+        }).forEach(function (m) { el.free.appendChild(pill(m.name)); });
+        el.freeEmpty.hidden = free.length > 0;
+        if (free.length === 0) el.freeEmpty.textContent = 'Everyone is in a crime.';
+
+        var belowCount = 0;
+        var itemCount = 0;
+        crimes.forEach(function (crime) {
+          (crime.slots || []).forEach(function (slot) {
+            var cpr = slot.checkpoint_pass_rate;
+            if (slot.user && slot.user.id && typeof cpr === 'number' &&
+                cpr < floorFor(crime.difficulty)) belowCount += 1;
+            if (slot.item_requirement && slot.item_requirement.is_available === false) itemCount += 1;
+          });
+        });
+
+        el.figures.hidden = false;
+        el.figCrimes.textContent = String(crimes.length);
+        el.figOpen.textContent = String(gaps.length);
+        el.figFree.textContent = String(free.length);
+        el.figBelow.textContent = String(belowCount);
+        el.figItems.textContent = String(itemCount);
+        el.crimesHint.textContent = 'Read ' + new Date().toLocaleString();
+
+        storeKey(el.apiKey.value.trim());
+        show(el.okBox, crimes.length + ' active ' + (crimes.length === 1 ? 'crime' : 'crimes') +
+          ', ' + gaps.length + ' open ' + (gaps.length === 1 ? 'seat' : 'seats') + '.');
+      } catch (err) {
+        show(el.errorBox, err instanceof Error ? err.message : String(err));
+      } finally {
+        el.loadBtn.disabled = false;
+        el.loadBtn.textContent = 'Load board';
+      }
+    }
+
+    el.toggleKey.addEventListener('click', function () {
+      var showing = el.apiKey.type === 'text';
+      el.apiKey.type = showing ? 'password' : 'text';
+      el.toggleKey.textContent = showing ? 'Show' : 'Hide';
+      el.toggleKey.setAttribute('aria-pressed', String(!showing));
+    });
+
+    el.forgetKey.addEventListener('click', function () {
+      storeKey(''); el.apiKey.value = '';
+      hide(el.errorBox); show(el.okBox, 'Key removed from this browser.');
+    });
+
+    el.loadBtn.addEventListener('click', function () { void loadBoard(); });
+
+    el.copyGaps.addEventListener('click', function () {
+      if (gaps.length === 0) {
+        el.copyToast.className = 'msg ok';
+        show(el.copyToast, 'No open seats to chase.');
+        return;
+      }
+      var lines = ['OC SEATS OPEN — PoIitically Incorrect', ''];
+      gaps.forEach(function (g) {
+        lines.push(g.crime + ' (level ' + g.difficulty + ', needs ' + floorFor(g.difficulty) +
+          '%) — ' + g.position +
+          (g.cpr === null ? '' : ' — your CPR ' + g.cpr + '%' +
+            (g.cpr < floorFor(g.difficulty) ? ' — under the line' : '')));
+      });
+      lines.push('');
+      lines.push(gaps.length + ' seats waiting.');
+      var text = lines.join('\n');
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () {
+          el.copyToast.className = 'msg ok';
+          show(el.copyToast, 'Copied.');
+        }, function () {
+          el.copyToast.className = 'msg err';
+          show(el.copyToast, 'Could not copy.');
+        });
+      }
+    });
+
+    el.apiKey.value = readKey();
+  })();
+</script>
+</body>
+</html>
