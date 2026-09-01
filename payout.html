@@ -298,8 +298,9 @@
       <div class="panel-body">
         <dl>
           <dt>Selections</dt>
-          <dd>faction → <strong>rankedwars</strong> and faction → <strong>rankedwarreport</strong>.
-            Missing either gives error 16, which is a tick box, not a broken key.</dd>
+          <dd>faction → <strong>members</strong>, <strong>rankedwars</strong> and
+            <strong>rankedwarreport</strong>. Missing one gives error 16, which is a tick box, not a
+            broken key.</dd>
           <dt>Purpose</dt>
           <dd>Reads the list of your ranked wars, then one war report, when you press the buttons.</dd>
           <dt>Storage</dt>
@@ -406,9 +407,11 @@
     </div>
 
     <div class="row-actions">
+      <button type="button" class="btn primary" id="loadAllMembers">Load all members</button>
       <button type="button" class="btn" id="addRow">Add member</button>
       <button type="button" class="btn quiet" id="clearRoster">Clear roster</button>
     </div>
+    <p class="msg ok" id="rosterToast" role="status" hidden style="margin:0 18px 14px"></p>
 
     <details>
       <summary>Paste a list instead</summary>
@@ -468,7 +471,7 @@
      'okBox','cacheBox','pot','fixedRate','cut','minHits','minHitsNote','poolField','rateField',
      'rows','empty','countHead','leadKey','leadValue','leadSub','distributable','cutSub','paidOut',
      'paidSub','remainder','addRow','clearRoster','pasteBox','importAdd','importReplace',
-     'importToast','copyBtn','copyToast']
+     'importToast','copyBtn','copyToast','loadAllMembers','rosterToast']
       .forEach(function (id) { el[id] = document.getElementById(id); });
 
     /* ---------- helpers ---------- */
@@ -922,6 +925,46 @@
 
     el.loadWars.addEventListener('click', function () { void loadWars(); });
     el.loadReport.addEventListener('click', function () { void loadReport(); });
+
+    async function loadAllMembers() {
+      hide(el.rosterToast);
+      busy(el.loadAllMembers, true, 'Load all members');
+      try {
+        var payload = await tornGet('/faction/members?striptags=true');
+        var list = Array.isArray(payload.members) ? payload.members : null;
+        if (!list) {
+          el.rosterToast.className = 'msg err';
+          show(el.rosterToast, 'Torn answered, but not with a member list.');
+          return;
+        }
+        var existing = {};
+        state.members.forEach(function (m) { existing[m.name.toLowerCase()] = m; });
+        var added = 0;
+        list.forEach(function (m) {
+          var name = typeof m.name === 'string' ? m.name : String(m.id);
+          if (existing[name.toLowerCase()]) return;
+          state.members.push({ id: nextId++, name: name, hits: 0, score: 0 });
+          added += 1;
+        });
+        state.members.sort(function (a, b) {
+          return a.name.localeCompare(b.name, 'en', { sensitivity: 'base' });
+        });
+        el.rosterToast.className = 'msg ok';
+        show(el.rosterToast, added === 0
+          ? 'Everyone is already on the roster.'
+          : 'Added ' + added + ' ' + plural(added, 'member', 'members') +
+            '. Now fill in the ' + countWord() + ', or load a war above to fill them in for you.');
+        render();
+        save();
+      } catch (err) {
+        el.rosterToast.className = 'msg err';
+        show(el.rosterToast, err.message);
+      } finally {
+        busy(el.loadAllMembers, false, 'Load all members');
+      }
+    }
+
+    el.loadAllMembers.addEventListener('click', function () { void loadAllMembers(); });
 
     el.addRow.addEventListener('click', function () {
       state.members.push({ id: nextId++, name: '', hits: 0, score: 0 });
