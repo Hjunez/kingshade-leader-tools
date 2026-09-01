@@ -116,7 +116,7 @@
   .grow { flex: 1 1 200px; min-width: 0; }
 
   .msg { font-size: 14px; border-radius: 3px; padding: 11px 13px; margin: 0; }
-  .msg.err { background: var(--bad-soft); color: var(--bad); }
+  .msg.err { background: var(--bad-soft); color: var(--bad); user-select: all; font-family: var(--mono); font-size: 13px; }
   .msg.ok { background: var(--good-soft); color: var(--good); }
   .msg[hidden] { display: none; }
 
@@ -345,15 +345,37 @@
       return 'Torn returned error ' + code + '.';
     }
 
+    // Every failure carries the exact endpoint, HTTP status and Torn error code, so a problem can be
+    // diagnosed from the screen instead of guessed at.
+    function TornCallError(path, status, code, text) {
+      var plain = describeError(code);
+      var detail = 'GET /v2' + path + ' → HTTP ' + status +
+        (code === null ? '' : ', Torn error ' + code + (text ? ' (' + text + ')' : ''));
+      var error = new Error(plain + '  [' + detail + ']');
+      error.tornCode = code;
+      error.detail = detail;
+      return error;
+    }
+
     async function tornGet(path) {
       var key = el.apiKey.value.trim();
       var joiner = path.indexOf('?') === -1 ? '?' : '&';
-      var response = await fetch('https://api.torn.com/v2' + path + joiner + 'comment=KSArmoryAudit',
-        { headers: { Authorization: 'ApiKey ' + key } });
-      var payload = await response.json();
+      var response;
+      try {
+        response = await fetch('https://api.torn.com/v2' + path + joiner + 'comment=KSArmoryAudit',
+          { headers: { Authorization: 'ApiKey ' + key } });
+      } catch (networkFailure) {
+        throw new Error('Could not reach Torn.  [GET /v2' + path + ' — network or CORS failure]');
+      }
+      var payload;
+      try {
+        payload = await response.json();
+      } catch (parseFailure) {
+        throw TornCallError(path, response.status, null, 'response was not JSON');
+      }
       if (payload && payload.error) {
         if ([2, 10, 13, 18].indexOf(payload.error.code) !== -1) { storeKey(''); el.apiKey.value = ''; }
-        throw new Error(describeError(payload.error.code));
+        throw TornCallError(path, response.status, payload.error.code, payload.error.error);
       }
       return payload;
     }
@@ -539,17 +561,15 @@
         storeKey(el.apiKey.value.trim());
 
         if (inventoryError !== null) {
-          el.loansEmpty.textContent = 'The armory contents need a Limited access key. Your key ' +
-            'read the activity log below, but not the item list.';
-          el.stockEmpty.textContent = 'Needs a Limited access key.';
-          show(el.errorBox, 'Armory contents unavailable: ' + inventoryError +
-            ' — Torn requires a Limited access key for the armory itself. The activity log below ' +
-            'loaded fine.');
+          el.loansEmpty.textContent = 'The armory item list did not load. The exact reason from ' +
+            'Torn is in the red box above — send that line on and it can be fixed.';
+          el.stockEmpty.textContent = 'Not loaded.';
+          show(el.errorBox, 'Armory contents: ' + inventoryError);
         } else {
           show(el.okBox, 'Audit complete. ' + stock.size + ' distinct items checked.');
         }
       } catch (err) {
-        show(el.errorBox, err.message);
+        show(el.errorBox, err instanceof Error ? err.message : String(err));
       } finally {
         el.runBtn.disabled = false;
         el.runBtn.textContent = 'Run audit';
