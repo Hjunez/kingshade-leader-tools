@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ask KS Leslie</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground: #eaedf1; --surface: #ffffff; --surface-2: #f4f6f9;
+    --ink: #14202b; --muted: #5c6d7e; --faint: #8b9aa8;
+    --line: #d3dae1; --line-strong: #b8c3cd;
+    --accent: #a3512a; --accent-ink: #ffffff; --accent-soft: #f2ded4;
+    --good: #1c7355; --good-soft: #dfeee8;
+    --warn: #8c6210; --warn-soft: #f6ecd6;
+    --shadow: 0 1px 2px rgba(20,32,43,.06), 0 8px 24px rgba(20,32,43,.06);
+    --display: 'Saira Condensed','Arial Narrow',Helvetica,sans-serif;
+    --body: 'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
+    --mono: 'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+      --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+      --line: #26313b; --line-strong: #35434f;
+      --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+      --good: #46a583; --good-soft: #172a24;
+      --warn: #cc9f3f; --warn-soft: #2a2417;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+    --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+    --line: #26313b; --line-strong: #35434f;
+    --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+    --good: #46a583; --good-soft: #172a24;
+    --warn: #cc9f3f; --warn-soft: #2a2417;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--body); font-size: 15px; line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 860px; margin: 0 auto; padding: 28px 20px 72px; display: flex; flex-direction: column; gap: 22px; }
+
+  .backbar a {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+    text-decoration: none; border: 1px solid var(--line-strong);
+    border-radius: 3px; padding: 7px 12px; display: inline-block;
+  }
+  .backbar a:hover { color: var(--accent); border-color: var(--accent); }
+  .backbar a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .masthead { padding-bottom: 18px; border-bottom: 2px solid var(--line-strong); }
+  h1 { font-family: var(--display); font-weight: 700; font-size: clamp(32px,5vw,46px); line-height: 1.02; margin: 0; }
+  .masthead p { margin: 8px 0 0; color: var(--muted); max-width: 60ch; }
+
+  .searchbar { display: flex; flex-direction: column; gap: 10px; }
+
+  input[type="search"] {
+    font-family: var(--body); font-size: 17px; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--line-strong);
+    border-radius: 4px; padding: 14px 16px; width: 100%; box-shadow: var(--shadow);
+  }
+  input[type="search"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    font-family: var(--display); font-weight: 600; font-size: 12px;
+    letter-spacing: .09em; text-transform: uppercase;
+    background: var(--surface); color: var(--muted);
+    border: 1px solid var(--line-strong); border-radius: 3px;
+    padding: 7px 11px; cursor: pointer;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+  .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .count { font-size: 13px; color: var(--faint); }
+
+  .results { display: flex; flex-direction: column; gap: 14px; }
+
+  article {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 4px; box-shadow: var(--shadow); padding: 20px 22px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+
+  article h2 {
+    font-family: var(--display); font-weight: 700; font-size: 22px;
+    line-height: 1.12; margin: 0; text-wrap: balance;
+  }
+
+  .badge {
+    align-self: flex-start;
+    font-family: var(--mono); font-size: 11px; font-weight: 500;
+    letter-spacing: .05em; text-transform: uppercase;
+    padding: 3px 8px; border-radius: 2px;
+  }
+  .badge.official { background: var(--good-soft); color: var(--good); }
+  .badge.supporting { background: var(--warn-soft); color: var(--warn); }
+
+  .content { white-space: pre-wrap; margin: 0; }
+
+  .source {
+    font-size: 13px; color: var(--faint);
+    border-top: 1px solid var(--line); padding-top: 10px; margin: 0;
+  }
+  .source strong { color: var(--muted); font-weight: 600; }
+
+  mark { background: var(--accent-soft); color: inherit; padding: 0 1px; border-radius: 2px; }
+
+  .empty { text-align: center; color: var(--faint); padding: 40px 10px; }
+
+  footer { border-top: 1px solid var(--line); padding-top: 18px; color: var(--faint); font-size: 13px; }
+  footer p { margin: 0 0 6px; max-width: 72ch; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav class="backbar"><a href="./">&larr; All tools</a></nav>
+
+  <header class="masthead">
+    <h1>Ask KS Leslie</h1>
+    <p>Everything Leslie can currently stand behind about Torn, with the source for each answer and
+      how well established it is. If it is not here, he does not know it yet &mdash; and saying so is
+      the point.</p>
+  </header>
+
+  <div class="searchbar">
+    <label class="sr-only" for="q" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Search</label>
+    <input type="search" id="q" placeholder="Search: API key, rate limit, captcha, crime formula&hellip;" autocomplete="off">
+    <div class="chips" id="chips"></div>
+    <p class="count" id="count"></p>
+  </div>
+
+  <div class="results" id="results"></div>
+
+  <footer>
+    <p><strong>Green</strong> means it comes from Torn&rsquo;s own rules or official API
+      documentation. <strong>Amber</strong> means it is supported by evidence but not settled &mdash;
+      treat it as the best current answer, not as law.</p>
+    <p>Leslie is deliberately narrow. He would rather tell you he does not know than give you a
+      confident guess, because a wrong answer about the rules costs a game ban.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var RECORDS = [{"id": "torn.rule.sharing-exploits-and-conduct", "subject": "Account sharing, exploit abuse, capture privacy and conduct rules that bind script development", "content": "Torn rules beyond Scripting Abuse that constrain KS development:\n- Account sharing: no tool may perform an action on behalf of another player. A shared tool displays information; it never acts.\n- Compromising security: capture fixtures and shared artefacts must not contain another player's private data.\n- Bug and exploit abuse: an exploit that is found is reported to Torn, never used.\n- Copyright: page content may be used for personal purposes. A published capture fixture is reduced to selectors and structural metadata.\n- Language and advertising: public forum replies are in English, and a script is advertised only by its owner, in the correct forum section.", "evidence": "OFFICIAL_CURRENT", "verification": "OFFICIAL_CURRENT", "sourceRef": "torn.com rules page, sections on account sharing, security, exploits, copyright and advertising", "sourceDesc": "Official Torn rules adjacent to scripting that shape tool design", "updated": "2026-09-01"}, {"id": "torn.api.key-disclosure-duty", "subject": "Disclosure duties for any tool that asks a Torn player for an API key", "content": "torn.com/api.html requires a tool that asks a user for a key to disclose, before the key is given: the purpose it is used for, where and how it is stored, how long it is retained, whether and with whom it is shared, how the key material is handled, and which access level is required.\nA Torn account password must never be requested by any tool, for any reason.\nDesign consequence for KS scripts: the key prompt itself carries the disclosure text, the required access level is named explicitly, and the disclosure is part of the released script's description rather than an undocumented assumption.", "evidence": "OFFICIAL_CURRENT", "verification": "OFFICIAL_CURRENT", "sourceRef": "torn.com/api.html acceptable usage terms, key handling section", "sourceDesc": "Official Torn API terms, user-disclosure duties", "updated": "2026-09-01"}, {"id": "torn.api.faction-members-shape", "subject": "Fields returned by the faction members endpoint, from the official specification", "content": "The faction members endpoint returns an object with a single members array. Each member carries these fields, all of them required by the specification:\nid, name, position, level, days_in_faction, is_revivable, is_on_wall, is_in_oc, has_early_discharge, revive_setting, plus two nested objects.\nlast_action: status, one of Online, Idle or Offline; timestamp, a unix time in seconds; relative, a human phrase.\nstatus: state, one of Abroad, Awoken, Dormant, Fallen, Federal, Hospital, Jail, Okay or Traveling; description, a human sentence; details, a string or null; until, a unix time or null; color; and plane_image_type for travel.\nWhat is absent, and cannot be obtained for any player through the API: battle stats. Strength, defence, speed and dexterity are not exposed for other players, including a leader's own members. Any member overview must therefore be built around activity and availability, not strength, and third-party stat estimates must never be presented as verified values.", "evidence": "OFFICIAL_CURRENT", "verification": "OFFICIAL_CURRENT", "sourceRef": "www.torn.com/swagger/openapi.json, FactionMember and FactionMembersResponse schemas, read 2026-09-01", "sourceDesc": "Official field list for the faction members endpoint", "updated": "2026-09-01"}, {"id": "torn.api.rate-limit-and-cache", "subject": "Torn API rate limit, caching behaviour, and the cache-buster prohibition", "content": "From torn.com/api.html, which the Scripting Abuse rule makes binding:\n- 100 calls per minute counted across all of a user's keys. The limit can change without notice, so it must live in exactly one constant in a script, never be spread across call sites.\n- Service cache: responses may be cached up to 30 seconds.\n- Global cache: itemmarket, properties, rentals, companies, bazaar and bounties are globally cached and that cache cannot be bypassed.\n- Cached responses do not consume quota. A cache-buster therefore buys nothing and only burns the rate limit, so it must never be used.\nDesign consequence: a KS script schedules API work against one shared limiter, treats a cached answer as a correct answer, and never adds randomised query parameters to force a fresh read.", "evidence": "OFFICIAL_CURRENT", "verification": "OFFICIAL_CURRENT", "sourceRef": "torn.com/api.html acceptable usage terms", "sourceDesc": "Official Torn API terms, rate limit and caching section", "updated": "2026-09-01"}, {"id": "torn.rule.scripting-abuse", "subject": "Torn Scripting Abuse rule, verbatim, and its penalty", "content": "Torn's Scripting Abuse rule, quoted verbatim from the official rules page:\n\n\"The use of scripts, extensions, applications, or any other software is permitted only when they rely on data from our API or from a page that you have manually loaded and are actively viewing. Such software must not make additional non-API requests to Torn, scrape pages that are not currently being viewed, attempt to bypass CAPTCHA protections, or extract data from unfocused pages to send elsewhere, generate alerts, or draw attention to itself or another window. Any software that makes non-API requests which are not directly and manually initiated by the user is prohibited and may be tracked. Furthermore, releasing software with malicious or undisclosed functionality is strictly forbidden, and developers of API-based tools are required to comply with the acceptable usage terms outlined [at torn.com/api.html].\"\n\nPenalty on Torn's own penalty list for Scripting Abuse: game ban.\nCompliance with torn.com/api.html is made binding by this rule, so a breach of the API terms carries the same game-rule penalty.\nConsequence for every KS script: only Torn API data, or data already present on a page the user manually opened and is actively viewing, may be used. No additional non-API requests to Torn, no scraping of pages not being viewed, no CAPTCHA interference, no extraction from unfocused pages, and no undisclosed functionality in a released script.", "evidence": "OFFICIAL_CURRENT", "verification": "OFFICIAL_CURRENT", "sourceRef": "torn.com rules page, Scripting Abuse section; transcribed verbatim by the owner 2026-09-01", "sourceDesc": "Current official Torn rule text governing all scripting work", "updated": "2026-09-01"}, {"id": "torn.api.openapi-specification", "subject": "Torn publishes a machine-readable OpenAPI specification, readable without a key", "content": "Torn publishes a full OpenAPI 3.1 specification of its API at www.torn.com/swagger/openapi.json. It is publicly readable, needs no key, and was version 6.13.1 with 234 paths when read on 2026-09-01.\nIt is the authority for endpoint paths, parameters, response shapes and enum values. Never guess an endpoint shape or invent a field name: read the specification, and record the version you read, because the specification itself states that API v2 development is ongoing and that unaltered selections fall back to the v1 shape.\nAuthentication, from the specification's own security scheme: the key is passed in an Authorization request header with the value prefixed by ApiKey and a space. The key therefore never has to appear in a web address, a browser history entry or an intermediate server log. A query parameter named key is also accepted, but the header is the better practice and should be the default in KS tools.\nThree further query parameters exist on faction endpoints: striptags, timestamp and comment. The comment parameter tags a call so the key owner can recognise it in their own API log — KS tools should always send a recognisable comment.", "evidence": "OFFICIAL_CURRENT", "verification": "OFFICIAL_CURRENT", "sourceRef": "www.torn.com/swagger/openapi.json, OpenAPI 3.1, Torn API version 6.13.1, read 2026-09-01", "sourceDesc": "Torn's official machine-readable API specification", "updated": "2026-09-01"}, {"id": "torn.api.key-error-handling", "subject": "Transient versus terminal Torn API key errors, and Custom Key defaults", "content": "Torn API error codes split into two classes that must be handled differently:\n- Retry later: codes 5, 9 and 17. Back off and try again.\n- Stop using the key: codes 2, 10, 13 and 18. The key is invalid, or disabled by federal jail, seven days of account inactivity, or a paused account. Such a key is removed, not retried; retrying a disabled key is exactly the pattern that looks like abuse from Torn's side.\nCustom keys are created with only timestamp and lookup enabled. Every additional selection a script needs must be documented for the user, otherwise the user sees error code 16 and reads it as a bug in the script rather than a missing selection.", "evidence": "OFFICIAL_CURRENT", "verification": "OFFICIAL_CURRENT", "sourceRef": "torn.com/api.html error code table and Custom Key documentation", "sourceDesc": "Official Torn API terms, key error semantics", "updated": "2026-09-01"}, {"id": "torn.api.browser-transport", "subject": "Direct browser calls to the Torn API from a foreign origin succeed, including preflighted requests", "content": "Question: can a web page hosted somewhere other than torn.com call the Torn API directly from the browser, or does the browser block it as a cross-origin request?\nTest run 2026-09-01 in a real browser, from an unrelated https origin, against the live API with no key supplied:\n- A plain GET to the v2 user endpoint returned a readable JSON body with response type cors. Torn answered with its ordinary incorrect-key error, which proves the request reached Torn and the response was readable rather than blocked.\n- A GET carrying an Authorization header returned the same readable result. A custom Authorization header forces a browser preflight, so this proves the preflight is answered too.\n- A faction endpoint behaved identically.\nConclusion: a static page on any https host can talk to the Torn API without a proxy and without a userscript, and the key can travel in a header rather than a URL.\nLimit of this evidence: the test origin was a general-purpose site, not the GitHub Pages address a KS tool would eventually use. Both are foreign https origins, so the same behaviour is expected, but the first real page should confirm it once. This is automated evidence and stays supporting until observed on the actual deployment.", "evidence": "AUTOMATED_TEST", "verification": "SUPPORTING", "sourceRef": "Browser runtime probe from a foreign https origin against api.torn.com, 2026-09-01", "sourceDesc": "Live cross-origin transport test deciding the delivery form for faction leader tools", "updated": "2026-09-01"}, {"id": "torn.unknowns.crime-and-combat-formulas", "subject": "Torn mechanics that are not publicly established and must never be stated as verified formulas", "content": "The following are not established by official documentation or by reliable community research, and must never be presented as verified formulas:\n- The exact crime experience formula per crime and per action.\n- The exact crime experience ratio in Hustling.\n- The full CPR and role formula for Organised Crimes. CPR is role and scenario specific, so a role name cannot be used to derive it.\n- Optimal crime thresholds.\n- Parts of unpublished combat mechanics.\nRequired behaviour when an answer would need one of these: say it is unknown, state what is actually verified around it, and propose the measurement that would settle it. A confident formula here is the most damaging failure mode, because it silently corrupts every downstream recommendation.", "evidence": "COMMUNITY_DERIVED", "verification": "SUPPORTING", "sourceRef": "TORN_KNOWLEDGE_PACK_MASTER_2026-08-26_AUDIT_FIXED.md, module 00 source hierarchy and unknowns list", "sourceDesc": "Owner-curated list of Torn unknowns, kept as an explicit guard against invented formulas", "updated": "2026-09-01"}];
+
+  var SUGGESTIONS = ['API key', 'rate limit', 'captcha', 'crime formula', 'error code', 'cache'];
+
+  var q = document.getElementById('q');
+  var results = document.getElementById('results');
+  var count = document.getElementById('count');
+  var chips = document.getElementById('chips');
+
+  SUGGESTIONS.forEach(function (term) {
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'chip';
+    button.textContent = term;
+    button.addEventListener('click', function () { q.value = term; render(); q.focus(); });
+    chips.appendChild(button);
+  });
+
+  function tokens(value) {
+    return value.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  }
+
+  function score(record, terms) {
+    if (terms.length === 0) return 1;
+    var subject = record.subject.toLowerCase();
+    var content = record.content.toLowerCase();
+    var source = (record.sourceRef + ' ' + record.sourceDesc).toLowerCase();
+    var total = 0;
+    terms.forEach(function (t) {
+      if (subject.indexOf(t) !== -1) total += 10;
+      if (content.indexOf(t) !== -1) total += 4;
+      if (source.indexOf(t) !== -1) total += 1;
+    });
+    return total;
+  }
+
+  function highlight(text, terms) {
+    var fragment = document.createDocumentFragment();
+    if (terms.length === 0) { fragment.appendChild(document.createTextNode(text)); return fragment; }
+    var pattern = new RegExp('(' + terms.map(function (t) {
+      return t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }).join('|') + ')', 'ig');
+    var last = 0, match;
+    while ((match = pattern.exec(text)) !== null) {
+      if (match.index > last) fragment.appendChild(document.createTextNode(text.slice(last, match.index)));
+      var mark = document.createElement('mark');
+      mark.textContent = match[0];
+      fragment.appendChild(mark);
+      last = match.index + match[0].length;
+      if (pattern.lastIndex === match.index) pattern.lastIndex += 1;
+    }
+    if (last < text.length) fragment.appendChild(document.createTextNode(text.slice(last)));
+    return fragment;
+  }
+
+  function render() {
+    var terms = tokens(q.value);
+    var matched = RECORDS
+      .map(function (r) { return { record: r, score: score(r, terms) }; })
+      .filter(function (x) { return x.score > 0; })
+      .sort(function (a, b) { return b.score - a.score; });
+
+    results.textContent = '';
+
+    if (matched.length === 0) {
+      var empty = document.createElement('p');
+      empty.className = 'empty';
+      empty.textContent = 'Nothing on that yet. Leslie only answers from what has been checked — ' +
+        'ask Kingshade to add it.';
+      results.appendChild(empty);
+      count.textContent = '';
+      return;
+    }
+
+    count.textContent = matched.length + (matched.length === 1 ? ' answer' : ' answers') +
+      (terms.length ? ' for “' + q.value.trim() + '”' : ' in total');
+
+    matched.forEach(function (x) {
+      var r = x.record;
+      var article = document.createElement('article');
+
+      var badge = document.createElement('span');
+      var official = r.verification === 'OFFICIAL_CURRENT';
+      badge.className = 'badge ' + (official ? 'official' : 'supporting');
+      badge.textContent = official ? 'Torn official' : 'Supporting evidence';
+      article.appendChild(badge);
+
+      var heading = document.createElement('h2');
+      heading.appendChild(highlight(r.subject, terms));
+      article.appendChild(heading);
+
+      var body = document.createElement('p');
+      body.className = 'content';
+      body.appendChild(highlight(r.content, terms));
+      article.appendChild(body);
+
+      var source = document.createElement('p');
+      source.className = 'source';
+      var label = document.createElement('strong');
+      label.textContent = 'Source: ';
+      source.appendChild(label);
+      source.appendChild(document.createTextNode(r.sourceRef + ' — checked ' + r.updated));
+      article.appendChild(source);
+
+      results.appendChild(article);
+    });
+  }
+
+  q.addEventListener('input', render);
+  render();
+})();
+</script>
+</body>
+</html>

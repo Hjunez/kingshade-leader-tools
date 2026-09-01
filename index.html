@@ -215,6 +215,102 @@
 
   .keynote p { margin: 0; font-size: 14px; max-width: 70ch; }
 
+  /* ---- welcome bar ---- */
+
+  .welcome {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    box-shadow: var(--shadow);
+    padding: 14px 18px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 18px;
+  }
+
+  .welcome .hello {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 21px;
+    letter-spacing: .01em;
+  }
+
+  .welcome .hello .who { color: var(--accent); }
+
+  .presence { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+  .who-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 13px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 5px 12px 5px 9px;
+    white-space: nowrap;
+  }
+
+  .who-pill .role {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+
+  .who-pill .state { color: var(--muted); font-size: 12px; }
+
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; }
+  .dot.online { background: var(--good); }
+  .dot.idle { background: #c9922f; }
+  .dot.offline { background: var(--faint); }
+
+  .welcome input[type="password"], .welcome select {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--ink);
+    background: var(--surface-2);
+    border: 1px solid var(--line-strong);
+    border-radius: 3px;
+    padding: 8px 10px;
+    min-width: 0;
+    flex: 1 1 200px;
+  }
+
+  .welcome select { font-family: var(--body); }
+
+  .mini {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    background: var(--surface-2);
+    color: var(--ink);
+    border: 1px solid var(--line-strong);
+    border-radius: 3px;
+    padding: 8px 12px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .mini:hover { border-color: var(--accent); color: var(--accent); }
+  .mini.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .mini.link { background: none; border-color: transparent; color: var(--faint); padding: 8px 4px; }
+  .mini.link:hover { color: var(--accent); }
+  .mini:focus-visible, .welcome input:focus-visible, .welcome select:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+
+  .welcome .line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex: 1 1 320px; }
+  .welcome .note { font-size: 13px; color: var(--faint); flex-basis: 100%; margin: 0; }
+  .welcome .note.bad { color: #b3453e; }
+  [hidden] { display: none !important; }
+
   footer {
     border-top: 1px solid var(--line);
     padding-top: 18px;
@@ -242,6 +338,34 @@
     <span class="stamp">Leader &amp; Co-Leader</span>
   </header>
 
+  <section class="welcome" id="welcome">
+    <!-- no key yet -->
+    <div class="line" id="connectLine">
+      <label class="sr" for="wKey" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Torn API key</label>
+      <input type="password" id="wKey" autocomplete="off" spellcheck="false" placeholder="Paste your Torn key to sign in">
+      <button type="button" class="mini primary" id="wConnect">Sign in</button>
+    </div>
+
+    <!-- pick yourself, once -->
+    <div class="line" id="pickLine" hidden>
+      <label class="sr" for="wMe" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Who are you?</label>
+      <select id="wMe"></select>
+      <button type="button" class="mini primary" id="wSaveMe">That's me</button>
+    </div>
+
+    <!-- signed in -->
+    <div class="hello" id="helloLine" hidden>Welcome back, <span class="who" id="wName"></span></div>
+
+    <div class="presence" id="presence" hidden></div>
+
+    <div class="line" id="wActions" hidden style="flex: 0 0 auto">
+      <button type="button" class="mini" id="wRefresh">Refresh</button>
+      <button type="button" class="mini link" id="wForget">Sign out</button>
+    </div>
+
+    <p class="note" id="wNote" hidden></p>
+  </section>
+
   <section>
     <h2>Ready to use</h2>
     <div class="grid">
@@ -256,8 +380,16 @@
       <a class="card" href="payout.html">
         <span class="tag">Live</span>
         <span class="name">War Payout Ledger</span>
-        <span class="what">Split the cash from sold caches by hits or by respect, with a faction cut
-          and a minimum to qualify. Copies a clean summary into faction chat.</span>
+        <span class="what">Pulls every member's hits straight from the war report, splits the cache
+          money by hits or respect, and copies a clean summary into faction chat.</span>
+        <span class="go">Open</span>
+      </a>
+
+      <a class="card" href="knowledge.html">
+        <span class="tag">Live</span>
+        <span class="name">Ask KS Leslie</span>
+        <span class="what">What Leslie can stand behind about Torn — the scripting rules, the API
+          terms, and what nobody has actually established. Every answer carries its source.</span>
         <span class="go">Open</span>
       </a>
     </div>
@@ -295,15 +427,206 @@
 
   <div class="keynote">
     <span class="title">First time here?</span>
-    <p>The payout ledger needs nothing at all — open it and start typing. The member board asks for
-      your own Torn API key: make a Custom Key in Torn under Settings, API Keys, tick faction →
-      members, and paste it in. Your key stays in your own browser and is only ever sent to Torn.</p>
+    <p>Ask KS Leslie needs nothing — just open it. The other two ask for your own Torn API key.
+      Make one Custom Key in Torn under Settings → API Keys and tick three boxes under faction:
+      <strong>members</strong>, <strong>rankedwars</strong> and <strong>rankedwarreport</strong>.
+      That one key covers both tools.</p>
+    <p>Your key stays in your own browser and is only ever sent to Torn. Miss one of the three boxes
+      and you get error 16 — that is a tick box, not a broken key.</p>
   </div>
 
   <footer>
     <p>These pages read through Torn's official API and never act on your behalf. No account, no
       login, nothing stored on any server.</p>
+    <p>The status beside each name is that person's status <em>in Torn</em>, read once when this page
+      opens. It is not a signal that they have this page open — nothing here watches anyone.</p>
   </footer>
 </div>
+
+<script>
+(function () {
+  'use strict';
+
+  var KEY_STORE = 'ks-leader-board-key';
+  var ME_STORE = 'ks-leader-me';
+
+  var el = {};
+  ['welcome','connectLine','wKey','wConnect','pickLine','wMe','wSaveMe','helloLine','wName',
+   'presence','wActions','wRefresh','wForget','wNote']
+    .forEach(function (id) { el[id] = document.getElementById(id); });
+
+  var members = [];
+
+  function read(store) {
+    try { return localStorage.getItem(store) || ''; } catch (err) { return ''; }
+  }
+
+  function write(store, value) {
+    try {
+      if (value) localStorage.setItem(store, value);
+      else localStorage.removeItem(store);
+    } catch (err) { /* storage blocked; the page still works for this visit */ }
+  }
+
+  function note(message, bad) {
+    el.wNote.textContent = message || '';
+    el.wNote.className = 'note' + (bad ? ' bad' : '');
+    el.wNote.hidden = !message;
+  }
+
+  function describeError(code) {
+    if (code === 2) return 'Torn rejected that key. Check it was copied whole.';
+    if (code === 16) return 'The key is missing the faction members selection.';
+    if (code === 13) return 'That key is disabled after seven days of account inactivity.';
+    if (code === 10) return 'The key owner is in federal jail, so the key cannot be used.';
+    if (code === 18) return 'That key has been paused by its owner.';
+    if (code === 5) return 'Too many calls in the last minute. Try again shortly.';
+    return 'Torn returned error ' + code + '.';
+  }
+
+  function sinceText(seconds) {
+    if (seconds < 60) return 'just now';
+    if (seconds < 3600) return Math.floor(seconds / 60) + ' min ago';
+    if (seconds < 86400) return Math.floor(seconds / 3600) + ' h ago';
+    var days = Math.floor(seconds / 86400);
+    return days + (days === 1 ? ' day ago' : ' days ago');
+  }
+
+  function pill(member) {
+    var wrap = document.createElement('span');
+    wrap.className = 'who-pill';
+
+    var status = member.last_action && member.last_action.status;
+    var dot = document.createElement('span');
+    dot.className = 'dot ' + (status === 'Online' ? 'online' : status === 'Idle' ? 'idle' : 'offline');
+    wrap.appendChild(dot);
+
+    var role = document.createElement('span');
+    role.className = 'role';
+    role.textContent = member.position;
+    wrap.appendChild(role);
+
+    wrap.appendChild(document.createTextNode(member.name));
+
+    var state = document.createElement('span');
+    state.className = 'state';
+    var stamp = member.last_action && member.last_action.timestamp;
+    state.textContent = status === 'Online'
+      ? 'online'
+      : (stamp ? sinceText(Math.floor(Date.now() / 1000) - stamp) : 'offline');
+    wrap.appendChild(state);
+
+    return wrap;
+  }
+
+  function renderPresence() {
+    var leaders = members.filter(function (m) {
+      return typeof m.position === 'string' && /leader/i.test(m.position);
+    }).sort(function (a, b) {
+      var aCo = /^co/i.test(a.position) ? 1 : 0;
+      var bCo = /^co/i.test(b.position) ? 1 : 0;
+      return aCo - bCo;
+    });
+
+    el.presence.textContent = '';
+    leaders.forEach(function (m) { el.presence.appendChild(pill(m)); });
+    el.presence.hidden = leaders.length === 0;
+  }
+
+  function renderSignedIn() {
+    var me = read(ME_STORE);
+    if (me) {
+      el.wName.textContent = me;
+      el.helloLine.hidden = false;
+      el.pickLine.hidden = true;
+    } else {
+      el.helloLine.hidden = true;
+      el.wMe.textContent = '';
+      members.slice().sort(function (a, b) {
+        return a.name.localeCompare(b.name, 'en', { sensitivity: 'base' });
+      }).forEach(function (m) {
+        var option = document.createElement('option');
+        option.value = m.name;
+        option.textContent = m.name;
+        el.wMe.appendChild(option);
+      });
+      el.pickLine.hidden = false;
+    }
+    el.connectLine.hidden = true;
+    el.wActions.hidden = false;
+    renderPresence();
+  }
+
+  function renderSignedOut() {
+    el.connectLine.hidden = false;
+    el.pickLine.hidden = true;
+    el.helloLine.hidden = true;
+    el.presence.hidden = true;
+    el.wActions.hidden = true;
+  }
+
+  async function loadMembers(key) {
+    note('Reading the roster…');
+    try {
+      var response = await fetch(
+        'https://api.torn.com/v2/faction/members?striptags=true&comment=KSLeaderHub',
+        { headers: { Authorization: 'ApiKey ' + key } });
+      var payload = await response.json();
+      if (payload && payload.error) {
+        note(describeError(payload.error.code), true);
+        if ([2, 10, 13, 18].indexOf(payload.error.code) !== -1) {
+          write(KEY_STORE, '');
+          renderSignedOut();
+        }
+        return;
+      }
+      if (!Array.isArray(payload.members)) {
+        note('Torn answered, but not with a member list.', true);
+        return;
+      }
+      members = payload.members;
+      write(KEY_STORE, key);
+      note('');
+      renderSignedIn();
+    } catch (err) {
+      note('Could not reach Torn. Check your connection.', true);
+    }
+  }
+
+  el.wConnect.addEventListener('click', function () {
+    var key = el.wKey.value.trim();
+    if (!key) { note('Paste your key first.', true); return; }
+    el.wKey.value = '';
+    void loadMembers(key);
+  });
+
+  el.wKey.addEventListener('keydown', function (event) {
+    if (event.key === 'Enter') el.wConnect.click();
+  });
+
+  el.wSaveMe.addEventListener('click', function () {
+    if (!el.wMe.value) return;
+    write(ME_STORE, el.wMe.value);
+    renderSignedIn();
+  });
+
+  el.wRefresh.addEventListener('click', function () {
+    var key = read(KEY_STORE);
+    if (key) void loadMembers(key);
+  });
+
+  el.wForget.addEventListener('click', function () {
+    write(KEY_STORE, '');
+    write(ME_STORE, '');
+    members = [];
+    renderSignedOut();
+    note('Signed out. Your key was removed from this browser.');
+  });
+
+  var stored = read(KEY_STORE);
+  if (stored) void loadMembers(stored);
+  else renderSignedOut();
+})();
+</script>
 </body>
 </html>
