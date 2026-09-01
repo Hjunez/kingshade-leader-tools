@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>War Participation History</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground: #eaedf1; --surface: #ffffff; --surface-2: #f4f6f9;
+    --ink: #14202b; --muted: #5c6d7e; --faint: #8b9aa8;
+    --line: #d3dae1; --line-strong: #b8c3cd;
+    --accent: #a3512a; --accent-ink: #ffffff; --accent-soft: #f2ded4;
+    --good: #1c7355; --good-soft: #dfeee8;
+    --warn: #8c6210; --warn-soft: #f6ecd6;
+    --bad: #a12f2a; --bad-soft: #f6dedc;
+    --shadow: 0 1px 2px rgba(20,32,43,.06), 0 8px 24px rgba(20,32,43,.06);
+    --display: 'Saira Condensed','Arial Narrow',Helvetica,sans-serif;
+    --body: 'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
+    --mono: 'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+      --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+      --line: #26313b; --line-strong: #35434f;
+      --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+      --good: #46a583; --good-soft: #172a24;
+      --warn: #cc9f3f; --warn-soft: #2a2417;
+      --bad: #dd6a61; --bad-soft: #2c1b1a;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+    --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+    --line: #26313b; --line-strong: #35434f;
+    --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+    --good: #46a583; --good-soft: #172a24;
+    --warn: #cc9f3f; --warn-soft: #2a2417;
+    --bad: #dd6a61; --bad-soft: #2c1b1a;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--body); font-size: 15px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 20px 72px; display: flex; flex-direction: column; gap: 22px; }
+
+  .backbar a {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+    text-decoration: none; border: 1px solid var(--line-strong);
+    border-radius: 3px; padding: 7px 12px; display: inline-block;
+  }
+  .backbar a:hover { color: var(--accent); border-color: var(--accent); }
+  .backbar a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .masthead {
+    display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between;
+    gap: 12px 24px; padding-bottom: 18px; border-bottom: 2px solid var(--line-strong);
+  }
+  h1 { font-family: var(--display); font-weight: 700; font-size: clamp(30px,5vw,42px); line-height: 1.02; margin: 0; }
+  .masthead p { margin: 6px 0 0; color: var(--muted); max-width: 58ch; }
+  .stamp {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .13em; text-transform: uppercase; color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 2px; padding: 5px 10px; white-space: nowrap;
+  }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; box-shadow: var(--shadow); }
+  .panel-head {
+    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+    gap: 8px 16px; padding: 14px 18px; border-bottom: 1px solid var(--line);
+  }
+  .panel-head h2 {
+    font-family: var(--display); font-weight: 600; font-size: 19px;
+    letter-spacing: .04em; text-transform: uppercase; margin: 0;
+  }
+  .panel-head .hint { color: var(--faint); font-size: 13px; margin: 0; }
+  .panel-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+
+  label.lbl {
+    font-family: var(--display); font-weight: 600; font-size: 12px;
+    letter-spacing: .11em; text-transform: uppercase; color: var(--muted);
+    display: block; margin-bottom: 6px;
+  }
+
+  input[type="password"], select {
+    font-family: var(--mono); font-size: 15px; color: var(--ink);
+    background: var(--surface-2); border: 1px solid var(--line-strong);
+    border-radius: 3px; padding: 9px 11px; min-width: 0;
+  }
+  input[type="password"] { width: 100%; }
+  select { font-family: var(--body); font-size: 14px; }
+  input:focus-visible, button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .btn {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .08em; text-transform: uppercase;
+    background: var(--surface-2); color: var(--ink);
+    border: 1px solid var(--line-strong); border-radius: 3px;
+    padding: 9px 15px; cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn.primary:hover { color: var(--accent-ink); filter: brightness(1.06); }
+  .btn[disabled] { opacity: .55; cursor: default; filter: none; }
+  .btn.quiet { background: transparent; border-color: transparent; color: var(--faint); }
+  .btn.quiet:hover { color: var(--bad); border-color: var(--line); }
+
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .grow { flex: 1 1 200px; min-width: 0; }
+
+  .msg { font-size: 14px; border-radius: 3px; padding: 11px 13px; margin: 0; }
+  .msg.err { background: var(--bad-soft); color: var(--bad); user-select: all; font-family: var(--mono); font-size: 13px; }
+  .msg.ok { background: var(--good-soft); color: var(--good); }
+  .msg[hidden] { display: none; }
+
+  .figures {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+    gap: 1px; background: var(--line); border: 1px solid var(--line);
+    border-radius: 4px; overflow: hidden;
+  }
+  .figure { background: var(--surface); padding: 15px 17px; display: flex; flex-direction: column; gap: 3px; }
+  .figure .k {
+    font-family: var(--display); font-weight: 600; font-size: 12px;
+    letter-spacing: .11em; text-transform: uppercase; color: var(--muted);
+  }
+  .figure .v { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 500; font-size: 24px; line-height: 1.2; }
+  .figure.alert .v { color: var(--warn); }
+  .figure .sub { font-size: 12px; color: var(--faint); }
+
+  .table-scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; }
+  th {
+    font-family: var(--display); font-weight: 600; font-size: 12px;
+    letter-spacing: .09em; text-transform: uppercase; color: var(--muted);
+    text-align: left; background: var(--surface-2);
+    border-bottom: 1px solid var(--line-strong); padding: 0; white-space: nowrap;
+  }
+  th button {
+    font: inherit; color: inherit; background: none; border: 0;
+    padding: 11px 12px; width: 100%; text-align: left; cursor: pointer;
+  }
+  th.right button, th.right { text-align: right; }
+  th.war { text-align: right; font-size: 11px; }
+  th.war div { padding: 8px 10px; }
+  th.war .opp { display: block; font-weight: 500; color: var(--faint); text-transform: none; letter-spacing: 0; }
+
+  td { padding: 8px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+  td.name { font-weight: 500; }
+  td.zero { color: var(--faint); }
+  td.total { font-weight: 600; }
+  tr.gone td.name { color: var(--faint); font-style: italic; }
+  tr.gone { background: var(--surface-2); }
+
+  .cell {
+    display: inline-block; min-width: 34px; padding: 1px 5px; border-radius: 2px;
+    font-family: var(--mono); font-variant-numeric: tabular-nums;
+  }
+  .cell.top { background: var(--good-soft); color: var(--good); font-weight: 600; }
+  .cell.none { color: var(--faint); }
+
+  .empty { padding: 30px 18px; text-align: center; color: var(--faint); }
+
+  details { border-top: 1px solid var(--line); }
+  summary {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+    padding: 13px 18px; cursor: pointer;
+  }
+  summary:hover { color: var(--accent); }
+  details dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 14px; }
+  details dt { font-weight: 600; color: var(--muted); }
+  details dd { margin: 0; }
+
+  footer { border-top: 1px solid var(--line); padding-top: 16px; color: var(--faint); font-size: 13px; }
+  footer p { margin: 0 0 6px; max-width: 74ch; }
+
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav class="backbar"><a href="./">&larr; All tools</a></nav>
+
+  <header class="masthead">
+    <div>
+      <h1>War Participation History</h1>
+      <p>Hits per member across your recent ranked wars. Turns "who actually shows up" from an
+        argument into a table.</p>
+    </div>
+    <span class="stamp">PoIitically Incorrect &middot; 48039</span>
+  </header>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Load the history</h2>
+      <p class="hint">One call per war. Ten wars is eleven calls.</p>
+    </div>
+    <div class="panel-body">
+      <div>
+        <label class="lbl" for="apiKey">Torn Custom API Key</label>
+        <div class="toolbar">
+          <input type="password" id="apiKey" class="grow" autocomplete="off" spellcheck="false"
+                 placeholder="Paste your key">
+          <button type="button" class="btn" id="toggleKey" aria-pressed="false">Show</button>
+          <label class="sr" for="howMany">How many wars</label>
+          <select id="howMany">
+            <option value="5">Last 5 wars</option>
+            <option value="10" selected>Last 10 wars</option>
+            <option value="20">Last 20 wars</option>
+          </select>
+          <button type="button" class="btn primary" id="loadBtn">Load</button>
+          <button type="button" class="btn quiet" id="forgetKey">Forget key</button>
+        </div>
+      </div>
+      <p class="msg err" id="errorBox" role="alert" hidden></p>
+      <p class="msg ok" id="okBox" role="status" hidden></p>
+    </div>
+
+    <details>
+      <summary>What this needs, and what it can and cannot tell you</summary>
+      <div class="panel-body">
+        <dl>
+          <dt>Key</dt>
+          <dd>faction → <strong>rankedwars</strong> and faction → <strong>rankedwarreport</strong>.
+            Both are public-level calls, so this works even without faction API access on your
+            position.</dd>
+          <dt>Blank cells</dt>
+          <dd>A blank means the member does not appear in that war's report. That can mean they made
+            no hits, or that they were not in the faction yet. Torn does not say which, so the page
+            does not guess.</dd>
+          <dt>Former members</dt>
+          <dd>Names in the report who are no longer on the roster are shown greyed out, so old
+            numbers do not make your current roster look better or worse than it is.</dd>
+          <dt>Respect</dt>
+          <dd>Switch the table to respect if you split payouts that way. Same data, same wars.</dd>
+        </dl>
+      </div>
+    </details>
+  </section>
+
+  <section class="figures" id="figures" hidden aria-label="Summary">
+    <div class="figure"><span class="k">Wars read</span><span class="v" id="figWars">0</span></div>
+    <div class="figure"><span class="k">Total hits</span><span class="v" id="figHits">0</span><span class="sub">across those wars</span></div>
+    <div class="figure"><span class="k">Members who hit</span><span class="v" id="figWho">0</span><span class="sub">at least once</span></div>
+    <div class="figure alert"><span class="k">Never hit</span><span class="v" id="figNever">0</span><span class="sub">current members, zero hits</span></div>
+    <div class="figure"><span class="k">Carried by</span><span class="v" id="figTop">—</span><span class="sub">most hits overall</span></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>The table</h2>
+      <div class="toolbar">
+        <div class="segmented" role="group" style="display:inline-flex;border:1px solid var(--line-strong);border-radius:3px;overflow:hidden">
+          <button type="button" class="btn" data-basis="hits" style="border:0;border-right:1px solid var(--line-strong)">Hits</button>
+          <button type="button" class="btn" data-basis="score" style="border:0">Respect</button>
+        </div>
+        <button type="button" class="btn" id="copyBtn">Copy</button>
+        <span class="msg ok" id="copyToast" role="status" hidden></span>
+      </div>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr id="headRow"></tr></thead>
+        <tbody id="body"></tbody>
+      </table>
+    </div>
+    <p class="empty" id="tableEmpty">Paste a key and press Load.</p>
+  </section>
+
+  <footer>
+    <p><strong>Read this as attendance, not as worth.</strong> A member with few hits may have been
+      asleep in another timezone, hospitalised, or new. The table tells you who to talk to, not who
+      to remove.</p>
+    <p>Manual load only. One press, one read. Nothing is written and nothing is stored on a server.</p>
+  </footer>
+</div>
+
+<script>
+  (function () {
+    'use strict';
+
+    var KEY_STORE = 'ks-leader-board-key';
+    var FACTION_ID = 48039;
+
+    var el = {};
+    ['apiKey','toggleKey','howMany','loadBtn','forgetKey','errorBox','okBox','figures','figWars',
+     'figHits','figWho','figNever','figTop','headRow','body','tableEmpty','copyBtn','copyToast']
+      .forEach(function (id) { el[id] = document.getElementById(id); });
+
+    var wars = [];       // { id, opponent, start, won }
+    var people = [];     // { id, name, current, per: {warId: {hits, score}}, hits, score, appeared }
+    var basis = 'hits';
+    var sortKey = 'total';
+
+    function show(box, message) { box.textContent = message; box.hidden = false; }
+    function hide(box) { box.textContent = ''; box.hidden = true; }
+    function readKey() { try { return localStorage.getItem(KEY_STORE) || ''; } catch (e) { return ''; } }
+    function storeKey(v) {
+      try { if (v) localStorage.setItem(KEY_STORE, v); else localStorage.removeItem(KEY_STORE); }
+      catch (e) { /* storage blocked */ }
+    }
+
+    function describeError(code) {
+      if (code === 2) return 'Torn rejected the key. Check it was copied whole.';
+      if (code === 7) return 'Your faction position is not allowed to see this. It is a faction permission, not a key setting.';
+      if (code === 16) return 'The key is missing a selection. Enable faction → rankedwars and faction → rankedwarreport.';
+      if (code === 5) return 'Too many calls in the last minute. Pick fewer wars, or wait a minute.';
+      if (code === 9 || code === 17) return 'Torn is temporarily unavailable. Try again shortly.';
+      return 'Torn returned error ' + code + '.';
+    }
+
+    async function tornGet(path) {
+      var key = el.apiKey.value.trim();
+      var joiner = path.indexOf('?') === -1 ? '?' : '&';
+      var response = await fetch('https://api.torn.com/v2' + path + joiner + 'comment=KSWarHistory',
+        { headers: { Authorization: 'ApiKey ' + key } });
+      var payload = await response.json();
+      if (payload && payload.error) {
+        if ([2, 10, 13, 18].indexOf(payload.error.code) !== -1) { storeKey(''); el.apiKey.value = ''; }
+        throw new Error(describeError(payload.error.code) + '  [GET /v2' + path +
+          ' → Torn error ' + payload.error.code + ']');
+      }
+      return payload;
+    }
+
+    function dateShort(unix) {
+      return new Date(unix * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    }
+
+    function value(person, warId) {
+      var cell = person.per[warId];
+      if (!cell) return null;
+      return basis === 'hits' ? cell.hits : cell.score;
+    }
+
+    function fmt(n) {
+      if (n === null) return '';
+      return basis === 'hits'
+        ? n.toLocaleString('en-US')
+        : n.toLocaleString('en-US', { maximumFractionDigits: 1 });
+    }
+
+    function total(person) { return basis === 'hits' ? person.hits : person.score; }
+
+    function render() {
+      document.querySelectorAll('[data-basis]').forEach(function (b) {
+        var on = b.getAttribute('data-basis') === basis;
+        b.style.background = on ? 'var(--accent)' : 'var(--surface-2)';
+        b.style.color = on ? 'var(--accent-ink)' : 'var(--muted)';
+      });
+
+      el.headRow.textContent = '';
+      function head(text, key, cls) {
+        var th = document.createElement('th');
+        if (cls) th.className = cls;
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = text;
+        button.addEventListener('click', function () { sortKey = key; render(); });
+        th.appendChild(button);
+        return th;
+      }
+      el.headRow.appendChild(head('Member', 'name'));
+      el.headRow.appendChild(head(basis === 'hits' ? 'Total hits' : 'Total respect', 'total', 'right'));
+      el.headRow.appendChild(head('Wars in', 'appeared', 'right'));
+
+      wars.forEach(function (war) {
+        var th = document.createElement('th');
+        th.className = 'war';
+        var box = document.createElement('div');
+        box.textContent = dateShort(war.start);
+        var opp = document.createElement('span');
+        opp.className = 'opp';
+        opp.textContent = war.opponent;
+        box.appendChild(opp);
+        th.appendChild(box);
+        el.headRow.appendChild(th);
+      });
+
+      var rows = people.slice().sort(function (a, b) {
+        if (sortKey === 'name') return a.name.localeCompare(b.name, 'en', { sensitivity: 'base' });
+        if (sortKey === 'appeared') return b.appeared - a.appeared || total(b) - total(a);
+        return total(b) - total(a);
+      });
+
+      var best = {};
+      wars.forEach(function (war) {
+        var top = 0;
+        people.forEach(function (p) {
+          var v = value(p, war.id);
+          if (v !== null && v > top) top = v;
+        });
+        best[war.id] = top;
+      });
+
+      el.body.textContent = '';
+      rows.forEach(function (person) {
+        var tr = document.createElement('tr');
+        if (!person.current) tr.className = 'gone';
+
+        var name = document.createElement('td');
+        name.className = 'name';
+        name.textContent = person.name + (person.current ? '' : ' (left)');
+        tr.appendChild(name);
+
+        var tot = document.createElement('td');
+        tot.className = 'num total';
+        tot.textContent = fmt(total(person));
+        tr.appendChild(tot);
+
+        var app = document.createElement('td');
+        app.className = 'num';
+        app.textContent = String(person.appeared) + ' / ' + wars.length;
+        tr.appendChild(app);
+
+        wars.forEach(function (war) {
+          var td = document.createElement('td');
+          td.className = 'num';
+          var v = value(person, war.id);
+          var span = document.createElement('span');
+          span.className = 'cell' + (v === null ? ' none' : (v > 0 && v === best[war.id] ? ' top' : ''));
+          span.textContent = v === null ? '·' : fmt(v);
+          td.appendChild(span);
+          tr.appendChild(td);
+        });
+
+        el.body.appendChild(tr);
+      });
+
+      el.tableEmpty.hidden = rows.length > 0;
+    }
+
+    async function load() {
+      hide(el.errorBox);
+      hide(el.okBox);
+      if (!el.apiKey.value.trim()) { show(el.errorBox, 'Paste your Custom API Key first.'); return; }
+
+      el.loadBtn.disabled = true;
+      el.loadBtn.textContent = 'Loading';
+
+      try {
+        var wanted = Number(el.howMany.value);
+        var listPayload = await tornGet('/faction/rankedwars?limit=' + wanted + '&sort=DESC');
+        var list = Array.isArray(listPayload.rankedwars) ? listPayload.rankedwars : [];
+        list = list.filter(function (w) { return w.end; });
+
+        var memberPayload = await tornGet('/faction/members?striptags=true');
+        var current = {};
+        (Array.isArray(memberPayload.members) ? memberPayload.members : [])
+          .forEach(function (m) { current[m.id] = m.name; });
+
+        wars = [];
+        var byPerson = {};
+
+        for (var i = 0; i < list.length; i += 1) {
+          var war = list[i];
+          var them = (war.factions || []).filter(function (f) { return f.id !== FACTION_ID; })[0];
+          var reportPayload = await tornGet('/faction/' + war.id + '/rankedwarreport');
+          var report = reportPayload.rankedwarreport;
+          var sides = (report && report.factions) || [];
+          var ours = sides.filter(function (f) { return f.id === FACTION_ID; })[0];
+          if (!ours || !Array.isArray(ours.members)) continue;
+
+          wars.push({
+            id: war.id,
+            opponent: (them && them.name) || 'unknown',
+            start: war.start,
+            won: report.winner === FACTION_ID
+          });
+
+          ours.members.forEach(function (m) {
+            var person = byPerson[m.id];
+            if (!person) {
+              person = byPerson[m.id] = {
+                id: m.id,
+                name: current[m.id] || m.name || ('Player ' + m.id),
+                current: Object.prototype.hasOwnProperty.call(current, m.id),
+                per: {}, hits: 0, score: 0, appeared: 0
+              };
+            }
+            var hits = typeof m.attacks === 'number' ? m.attacks : 0;
+            var score = typeof m.score === 'number' ? m.score : 0;
+            person.per[war.id] = { hits: hits, score: score };
+            person.hits += hits;
+            person.score += score;
+            if (hits > 0 || score > 0) person.appeared += 1;
+          });
+        }
+
+        wars.reverse();
+
+        // current members who never appear at all still belong in the table
+        Object.keys(current).forEach(function (id) {
+          var numeric = Number(id);
+          if (!byPerson[numeric]) {
+            byPerson[numeric] = {
+              id: numeric, name: current[id], current: true,
+              per: {}, hits: 0, score: 0, appeared: 0
+            };
+          }
+        });
+
+        people = Object.keys(byPerson).map(function (k) { return byPerson[k]; });
+
+        var totalHits = people.reduce(function (s, p) { return s + p.hits; }, 0);
+        var whoHit = people.filter(function (p) { return p.hits > 0; }).length;
+        var never = people.filter(function (p) { return p.current && p.hits === 0; }).length;
+        var top = people.slice().sort(function (a, b) { return b.hits - a.hits; })[0];
+
+        el.figures.hidden = false;
+        el.figWars.textContent = String(wars.length);
+        el.figHits.textContent = totalHits.toLocaleString('en-US');
+        el.figWho.textContent = String(whoHit);
+        el.figNever.textContent = String(never);
+        el.figTop.textContent = top && top.hits > 0 ? top.name : '—';
+
+        storeKey(el.apiKey.value.trim());
+        render();
+        show(el.okBox, 'Read ' + wars.length + ' ' + (wars.length === 1 ? 'war' : 'wars') + ' and ' +
+          people.length + ' people.');
+      } catch (err) {
+        show(el.errorBox, err instanceof Error ? err.message : String(err));
+      } finally {
+        el.loadBtn.disabled = false;
+        el.loadBtn.textContent = 'Load';
+      }
+    }
+
+    el.toggleKey.addEventListener('click', function () {
+      var showing = el.apiKey.type === 'text';
+      el.apiKey.type = showing ? 'password' : 'text';
+      el.toggleKey.textContent = showing ? 'Show' : 'Hide';
+      el.toggleKey.setAttribute('aria-pressed', String(!showing));
+    });
+
+    el.forgetKey.addEventListener('click', function () {
+      storeKey(''); el.apiKey.value = '';
+      hide(el.errorBox); show(el.okBox, 'Key removed from this browser.');
+    });
+
+    el.loadBtn.addEventListener('click', function () { void load(); });
+
+    document.querySelectorAll('[data-basis]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        basis = button.getAttribute('data-basis');
+        render();
+      });
+    });
+
+    el.copyBtn.addEventListener('click', function () {
+      if (people.length === 0) return;
+      var lines = ['WAR PARTICIPATION — PoIitically Incorrect', wars.length + ' wars', ''];
+      people.slice().sort(function (a, b) { return total(b) - total(a); }).forEach(function (p) {
+        lines.push((p.current ? '' : '(left) ') + p.name + ' — ' + fmt(total(p)) + ' ' +
+          (basis === 'hits' ? 'hits' : 'respect') + ' — in ' + p.appeared + ' of ' + wars.length);
+      });
+      var text = lines.join('\n');
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () {
+          show(el.copyToast, 'Copied.');
+        }, function () { show(el.copyToast, 'Could not copy.'); });
+      }
+    });
+
+    el.apiKey.value = readKey();
+    render();
+  })();
+</script>
+</body>
+</html>
