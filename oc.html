@@ -432,7 +432,11 @@
         var meta = document.createElement('div');
         meta.className = 'meta';
         if (cpr !== null) {
-          meta.appendChild(pill(cpr + '% CPR', below ? 'warn' : 'good'));
+          // On an empty seat Torn returns the requesting player's own rate, not a
+          // candidate's. Label it so nobody reads it as the seat's number.
+          var seated = !!(slot.user && slot.user.id);
+          meta.appendChild(pill(seated ? cpr + '% CPR' : 'your CPR ' + cpr + '%',
+            below ? 'warn' : 'good'));
         }
         var item = slot.item_requirement;
         if (item) {
