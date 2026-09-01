@@ -3,76 +3,42 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Member Activity Board</title>
+<title>PoIitically Incorrect — Leader Tools</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
   :root {
-    --ground: #eaedf1;
-    --surface: #ffffff;
-    --surface-2: #f4f6f9;
-    --ink: #14202b;
-    --muted: #5c6d7e;
-    --faint: #8b9aa8;
-    --line: #d3dae1;
-    --line-strong: #b8c3cd;
-    --accent: #a3512a;
-    --accent-ink: #ffffff;
-    --accent-soft: #f2ded4;
-    --good: #1c7355;
-    --good-soft: #dfeee8;
-    --warn: #8c6210;
-    --warn-soft: #f6ecd6;
-    --bad: #a12f2a;
-    --bad-soft: #f6dedc;
-    --shadow: 0 1px 2px rgba(20, 32, 43, .06), 0 8px 24px rgba(20, 32, 43, .06);
-
-    --display: 'Saira Condensed', 'Arial Narrow', Helvetica, sans-serif;
-    --body: 'Public Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif;
-    --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    --ground: #eaedf1; --surface: #ffffff; --surface-2: #f4f6f9;
+    --ink: #14202b; --muted: #5c6d7e; --faint: #8b9aa8;
+    --line: #d3dae1; --line-strong: #b8c3cd;
+    --accent: #a3512a; --accent-ink: #ffffff; --accent-soft: #f2ded4;
+    --good: #1c7355; --good-soft: #dfeee8;
+    --shadow: 0 1px 2px rgba(20,32,43,.06), 0 8px 24px rgba(20,32,43,.06);
+    --shadow-lift: 0 2px 4px rgba(20,32,43,.08), 0 14px 34px rgba(20,32,43,.12);
+    --display: 'Saira Condensed','Arial Narrow',Helvetica,sans-serif;
+    --body: 'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
+    --mono: 'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
   }
 
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --ground: #0e141a;
-      --surface: #171f27;
-      --surface-2: #1d262f;
-      --ink: #e3e9ef;
-      --muted: #93a3b2;
-      --faint: #6b7c8b;
-      --line: #26313b;
-      --line-strong: #35434f;
-      --accent: #d8804d;
-      --accent-ink: #171f27;
-      --accent-soft: #2e211a;
-      --good: #46a583;
-      --good-soft: #172a24;
-      --warn: #cc9f3f;
-      --warn-soft: #2a2417;
-      --bad: #dd6a61;
-      --bad-soft: #2c1b1a;
-      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .3);
+      --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+      --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+      --line: #26313b; --line-strong: #35434f;
+      --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+      --good: #46a583; --good-soft: #172a24;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+      --shadow-lift: 0 2px 4px rgba(0,0,0,.5), 0 14px 34px rgba(0,0,0,.45);
     }
   }
 
   :root[data-theme="dark"] {
-    --ground: #0e141a;
-    --surface: #171f27;
-    --surface-2: #1d262f;
-    --ink: #e3e9ef;
-    --muted: #93a3b2;
-    --faint: #6b7c8b;
-    --line: #26313b;
-    --line-strong: #35434f;
-    --accent: #d8804d;
-    --accent-ink: #171f27;
-    --accent-soft: #2e211a;
-    --good: #46a583;
-    --good-soft: #172a24;
-    --warn: #cc9f3f;
-    --warn-soft: #2a2417;
-    --bad: #dd6a61;
-    --bad-soft: #2c1b1a;
-    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .3);
+    --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+    --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+    --line: #26313b; --line-strong: #35434f;
+    --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+    --good: #46a583; --good-soft: #172a24;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+    --shadow-lift: 0 2px 4px rgba(0,0,0,.5), 0 14px 34px rgba(0,0,0,.45);
   }
 
   * { box-sizing: border-box; }
@@ -83,17 +49,17 @@
     color: var(--ink);
     font-family: var(--body);
     font-size: 15px;
-    line-height: 1.5;
+    line-height: 1.55;
     -webkit-font-smoothing: antialiased;
   }
 
   .wrap {
-    max-width: 1140px;
+    max-width: 960px;
     margin: 0 auto;
-    padding: 28px 20px 72px;
+    padding: 44px 20px 72px;
     display: flex;
     flex-direction: column;
-    gap: 22px;
+    gap: 32px;
   }
 
   .masthead {
@@ -102,230 +68,165 @@
     align-items: flex-end;
     justify-content: space-between;
     gap: 12px 24px;
-    padding-bottom: 18px;
+    padding-bottom: 20px;
     border-bottom: 2px solid var(--line-strong);
+  }
+
+  .eyebrow {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 4px;
   }
 
   h1 {
     font-family: var(--display);
     font-weight: 700;
-    font-size: clamp(30px, 5vw, 42px);
-    line-height: 1.02;
+    font-size: clamp(34px, 6vw, 52px);
+    line-height: 1;
     margin: 0;
     text-wrap: balance;
   }
 
-  .masthead p { margin: 6px 0 0; color: var(--muted); max-width: 58ch; }
+  .masthead p.sub { margin: 10px 0 0; color: var(--muted); max-width: 54ch; }
 
   .stamp {
-    font-family: var(--display);
-    font-weight: 600;
-    font-size: 13px;
-    letter-spacing: .13em;
-    text-transform: uppercase;
-    color: var(--accent);
-    border: 1px solid var(--accent);
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: .04em;
+    color: var(--faint);
+    border: 1px solid var(--line-strong);
     border-radius: 2px;
-    padding: 5px 10px;
+    padding: 5px 9px;
     white-space: nowrap;
   }
 
-  .panel {
+  h2 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 14px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 14px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(268px, 1fr));
+    gap: 16px;
+  }
+
+  .card {
     background: var(--surface);
     border: 1px solid var(--line);
-    border-radius: 4px;
+    border-radius: 5px;
     box-shadow: var(--shadow);
-  }
-
-  .panel-head {
+    padding: 22px 22px 20px;
     display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 8px 16px;
-    padding: 14px 18px;
-    border-bottom: 1px solid var(--line);
+    flex-direction: column;
+    gap: 9px;
+    text-decoration: none;
+    color: inherit;
+    position: relative;
+    transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease;
   }
 
-  .panel-head h2 {
+  a.card:hover, a.card:focus-visible {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lift);
+    border-color: var(--accent);
+  }
+
+  a.card:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  .card .name {
     font-family: var(--display);
-    font-weight: 600;
-    font-size: 19px;
-    letter-spacing: .04em;
-    text-transform: uppercase;
-    margin: 0;
+    font-weight: 700;
+    font-size: 25px;
+    line-height: 1.08;
+    letter-spacing: .01em;
   }
 
-  .panel-head .hint { color: var(--faint); font-size: 13px; margin: 0; }
-  .panel-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+  .card .what { color: var(--muted); font-size: 14px; flex: 1; }
 
-  label.lbl {
-    font-family: var(--display);
-    font-weight: 600;
-    font-size: 12px;
-    letter-spacing: .11em;
-    text-transform: uppercase;
-    color: var(--muted);
-    display: block;
-    margin-bottom: 6px;
-  }
-
-  input[type="password"], input[type="text"] {
-    font-family: var(--mono);
-    font-size: 15px;
-    color: var(--ink);
-    background: var(--surface-2);
-    border: 1px solid var(--line-strong);
-    border-radius: 3px;
-    padding: 9px 11px;
-    width: 100%;
-    min-width: 0;
-  }
-
-  input:focus-visible, button:focus-visible, select:focus-visible, summary:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-
-  select {
-    font-family: var(--body);
-    font-size: 14px;
-    color: var(--ink);
-    background: var(--surface-2);
-    border: 1px solid var(--line-strong);
-    border-radius: 3px;
-    padding: 8px 10px;
-  }
-
-  .btn {
+  .card .go {
     font-family: var(--display);
     font-weight: 600;
     font-size: 13px;
-    letter-spacing: .08em;
+    letter-spacing: .1em;
     text-transform: uppercase;
+    color: var(--accent);
+    margin-top: 4px;
+  }
+
+  a.card:hover .go::after { transform: translateX(3px); }
+  .card .go::after {
+    content: ' →';
+    display: inline-block;
+    transition: transform .14s ease;
+  }
+
+  .tag {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    padding: 3px 7px;
+    border-radius: 2px;
+    background: var(--good-soft);
+    color: var(--good);
+  }
+
+  .card.planned {
     background: var(--surface-2);
-    color: var(--ink);
-    border: 1px solid var(--line-strong);
-    border-radius: 3px;
-    padding: 9px 15px;
-    cursor: pointer;
-    white-space: nowrap;
+    box-shadow: none;
+    border-style: dashed;
   }
 
-  .btn:hover { border-color: var(--accent); color: var(--accent); }
-  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-  .btn.primary:hover { color: var(--accent-ink); filter: brightness(1.06); }
-  .btn.primary[disabled] { opacity: .55; cursor: default; filter: none; }
-  .btn.quiet { background: transparent; border-color: transparent; color: var(--faint); }
-  .btn.quiet:hover { color: var(--bad); border-color: var(--line); }
+  .card.planned .name { color: var(--muted); font-size: 21px; }
+  .card.planned .what { color: var(--faint); }
+  .card.planned .tag { background: transparent; color: var(--faint); border: 1px solid var(--line-strong); }
 
-  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-  .grow { flex: 1 1 200px; min-width: 0; }
-
-  .msg { font-size: 14px; border-radius: 3px; padding: 11px 13px; }
-  .msg.err { background: var(--bad-soft); color: var(--bad); }
-  .msg.ok { background: var(--good-soft); color: var(--good); }
-  .msg[hidden] { display: none; }
-
-  .figures {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 1px;
-    background: var(--line);
-    border: 1px solid var(--line);
-    border-radius: 4px;
-    overflow: hidden;
+  .keynote {
+    background: var(--accent-soft);
+    border: 1px solid var(--accent);
+    border-radius: 5px;
+    padding: 18px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
 
-  .figure { background: var(--surface); padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; }
-  .figure .k {
-    font-family: var(--display); font-weight: 600; font-size: 12px;
-    letter-spacing: .11em; text-transform: uppercase; color: var(--muted);
-  }
-  .figure .v {
-    font-family: var(--mono); font-variant-numeric: tabular-nums;
-    font-weight: 500; font-size: 24px; line-height: 1.2;
-  }
-  .figure.alert .v { color: var(--bad); }
-  .figure.watch .v { color: var(--warn); }
-
-  .table-scroll { overflow-x: auto; }
-
-  table { border-collapse: collapse; width: 100%; min-width: 760px; }
-
-  th {
+  .keynote .title {
     font-family: var(--display);
     font-weight: 600;
-    font-size: 12px;
-    letter-spacing: .11em;
-    text-transform: uppercase;
-    color: var(--muted);
-    text-align: left;
-    background: var(--surface-2);
-    border-bottom: 1px solid var(--line-strong);
-    padding: 0;
-  }
-
-  th button {
-    font: inherit; color: inherit; background: none; border: 0;
-    padding: 11px 14px; width: 100%; text-align: left; cursor: pointer;
-  }
-
-  th button:hover { color: var(--accent); }
-  th.right button { text-align: right; }
-
-  td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: baseline; }
-  td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
-  td.name { font-weight: 500; }
-  td .sub { display: block; color: var(--faint); font-size: 12px; }
-
-  tr.stale-critical td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
-  tr.stale-warn td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
-
-  .pill {
-    font-family: var(--mono);
-    font-size: 11px;
-    font-weight: 500;
+    font-size: 17px;
     letter-spacing: .03em;
-    padding: 2px 6px;
-    border-radius: 2px;
-    white-space: nowrap;
-    background: var(--surface-2);
-    color: var(--muted);
+    text-transform: uppercase;
   }
 
-  .pill.good { background: var(--good-soft); color: var(--good); }
-  .pill.warn { background: var(--warn-soft); color: var(--warn); }
-  .pill.bad { background: var(--bad-soft); color: var(--bad); }
-  .pill.accent { background: var(--accent-soft); color: var(--accent); }
+  .keynote p { margin: 0; font-size: 14px; max-width: 70ch; }
 
-  .flags { display: flex; flex-wrap: wrap; gap: 4px; }
-
-  .empty { padding: 34px 18px; text-align: center; color: var(--faint); }
-
-  details { border-top: 1px solid var(--line); }
-  summary {
-    font-family: var(--display); font-weight: 600; font-size: 13px;
-    letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
-    padding: 13px 18px; cursor: pointer;
+  footer {
+    border-top: 1px solid var(--line);
+    padding-top: 18px;
+    color: var(--faint);
+    font-size: 13px;
   }
-  summary:hover { color: var(--accent); }
-  details .panel-body { padding-top: 4px; }
-  details dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 14px; }
-  details dt { font-weight: 600; color: var(--muted); }
-  details dd { margin: 0; }
 
-  footer { border-top: 1px solid var(--line); padding-top: 16px; color: var(--faint); font-size: 13px; }
-  footer p { margin: 0 0 6px; max-width: 72ch; }
-
-  .sr {
-    position: absolute; width: 1px; height: 1px;
-    padding: 0; margin: -1px; overflow: hidden;
-    clip: rect(0 0 0 0); white-space: nowrap; border: 0;
-  }
+  footer p { margin: 0; max-width: 70ch; }
 
   @media (prefers-reduced-motion: reduce) {
-    * { transition: none !important; animation: none !important; }
+    * { transition: none !important; }
+    a.card:hover { transform: none; }
   }
 </style>
 </head>
@@ -333,486 +234,76 @@
 <div class="wrap">
   <header class="masthead">
     <div>
-      <h1>Member Activity Board</h1>
-      <p>Who is still here, who has gone quiet, and who is out of action right now. One list,
-        one refresh, no guessing.</p>
+      <p class="eyebrow">Faction 48039</p>
+      <h1>Leader Tools</h1>
+      <p class="sub">Built for the Leader and Co-Leader of PoIitically Incorrect. Open a tool, do the
+        job, get on with the war.</p>
     </div>
-    <span class="stamp">PoIitically Incorrect &middot; 48039</span>
+    <span class="stamp">Leader &amp; Co-Leader</span>
   </header>
 
-  <section class="panel">
-    <div class="panel-head">
-      <h2>Your key</h2>
-      <p class="hint">Stays in this browser. Never sent anywhere but Torn.</p>
-    </div>
-    <div class="panel-body">
-      <div>
-        <label class="lbl" for="apiKey">Torn Custom API Key</label>
-        <div class="toolbar">
-          <input type="password" id="apiKey" class="grow" autocomplete="off" spellcheck="false"
-                 placeholder="Paste your key">
-          <button type="button" class="btn" id="toggleKey" aria-pressed="false">Show</button>
-          <button type="button" class="btn primary" id="loadBtn">Load members</button>
-          <button type="button" class="btn quiet" id="forgetKey">Forget key</button>
-        </div>
-      </div>
-      <p class="msg err" id="errorBox" role="alert" hidden></p>
-      <p class="msg ok" id="okBox" role="status" hidden></p>
-    </div>
+  <section>
+    <h2>Ready to use</h2>
+    <div class="grid">
+      <a class="card" href="members.html">
+        <span class="tag">Live</span>
+        <span class="name">Member Activity Board</span>
+        <span class="what">Who is still here, who has gone quiet, and who is in hospital, jail or
+          abroad right now. Quiet members are flagged and the list copies out for messaging.</span>
+        <span class="go">Open</span>
+      </a>
 
-    <details>
-      <summary>What this does with your key</summary>
-      <div class="panel-body">
-        <dl>
-          <dt>Purpose</dt>
-          <dd>Reads your faction's member list, once, each time you press Load members.</dd>
-          <dt>Access needed</dt>
-          <dd>A Custom Key with the faction <em>members</em> selection enabled. Error 16 means that
-            selection is missing, not that the key is broken.</dd>
-          <dt>Storage</dt>
-          <dd>Your browser's local storage on this device only. There is no server and no account.</dd>
-          <dt>Retention</dt>
-          <dd>Until you press Forget key or clear your browser data.</dd>
-          <dt>Sharing</dt>
-          <dd>Never. The only place it is sent is api.torn.com, in a request header, never in a
-            web address.</dd>
-          <dt>Writes</dt>
-          <dd>None. This page only reads. It never attacks, sends, spends or changes anything.</dd>
-          <dt>Call tag</dt>
-          <dd>Every request is tagged <code>KSLeaderBoard</code>, so you can recognise it in your own
-            API key log.</dd>
-        </dl>
-      </div>
-    </details>
+      <a class="card" href="payout.html">
+        <span class="tag">Live</span>
+        <span class="name">War Payout Ledger</span>
+        <span class="what">Split the cash from sold caches by hits or by respect, with a faction cut
+          and a minimum to qualify. Copies a clean summary into faction chat.</span>
+        <span class="go">Open</span>
+      </a>
+    </div>
   </section>
 
-  <section class="figures" aria-label="Summary" id="figures" hidden>
-    <div class="figure"><span class="k">Members</span><span class="v" id="figTotal">0</span></div>
-    <div class="figure"><span class="k">Online now</span><span class="v" id="figOnline">0</span></div>
-    <div class="figure watch"><span class="k">Quiet 3d+</span><span class="v" id="figWarn">0</span></div>
-    <div class="figure alert"><span class="k">Quiet 7d+</span><span class="v" id="figCritical">0</span></div>
-    <div class="figure"><span class="k">Hospital</span><span class="v" id="figHosp">0</span></div>
-    <div class="figure"><span class="k">In an OC</span><span class="v" id="figOc">0</span></div>
-  </section>
+  <section>
+    <h2>Next up</h2>
+    <div class="grid">
+      <div class="card planned">
+        <span class="tag">Planned</span>
+        <span class="name">Armory &amp; Loaner Audit</span>
+        <span class="what">Who drew what from the armory, and what never came back.</span>
+      </div>
 
-  <section class="panel">
-    <div class="panel-head">
-      <h2>Roster</h2>
-      <p class="hint" id="pulledAt">Not loaded yet</p>
-    </div>
+      <div class="card planned">
+        <span class="tag">Planned</span>
+        <span class="name">OC Roster Board</span>
+        <span class="what">Who sits in which crime, which slots are empty, and who is free to fill
+          one.</span>
+      </div>
 
-    <div class="panel-body" style="padding-bottom:0">
-      <div class="toolbar">
-        <input type="text" id="search" class="grow" placeholder="Filter by name or position"
-               autocomplete="off">
-        <label class="sr" for="stateFilter">Show</label>
-        <select id="stateFilter">
-          <option value="all">Everyone</option>
-          <option value="quiet3">Quiet 3 days or more</option>
-          <option value="quiet7">Quiet 7 days or more</option>
-          <option value="okay">Okay right now</option>
-          <option value="out">Hospital, jail or abroad</option>
-        </select>
-        <button type="button" class="btn" id="copyNudge">Copy quiet list</button>
+      <div class="card planned">
+        <span class="tag">Planned</span>
+        <span class="name">War Participation History</span>
+        <span class="what">Hits per member across recent wars, so the payout talk runs on numbers.</span>
+      </div>
+
+      <div class="card planned">
+        <span class="tag">Planned</span>
+        <span class="name">Chain Watch</span>
+        <span class="what">Live chain count, time to timeout, and who is actually feeding it.</span>
       </div>
     </div>
-
-    <div class="table-scroll">
-      <table>
-        <thead>
-          <tr>
-            <th><button type="button" data-sort="name">Member</button></th>
-            <th class="right"><button type="button" data-sort="level">Level</button></th>
-            <th><button type="button" data-sort="position">Position</button></th>
-            <th class="right"><button type="button" data-sort="days">Days in</button></th>
-            <th class="right"><button type="button" data-sort="last">Last action</button></th>
-            <th><button type="button" data-sort="state">Status</button></th>
-            <th>Flags</th>
-          </tr>
-        </thead>
-        <tbody id="tbody"></tbody>
-      </table>
-    </div>
-    <p class="empty" id="empty">Paste a key and press Load members.</p>
   </section>
+
+  <div class="keynote">
+    <span class="title">First time here?</span>
+    <p>The payout ledger needs nothing at all — open it and start typing. The member board asks for
+      your own Torn API key: make a Custom Key in Torn under Settings, API Keys, tick faction →
+      members, and paste it in. Your key stays in your own browser and is only ever sent to Torn.</p>
+  </div>
 
   <footer>
-    <p><strong>Manual refresh only, by design.</strong> The page makes one API call when you press
-      the button and never polls in the background. Background watching of a game you are not looking
-      at is exactly what Torn's scripting rule prohibits, so this page does not do it.</p>
-    <p><strong>Torn does not publish other players' battle stats.</strong> Not for your own members
-      either. This board measures activity and availability, which is what a leader can actually act
-      on.</p>
+    <p>These pages read through Torn's official API and never act on your behalf. No account, no
+      login, nothing stored on any server.</p>
   </footer>
 </div>
-
-<script>
-  (function () {
-    'use strict';
-
-    var KEY_STORE = 'ks-leader-board-key';
-    var DAY = 86400;
-
-    var members = [];
-    var sortKey = 'last';
-    var sortDir = 1; /* 1 = most stale first for time, ascending for text */
-
-    var el = {
-      apiKey: document.getElementById('apiKey'),
-      toggleKey: document.getElementById('toggleKey'),
-      loadBtn: document.getElementById('loadBtn'),
-      forgetKey: document.getElementById('forgetKey'),
-      errorBox: document.getElementById('errorBox'),
-      okBox: document.getElementById('okBox'),
-      figures: document.getElementById('figures'),
-      figTotal: document.getElementById('figTotal'),
-      figOnline: document.getElementById('figOnline'),
-      figWarn: document.getElementById('figWarn'),
-      figCritical: document.getElementById('figCritical'),
-      figHosp: document.getElementById('figHosp'),
-      figOc: document.getElementById('figOc'),
-      pulledAt: document.getElementById('pulledAt'),
-      search: document.getElementById('search'),
-      stateFilter: document.getElementById('stateFilter'),
-      copyNudge: document.getElementById('copyNudge'),
-      tbody: document.getElementById('tbody'),
-      empty: document.getElementById('empty')
-    };
-
-    /* ---------- torn error codes ---------- */
-
-    var TERMINAL_CODES = { 2: 1, 10: 1, 13: 1, 18: 1 };
-    var RETRY_CODES = { 5: 1, 9: 1, 17: 1 };
-
-    function describeError(code, text) {
-      if (code === 2) return 'Torn rejected the key. Check it was copied whole, with no spaces.';
-      if (code === 16) return 'The key works, but it is missing the faction members selection. Edit the Custom Key in Torn and enable it.';
-      if (code === 13) return 'This key is disabled because the account has been inactive for seven days.';
-      if (code === 10) return 'The key owner is in federal jail, so the key cannot be used.';
-      if (code === 18) return 'This key has been paused by its owner.';
-      if (code === 5) return 'Too many calls in the last minute. Wait a moment and press Load again.';
-      if (code === 9) return 'Torn\'s API is temporarily unavailable. Try again shortly.';
-      if (code === 17) return 'Torn is in a backend update. Try again in a minute.';
-      return 'Torn returned error ' + code + (text ? ': ' + text : '') + '.';
-    }
-
-    /* ---------- helpers ---------- */
-
-    function show(box, message) {
-      box.textContent = message;
-      box.hidden = false;
-    }
-
-    function hide(box) {
-      box.textContent = '';
-      box.hidden = true;
-    }
-
-    function nowSeconds() {
-      return Math.floor(Date.now() / 1000);
-    }
-
-    function sinceText(seconds) {
-      if (seconds < 60) return 'just now';
-      if (seconds < 3600) return Math.floor(seconds / 60) + ' min';
-      if (seconds < DAY) return Math.floor(seconds / 3600) + ' h';
-      var days = Math.floor(seconds / DAY);
-      return days + (days === 1 ? ' day' : ' days');
-    }
-
-    function untilText(until) {
-      if (!until) return '';
-      var left = until - nowSeconds();
-      if (left <= 0) return 'out now';
-      if (left < 3600) return Math.ceil(left / 60) + ' min left';
-      if (left < DAY) return Math.floor(left / 3600) + ' h left';
-      return Math.floor(left / DAY) + ' d left';
-    }
-
-    function staleness(member) {
-      if (member.lastStatus === 'Online') return 'fresh';
-      var age = nowSeconds() - member.lastTimestamp;
-      if (age >= 7 * DAY) return 'critical';
-      if (age >= 3 * DAY) return 'warn';
-      return 'fresh';
-    }
-
-    /* ---------- key storage ---------- */
-
-    function readStoredKey() {
-      try { return localStorage.getItem(KEY_STORE) || ''; } catch (err) { return ''; }
-    }
-
-    function storeKey(value) {
-      try {
-        if (value) localStorage.setItem(KEY_STORE, value);
-        else localStorage.removeItem(KEY_STORE);
-      } catch (err) { /* storage blocked: the page still works for this session */ }
-    }
-
-    /* ---------- loading ---------- */
-
-    function normalise(raw) {
-      var last = raw.last_action || {};
-      var status = raw.status || {};
-      return {
-        id: raw.id,
-        name: typeof raw.name === 'string' ? raw.name : String(raw.id),
-        level: typeof raw.level === 'number' ? raw.level : 0,
-        position: typeof raw.position === 'string' ? raw.position : '',
-        days: typeof raw.days_in_faction === 'number' ? raw.days_in_faction : 0,
-        lastTimestamp: typeof last.timestamp === 'number' ? last.timestamp : 0,
-        lastStatus: typeof last.status === 'string' ? last.status : 'Offline',
-        lastRelative: typeof last.relative === 'string' ? last.relative : '',
-        state: typeof status.state === 'string' ? status.state : 'Unknown',
-        description: typeof status.description === 'string' ? status.description : '',
-        until: typeof status.until === 'number' ? status.until : 0,
-        inOc: raw.is_in_oc === true,
-        onWall: raw.is_on_wall === true
-      };
-    }
-
-    async function loadMembers() {
-      var key = el.apiKey.value.trim();
-      hide(el.errorBox);
-      hide(el.okBox);
-
-      if (!key) {
-        show(el.errorBox, 'Paste your Custom API Key first.');
-        return;
-      }
-
-      el.loadBtn.disabled = true;
-      el.loadBtn.textContent = 'Loading';
-
-      try {
-        var response = await fetch(
-          'https://api.torn.com/v2/faction/members?striptags=true&comment=KSLeaderBoard',
-          { headers: { Authorization: 'ApiKey ' + key } }
-        );
-        var payload = await response.json();
-
-        if (payload && payload.error) {
-          var code = payload.error.code;
-          show(el.errorBox, describeError(code, payload.error.error));
-          if (TERMINAL_CODES[code]) {
-            storeKey('');
-            el.apiKey.value = '';
-            show(el.errorBox, describeError(code, payload.error.error) +
-              ' The key has been cleared from this browser.');
-          } else if (!RETRY_CODES[code] && code !== 16) {
-            /* unclassified: leave the key alone, the owner decides */
-          }
-          return;
-        }
-
-        var list = payload && Array.isArray(payload.members) ? payload.members : null;
-        if (!list) {
-          show(el.errorBox, 'Torn answered, but not with a member list. The endpoint may have changed.');
-          return;
-        }
-
-        members = list.map(normalise);
-        storeKey(key);
-        el.pulledAt.textContent = 'Pulled ' + new Date().toLocaleString();
-        show(el.okBox, 'Loaded ' + members.length + ' members.');
-        render();
-      } catch (err) {
-        show(el.errorBox, 'Could not reach the Torn API. Check your connection, then try again.');
-      } finally {
-        el.loadBtn.disabled = false;
-        el.loadBtn.textContent = 'Load members';
-      }
-    }
-
-    /* ---------- filtering and sorting ---------- */
-
-    function visibleMembers() {
-      var needle = el.search.value.trim().toLowerCase();
-      var mode = el.stateFilter.value;
-      var now = nowSeconds();
-
-      return members.filter(function (m) {
-        if (needle) {
-          var hay = (m.name + ' ' + m.position).toLowerCase();
-          if (hay.indexOf(needle) === -1) return false;
-        }
-        var age = now - m.lastTimestamp;
-        if (mode === 'quiet3') return m.lastStatus !== 'Online' && age >= 3 * DAY;
-        if (mode === 'quiet7') return m.lastStatus !== 'Online' && age >= 7 * DAY;
-        if (mode === 'okay') return m.state === 'Okay';
-        if (mode === 'out') return m.state !== 'Okay';
-        return true;
-      });
-    }
-
-    function sorted(list) {
-      var copy = list.slice();
-      copy.sort(function (a, b) {
-        var result;
-        if (sortKey === 'name') result = a.name.localeCompare(b.name, 'en', { sensitivity: 'base' });
-        else if (sortKey === 'position') result = a.position.localeCompare(b.position, 'en', { sensitivity: 'base' });
-        else if (sortKey === 'state') result = a.state.localeCompare(b.state, 'en', { sensitivity: 'base' });
-        else if (sortKey === 'level') result = b.level - a.level;
-        else if (sortKey === 'days') result = b.days - a.days;
-        else result = a.lastTimestamp - b.lastTimestamp; /* oldest action first */
-        return result * sortDir;
-      });
-      return copy;
-    }
-
-    /* ---------- rendering ---------- */
-
-    function cell(text, className) {
-      var td = document.createElement('td');
-      if (className) td.className = className;
-      td.textContent = text;
-      return td;
-    }
-
-    function pill(text, tone) {
-      var span = document.createElement('span');
-      span.className = 'pill' + (tone ? ' ' + tone : '');
-      span.textContent = text;
-      return span;
-    }
-
-    function render() {
-      var now = nowSeconds();
-      var rows = sorted(visibleMembers());
-
-      el.tbody.textContent = '';
-      rows.forEach(function (m) {
-        var tr = document.createElement('tr');
-        var stale = staleness(m);
-        if (stale !== 'fresh') tr.className = 'stale-' + stale;
-
-        var nameCell = document.createElement('td');
-        nameCell.className = 'name';
-        nameCell.textContent = m.name;
-        var sub = document.createElement('span');
-        sub.className = 'sub';
-        sub.textContent = 'ID ' + m.id;
-        nameCell.appendChild(sub);
-        tr.appendChild(nameCell);
-
-        tr.appendChild(cell(String(m.level), 'num'));
-        tr.appendChild(cell(m.position));
-        tr.appendChild(cell(String(m.days), 'num'));
-
-        var lastCell = document.createElement('td');
-        lastCell.className = 'num';
-        lastCell.textContent = m.lastStatus === 'Online' ? 'online' : sinceText(now - m.lastTimestamp);
-        var lastSub = document.createElement('span');
-        lastSub.className = 'sub';
-        lastSub.textContent = m.lastStatus;
-        lastCell.appendChild(lastSub);
-        tr.appendChild(lastCell);
-
-        var stateCell = document.createElement('td');
-        var tone = m.state === 'Okay' ? 'good'
-          : (m.state === 'Hospital' || m.state === 'Jail' || m.state === 'Federal') ? 'bad'
-            : (m.state === 'Abroad' || m.state === 'Traveling') ? 'accent' : '';
-        stateCell.appendChild(pill(m.state, tone));
-        if (m.until) {
-          var untilSub = document.createElement('span');
-          untilSub.className = 'sub';
-          untilSub.textContent = untilText(m.until);
-          stateCell.appendChild(untilSub);
-        }
-        tr.appendChild(stateCell);
-
-        var flagCell = document.createElement('td');
-        var flags = document.createElement('div');
-        flags.className = 'flags';
-        if (m.inOc) flags.appendChild(pill('OC'));
-        if (m.onWall) flags.appendChild(pill('wall', 'accent'));
-        if (stale === 'critical') flags.appendChild(pill('quiet 7d+', 'bad'));
-        else if (stale === 'warn') flags.appendChild(pill('quiet 3d+', 'warn'));
-        flagCell.appendChild(flags);
-        tr.appendChild(flagCell);
-
-        el.tbody.appendChild(tr);
-      });
-
-      el.empty.hidden = members.length > 0 && rows.length > 0;
-      if (members.length > 0 && rows.length === 0) {
-        el.empty.textContent = 'No members match that filter.';
-      }
-
-      if (members.length > 0) {
-        el.figures.hidden = false;
-        el.figTotal.textContent = String(members.length);
-        el.figOnline.textContent = String(members.filter(function (m) {
-          return m.lastStatus === 'Online';
-        }).length);
-        el.figWarn.textContent = String(members.filter(function (m) {
-          return staleness(m) === 'warn';
-        }).length);
-        el.figCritical.textContent = String(members.filter(function (m) {
-          return staleness(m) === 'critical';
-        }).length);
-        el.figHosp.textContent = String(members.filter(function (m) {
-          return m.state === 'Hospital';
-        }).length);
-        el.figOc.textContent = String(members.filter(function (m) { return m.inOc; }).length);
-      }
-    }
-
-    /* ---------- wiring ---------- */
-
-    el.toggleKey.addEventListener('click', function () {
-      var showing = el.apiKey.type === 'text';
-      el.apiKey.type = showing ? 'password' : 'text';
-      el.toggleKey.textContent = showing ? 'Show' : 'Hide';
-      el.toggleKey.setAttribute('aria-pressed', String(!showing));
-    });
-
-    el.loadBtn.addEventListener('click', function () { void loadMembers(); });
-
-    el.forgetKey.addEventListener('click', function () {
-      storeKey('');
-      el.apiKey.value = '';
-      hide(el.errorBox);
-      show(el.okBox, 'Key removed from this browser.');
-    });
-
-    el.search.addEventListener('input', render);
-    el.stateFilter.addEventListener('change', render);
-
-    document.querySelectorAll('[data-sort]').forEach(function (button) {
-      button.addEventListener('click', function () {
-        var key = button.getAttribute('data-sort');
-        if (key === sortKey) sortDir = -sortDir;
-        else { sortKey = key; sortDir = 1; }
-        render();
-      });
-    });
-
-    el.copyNudge.addEventListener('click', function () {
-      var quiet = sorted(members.filter(function (m) { return staleness(m) !== 'fresh'; }));
-      if (quiet.length === 0) {
-        show(el.okBox, 'Nobody is over the quiet threshold. Good.');
-        return;
-      }
-      var now = nowSeconds();
-      var text = quiet.map(function (m) {
-        return m.name + ' [' + m.id + '] — quiet ' + sinceText(now - m.lastTimestamp) +
-          ' — ' + m.days + ' days in faction';
-      }).join('\n');
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(function () {
-          show(el.okBox, 'Copied ' + quiet.length + ' names.');
-        }, function () {
-          show(el.errorBox, 'Could not copy. Select the rows and copy by hand.');
-        });
-      } else {
-        show(el.errorBox, 'Clipboard unavailable in this browser.');
-      }
-    });
-
-    el.apiKey.value = readStoredKey();
-  })();
-</script>
 </body>
 </html>

@@ -1,0 +1,1021 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>War Payout Ledger</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground: #eaedf1;
+    --surface: #ffffff;
+    --surface-2: #f4f6f9;
+    --ink: #14202b;
+    --muted: #5c6d7e;
+    --faint: #8b9aa8;
+    --line: #d3dae1;
+    --line-strong: #b8c3cd;
+    --accent: #a3512a;
+    --accent-ink: #ffffff;
+    --accent-soft: #f2ded4;
+    --good: #1c7355;
+    --warn: #8c6210;
+    --bad: #a12f2a;
+    --shadow: 0 1px 2px rgba(20, 32, 43, .06), 0 8px 24px rgba(20, 32, 43, .06);
+
+    --display: 'Saira Condensed', 'Arial Narrow', Helvetica, sans-serif;
+    --body: 'Public Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0e141a;
+      --surface: #171f27;
+      --surface-2: #1d262f;
+      --ink: #e3e9ef;
+      --muted: #93a3b2;
+      --faint: #6b7c8b;
+      --line: #26313b;
+      --line-strong: #35434f;
+      --accent: #d8804d;
+      --accent-ink: #171f27;
+      --accent-soft: #2e211a;
+      --good: #46a583;
+      --warn: #cc9f3f;
+      --bad: #dd6a61;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .3);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0e141a;
+    --surface: #171f27;
+    --surface-2: #1d262f;
+    --ink: #e3e9ef;
+    --muted: #93a3b2;
+    --faint: #6b7c8b;
+    --line: #26313b;
+    --line-strong: #35434f;
+    --accent: #d8804d;
+    --accent-ink: #171f27;
+    --accent-soft: #2e211a;
+    --good: #46a583;
+    --warn: #cc9f3f;
+    --bad: #dd6a61;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .3);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: 28px 20px 72px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  /* ---------- masthead ---------- */
+
+  .masthead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px 24px;
+    padding-bottom: 18px;
+    border-bottom: 2px solid var(--line-strong);
+  }
+
+  h1 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(30px, 5vw, 42px);
+    line-height: 1.02;
+    letter-spacing: .01em;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .masthead p {
+    margin: 6px 0 0;
+    color: var(--muted);
+    max-width: 58ch;
+  }
+
+  .stamp {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 2px;
+    padding: 5px 10px;
+    white-space: nowrap;
+  }
+
+  /* ---------- panels ---------- */
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    box-shadow: var(--shadow);
+  }
+
+  .panel-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px 16px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .panel-head h2 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 19px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    margin: 0;
+  }
+
+  .panel-head .hint { color: var(--faint); font-size: 13px; margin: 0; }
+
+  .panel-body { padding: 18px; }
+
+  /* ---------- form controls ---------- */
+
+  .field-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 16px;
+  }
+
+  .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+
+  .field > label,
+  .legend {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: .11em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .field .note { font-size: 12px; color: var(--faint); }
+
+  input[type="text"] {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 15px;
+    color: var(--ink);
+    background: var(--surface-2);
+    border: 1px solid var(--line-strong);
+    border-radius: 3px;
+    padding: 9px 11px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  input[type="text"].name-input {
+    font-family: var(--body);
+    font-variant-numeric: normal;
+  }
+
+  input:focus-visible,
+  button:focus-visible,
+  summary:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  textarea {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--ink);
+    background: var(--surface-2);
+    border: 1px solid var(--line-strong);
+    border-radius: 3px;
+    padding: 10px 11px;
+    width: 100%;
+    min-height: 120px;
+    resize: vertical;
+  }
+
+  .segmented {
+    display: inline-flex;
+    border: 1px solid var(--line-strong);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .segmented button {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    background: var(--surface-2);
+    color: var(--muted);
+    border: 0;
+    border-right: 1px solid var(--line-strong);
+    padding: 9px 14px;
+    cursor: pointer;
+  }
+
+  .segmented button:last-child { border-right: 0; }
+  .segmented button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+  .btn {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    background: var(--surface-2);
+    color: var(--ink);
+    border: 1px solid var(--line-strong);
+    border-radius: 3px;
+    padding: 9px 15px;
+    cursor: pointer;
+  }
+
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn.primary:hover { color: var(--accent-ink); filter: brightness(1.06); }
+  .btn.quiet { background: transparent; border-color: transparent; color: var(--faint); }
+  .btn.quiet:hover { color: var(--bad); border-color: var(--line); }
+
+  /* ---------- headline figures ---------- */
+
+  .figures {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .figure { background: var(--surface); padding: 16px 18px; display: flex; flex-direction: column; gap: 4px; }
+  .figure.lead { background: var(--accent-soft); }
+
+  .figure .k {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: .11em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .figure .v {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+    font-size: 22px;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  .figure.lead .v { font-size: 27px; font-weight: 600; color: var(--accent); }
+  .figure .sub { font-size: 12px; color: var(--faint); }
+
+  /* ---------- roster ---------- */
+
+  .roster { display: flex; flex-direction: column; }
+
+  .row {
+    display: grid;
+    grid-template-columns: 2fr 110px 1fr 34px;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 18px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .row.head {
+    padding-top: 10px;
+    padding-bottom: 10px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--line-strong);
+  }
+
+  .row.head span,
+  .row.head button {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: .11em;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: none;
+    border: 0;
+    padding: 0;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .row.head button:hover { color: var(--accent); }
+  .row.head .num, .row.head .pay { text-align: right; }
+  .row.head button.num, .row.head button.pay { justify-self: end; }
+
+  .row .payout {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+
+  .row.excluded { background: var(--surface-2); }
+  .row.excluded .payout { color: var(--faint); }
+  .row.excluded .name-input { color: var(--faint); }
+
+  .row .drop { justify-self: end; }
+
+  .row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .empty { padding: 30px 18px; text-align: center; color: var(--faint); }
+
+  details { border-top: 1px solid var(--line); }
+
+  summary {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 13px 18px;
+    cursor: pointer;
+  }
+
+  summary:hover { color: var(--accent); }
+  details .panel-body { padding-top: 4px; }
+
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .toast {
+    font-size: 13px;
+    color: var(--good);
+    font-weight: 500;
+  }
+
+  footer {
+    color: var(--faint);
+    font-size: 13px;
+    border-top: 1px solid var(--line);
+    padding-top: 16px;
+  }
+
+  footer p { margin: 0 0 6px; max-width: 70ch; }
+
+  .sr {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (max-width: 620px) {
+    .row { grid-template-columns: 1fr 84px 34px; row-gap: 4px; }
+    .row .payout { grid-column: 1 / 3; text-align: left; }
+    .row.head .pay { display: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+
+  .backbar { margin: -6px 0 -8px; }
+  .backbar a {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-decoration: none;
+    border: 1px solid var(--line-strong);
+    border-radius: 3px;
+    padding: 7px 12px;
+    display: inline-block;
+  }
+  .backbar a:hover { color: var(--accent); border-color: var(--accent); }
+  .backbar a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="backbar"><a href="./">← All tools</a></nav>
+
+  <header class="masthead">
+    <div>
+      <h1>War Payout Ledger</h1>
+      <p>Split the cash from sold caches across everyone who hit. Type the numbers, read the rate,
+        copy the result into faction chat.</p>
+    </div>
+    <span class="stamp">PoIitically Incorrect &middot; 48039</span>
+  </header>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>The pot</h2>
+      <p class="hint">Enter what the caches actually sold for, not their market value.</p>
+    </div>
+    <div class="panel-body">
+      <div class="field-grid">
+        <div class="field" id="poolField">
+          <label for="pot">Cash from caches</label>
+          <input type="text" id="pot" inputmode="numeric" autocomplete="off" placeholder="0">
+          <span class="note">Total after selling, before any cut.</span>
+        </div>
+
+        <div class="field" id="rateField" hidden>
+          <label for="fixedRate">Rate per hit</label>
+          <input type="text" id="fixedRate" inputmode="numeric" autocomplete="off" placeholder="0">
+          <span class="note">What one hit is worth. The pot is worked out from it.</span>
+        </div>
+
+        <div class="field">
+          <label for="cut">Faction keeps</label>
+          <input type="text" id="cut" inputmode="decimal" autocomplete="off" placeholder="0">
+          <span class="note">Percent off the top, before the split.</span>
+        </div>
+
+        <div class="field">
+          <label for="minHits">Minimum to qualify</label>
+          <input type="text" id="minHits" inputmode="numeric" autocomplete="off" placeholder="0">
+          <span class="note" id="minHitsNote">Fewer hits than this and a member is skipped.</span>
+        </div>
+
+        <div class="field">
+          <span class="legend" id="basisLabel">Split by</span>
+          <div class="segmented" role="group" aria-labelledby="basisLabel">
+            <button type="button" data-basis="hits" aria-pressed="true">Hits</button>
+            <button type="button" data-basis="respect" aria-pressed="false">Respect</button>
+          </div>
+          <span class="note">Respect rewards hitting up; hits reward showing up.</span>
+        </div>
+
+        <div class="field">
+          <span class="legend" id="modeLabel">Work it out from</span>
+          <div class="segmented" role="group" aria-labelledby="modeLabel">
+            <button type="button" data-mode="pool" aria-pressed="true">The pot</button>
+            <button type="button" data-mode="rate" aria-pressed="false">A set rate</button>
+          </div>
+          <span class="note">Set rate tells you what the payout will cost you.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="figures" aria-label="Result summary">
+    <div class="figure lead">
+      <span class="k" id="leadKey">Per hit</span>
+      <span class="v" id="leadValue">$0</span>
+      <span class="sub" id="leadSub">Nothing entered yet</span>
+    </div>
+    <div class="figure">
+      <span class="k">Distributable</span>
+      <span class="v" id="distributable">$0</span>
+      <span class="sub" id="cutSub">No cut taken</span>
+    </div>
+    <div class="figure">
+      <span class="k">Paid out</span>
+      <span class="v" id="paidOut">$0</span>
+      <span class="sub" id="paidSub">0 of 0 members</span>
+    </div>
+    <div class="figure">
+      <span class="k">Stays in bank</span>
+      <span class="v" id="remainder">$0</span>
+      <span class="sub">Cut plus rounding</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Roster</h2>
+      <p class="hint">Payouts round down to whole dollars.</p>
+    </div>
+
+    <div class="roster" id="roster">
+      <div class="row head">
+        <button type="button" data-sort="name">Member</button>
+        <button type="button" class="num" data-sort="count" id="countHead">Hits</button>
+        <button type="button" class="pay" data-sort="payout">Payout</button>
+        <span class="sr">Remove</span>
+      </div>
+      <div id="rows"></div>
+      <p class="empty" id="empty">No members yet. Add a row, or paste the war report below.</p>
+    </div>
+
+    <div class="row-actions">
+      <button type="button" class="btn" id="addRow">Add member</button>
+      <button type="button" class="btn quiet" id="clearRoster">Clear roster</button>
+    </div>
+
+    <details>
+      <summary>Paste a list instead</summary>
+      <div class="panel-body">
+        <p class="hint" style="margin:0 0 10px">One member per line. The last number on the line is
+          the count, everything before it is the name. Player IDs in brackets are ignored.</p>
+        <label class="sr" for="pasteBox">Members to import</label>
+        <textarea id="pasteBox" spellcheck="false" placeholder="Kingshade [2179382]   42&#10;Someone Else   17&#10;Third Member 8"></textarea>
+        <div class="toolbar" style="margin-top:12px">
+          <button type="button" class="btn" id="importAdd">Add to roster</button>
+          <button type="button" class="btn" id="importReplace">Replace roster</button>
+          <span class="toast" id="importToast" role="status"></span>
+        </div>
+      </div>
+    </details>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Hand it over</h2>
+      <p class="hint">Plain text, ready to paste into faction chat or a forum post.</p>
+    </div>
+    <div class="panel-body">
+      <div class="toolbar">
+        <button type="button" class="btn primary" id="copyBtn">Copy payout summary</button>
+        <span class="toast" id="copyToast" role="status"></span>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p><strong>Rounding.</strong> Every payout rounds down to a whole dollar, so the leftover cents
+      stay in the bank rather than leaving you a few dollars short on the last payment.</p>
+    <p><strong>Nothing leaves this page.</strong> No Torn account, no API key, no connection to the
+      game. It is a calculator: what you type stays in your browser, and only this browser.</p>
+  </footer>
+</div>
+
+<script>
+  (function () {
+    'use strict';
+
+    var STORE_KEY = 'ks-war-payout-v1';
+
+    var state = {
+      pot: 0,
+      fixedRate: 0,
+      cut: 0,
+      minCount: 0,
+      basis: 'hits',
+      mode: 'pool',
+      members: []
+    };
+
+    var nextId = 1;
+
+    /* ---------- helpers ---------- */
+
+    function parseNumber(value) {
+      if (typeof value !== 'string') return 0;
+      var cleaned = value.replace(/[^0-9.]/g, '');
+      var parts = cleaned.split('.');
+      if (parts.length > 2) cleaned = parts[0] + '.' + parts.slice(1).join('');
+      var n = parseFloat(cleaned);
+      return isFinite(n) && n > 0 ? n : 0;
+    }
+
+    function money(n) {
+      return '$' + Math.round(n).toLocaleString('en-US');
+    }
+
+    function plural(n, one, many) {
+      return n === 1 ? one : many;
+    }
+
+    function countWord() {
+      return state.basis === 'hits' ? 'hits' : 'respect';
+    }
+
+    function countWordSingular() {
+      return state.basis === 'hits' ? 'hit' : 'respect';
+    }
+
+    /* ---------- persistence ---------- */
+
+    function save() {
+      try {
+        localStorage.setItem(STORE_KEY, JSON.stringify(state));
+      } catch (err) {
+        /* private window or storage blocked: the page still works, it just forgets */
+      }
+    }
+
+    function load() {
+      var raw = null;
+      try {
+        raw = localStorage.getItem(STORE_KEY);
+      } catch (err) {
+        raw = null;
+      }
+      if (!raw) return;
+      try {
+        var saved = JSON.parse(raw);
+        if (!saved || typeof saved !== 'object') return;
+        state.pot = typeof saved.pot === 'number' ? saved.pot : 0;
+        state.fixedRate = typeof saved.fixedRate === 'number' ? saved.fixedRate : 0;
+        state.cut = typeof saved.cut === 'number' ? saved.cut : 0;
+        state.minCount = typeof saved.minCount === 'number' ? saved.minCount : 0;
+        state.basis = saved.basis === 'respect' ? 'respect' : 'hits';
+        state.mode = saved.mode === 'rate' ? 'rate' : 'pool';
+        if (Array.isArray(saved.members)) {
+          state.members = saved.members.map(function (m) {
+            return {
+              id: nextId++,
+              name: typeof m.name === 'string' ? m.name : '',
+              count: typeof m.count === 'number' && m.count > 0 ? m.count : 0
+            };
+          });
+        }
+      } catch (err) {
+        /* corrupt payload: start clean rather than half-loaded */
+      }
+    }
+
+    /* ---------- calculation ---------- */
+
+    function calculate() {
+      var qualified = state.members.filter(function (m) {
+        return m.count > 0 && m.count >= state.minCount;
+      });
+      var totalCount = qualified.reduce(function (sum, m) { return sum + m.count; }, 0);
+      var cutFraction = Math.min(state.cut, 100) / 100;
+
+      var distributable;
+      var rate;
+      var potNeeded;
+
+      if (state.mode === 'rate') {
+        rate = state.fixedRate;
+        distributable = rate * totalCount;
+        potNeeded = cutFraction < 1 ? distributable / (1 - cutFraction) : 0;
+      } else {
+        distributable = state.pot * (1 - cutFraction);
+        rate = totalCount > 0 ? distributable / totalCount : 0;
+        potNeeded = state.pot;
+      }
+
+      var payouts = state.members.map(function (m) {
+        var eligible = m.count > 0 && m.count >= state.minCount;
+        return {
+          member: m,
+          eligible: eligible,
+          amount: eligible ? Math.floor(rate * m.count) : 0
+        };
+      });
+
+      var paid = payouts.reduce(function (sum, p) { return sum + p.amount; }, 0);
+      var factionCut = potNeeded * cutFraction;
+
+      return {
+        qualifiedCount: qualified.length,
+        totalCount: totalCount,
+        rate: rate,
+        distributable: distributable,
+        potNeeded: potNeeded,
+        factionCut: factionCut,
+        payouts: payouts,
+        paid: paid,
+        remainder: Math.max(potNeeded - paid, 0)
+      };
+    }
+
+    /* ---------- rendering ---------- */
+
+    var el = {
+      pot: document.getElementById('pot'),
+      fixedRate: document.getElementById('fixedRate'),
+      cut: document.getElementById('cut'),
+      minHits: document.getElementById('minHits'),
+      minHitsNote: document.getElementById('minHitsNote'),
+      poolField: document.getElementById('poolField'),
+      rateField: document.getElementById('rateField'),
+      rows: document.getElementById('rows'),
+      empty: document.getElementById('empty'),
+      countHead: document.getElementById('countHead'),
+      leadKey: document.getElementById('leadKey'),
+      leadValue: document.getElementById('leadValue'),
+      leadSub: document.getElementById('leadSub'),
+      distributable: document.getElementById('distributable'),
+      cutSub: document.getElementById('cutSub'),
+      paidOut: document.getElementById('paidOut'),
+      paidSub: document.getElementById('paidSub'),
+      remainder: document.getElementById('remainder')
+    };
+
+    function renderRows(result) {
+      el.rows.textContent = '';
+      state.members.forEach(function (member, index) {
+        var payout = result.payouts[index];
+        var row = document.createElement('div');
+        row.className = 'row' + (payout.eligible ? '' : ' excluded');
+
+        var name = document.createElement('input');
+        name.type = 'text';
+        name.className = 'name-input';
+        name.value = member.name;
+        name.placeholder = 'Member name';
+        name.setAttribute('aria-label', 'Member name');
+        name.addEventListener('input', function () {
+          member.name = name.value;
+          save();
+        });
+
+        var count = document.createElement('input');
+        count.type = 'text';
+        count.inputMode = 'numeric';
+        count.value = member.count ? String(member.count) : '';
+        count.placeholder = '0';
+        count.setAttribute('aria-label', countWord());
+        count.addEventListener('input', function () {
+          member.count = parseNumber(count.value);
+          render();
+          save();
+        });
+
+        var payoutCell = document.createElement('span');
+        payoutCell.className = 'payout';
+        payoutCell.textContent = payout.eligible ? money(payout.amount) : 'skipped';
+
+        var drop = document.createElement('button');
+        drop.type = 'button';
+        drop.className = 'btn quiet drop';
+        drop.textContent = '×';
+        drop.setAttribute('aria-label', 'Remove ' + (member.name || 'member'));
+        drop.addEventListener('click', function () {
+          state.members = state.members.filter(function (m) { return m.id !== member.id; });
+          render();
+          save();
+        });
+
+        row.appendChild(name);
+        row.appendChild(count);
+        row.appendChild(payoutCell);
+        row.appendChild(drop);
+        el.rows.appendChild(row);
+      });
+
+      el.empty.hidden = state.members.length > 0;
+    }
+
+    function render() {
+      var result = calculate();
+
+      el.countHead.textContent = state.basis === 'hits' ? 'Hits' : 'Respect';
+      el.minHitsNote.textContent = 'Less ' + countWord() + ' than this and a member is skipped.';
+      el.poolField.hidden = state.mode !== 'pool';
+      el.rateField.hidden = state.mode !== 'rate';
+
+      if (state.mode === 'rate') {
+        el.leadKey.textContent = 'Pot needed';
+        el.leadValue.textContent = money(result.potNeeded);
+        el.leadSub.textContent = result.totalCount > 0
+          ? money(state.fixedRate) + ' × ' + result.totalCount.toLocaleString('en-US') + ' ' + countWord()
+          : 'Enter a rate and some ' + countWord();
+      } else {
+        el.leadKey.textContent = 'Per ' + countWordSingular();
+        el.leadValue.textContent = money(result.rate);
+        el.leadSub.textContent = result.totalCount > 0
+          ? result.totalCount.toLocaleString('en-US') + ' ' + countWord() + ' counted'
+          : 'Enter the pot and some ' + countWord();
+      }
+
+      el.distributable.textContent = money(result.distributable);
+      el.cutSub.textContent = state.cut > 0
+        ? money(result.factionCut) + ' held back (' + state.cut + '%)'
+        : 'No cut taken';
+
+      el.paidOut.textContent = money(result.paid);
+      el.paidSub.textContent = result.qualifiedCount + ' of ' + state.members.length + ' ' +
+        plural(state.members.length, 'member', 'members');
+
+      el.remainder.textContent = money(result.remainder);
+
+      renderRows(result);
+    }
+
+    /* ---------- summary text ---------- */
+
+    function summaryText() {
+      var result = calculate();
+      var lines = [];
+      lines.push('RANKED WAR PAYOUT — PoIitically Incorrect');
+      lines.push('');
+      if (state.mode === 'rate') {
+        lines.push('Rate set at ' + money(state.fixedRate) + ' per ' + countWordSingular());
+        lines.push('Pot needed: ' + money(result.potNeeded));
+      } else {
+        lines.push('Cash from caches: ' + money(state.pot));
+        lines.push('Rate: ' + money(result.rate) + ' per ' + countWordSingular());
+      }
+      if (state.cut > 0) {
+        lines.push('Faction keeps ' + state.cut + '%: ' + money(result.factionCut));
+      }
+      if (state.minCount > 0) {
+        lines.push('Minimum to qualify: ' + state.minCount + ' ' + countWord());
+      }
+      lines.push('');
+
+      var eligible = result.payouts.filter(function (p) { return p.eligible; })
+        .slice()
+        .sort(function (a, b) { return b.amount - a.amount; });
+
+      eligible.forEach(function (p) {
+        lines.push((p.member.name || 'Unnamed') + ' — ' +
+          p.member.count.toLocaleString('en-US') + ' ' + countWord() + ' — ' + money(p.amount));
+      });
+
+      var skipped = result.payouts.filter(function (p) { return !p.eligible; });
+      if (skipped.length > 0) {
+        lines.push('');
+        lines.push('Not paid: ' + skipped.map(function (p) {
+          return (p.member.name || 'Unnamed') + ' (' + p.member.count + ')';
+        }).join(', '));
+      }
+
+      lines.push('');
+      lines.push('Paid out: ' + money(result.paid) + ' to ' + eligible.length + ' ' +
+        plural(eligible.length, 'member', 'members'));
+      lines.push('Stays in bank: ' + money(result.remainder));
+      return lines.join('\n');
+    }
+
+    /* ---------- import ---------- */
+
+    function parsePaste(text) {
+      var found = [];
+      text.split(/\r?\n/).forEach(function (line) {
+        var trimmed = line.replace(/\[\s*\d+\s*\]/g, ' ').trim();
+        if (!trimmed) return;
+        var match = trimmed.match(/^(.*?)[\s\t:|,-]*([0-9][0-9,\s]*)$/);
+        if (!match) return;
+        var name = match[1].replace(/[\s\t:|,-]+$/, '').trim();
+        var count = parseNumber(match[2]);
+        if (!name || count <= 0) return;
+        found.push({ id: nextId++, name: name, count: count });
+      });
+      return found;
+    }
+
+    /* ---------- wiring ---------- */
+
+    function bindNumber(input, key) {
+      input.addEventListener('input', function () {
+        state[key] = parseNumber(input.value);
+        render();
+        save();
+      });
+    }
+
+    bindNumber(el.pot, 'pot');
+    bindNumber(el.fixedRate, 'fixedRate');
+    bindNumber(el.cut, 'cut');
+    bindNumber(el.minHits, 'minCount');
+
+    document.querySelectorAll('[data-basis]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        state.basis = button.getAttribute('data-basis');
+        document.querySelectorAll('[data-basis]').forEach(function (other) {
+          other.setAttribute('aria-pressed', String(other === button));
+        });
+        render();
+        save();
+      });
+    });
+
+    document.querySelectorAll('[data-mode]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        state.mode = button.getAttribute('data-mode');
+        document.querySelectorAll('[data-mode]').forEach(function (other) {
+          other.setAttribute('aria-pressed', String(other === button));
+        });
+        render();
+        save();
+      });
+    });
+
+    document.querySelectorAll('[data-sort]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var key = button.getAttribute('data-sort');
+        var result = calculate();
+        if (key === 'name') {
+          state.members.sort(function (a, b) {
+            return a.name.localeCompare(b.name, 'en', { sensitivity: 'base' });
+          });
+        } else if (key === 'count') {
+          state.members.sort(function (a, b) { return b.count - a.count; });
+        } else {
+          var amounts = {};
+          result.payouts.forEach(function (p) { amounts[p.member.id] = p.amount; });
+          state.members.sort(function (a, b) { return amounts[b.id] - amounts[a.id]; });
+        }
+        render();
+        save();
+      });
+    });
+
+    document.getElementById('addRow').addEventListener('click', function () {
+      state.members.push({ id: nextId++, name: '', count: 0 });
+      render();
+      save();
+      var inputs = el.rows.querySelectorAll('.name-input');
+      if (inputs.length) inputs[inputs.length - 1].focus();
+    });
+
+    document.getElementById('clearRoster').addEventListener('click', function () {
+      state.members = [];
+      render();
+      save();
+    });
+
+    function runImport(replace) {
+      var box = document.getElementById('pasteBox');
+      var toast = document.getElementById('importToast');
+      var parsed = parsePaste(box.value);
+      if (parsed.length === 0) {
+        toast.textContent = 'No lines matched. Each line needs a name and a number.';
+        return;
+      }
+      state.members = replace ? parsed : state.members.concat(parsed);
+      box.value = '';
+      toast.textContent = 'Added ' + parsed.length + ' ' + plural(parsed.length, 'member', 'members') + '.';
+      render();
+      save();
+    }
+
+    document.getElementById('importAdd').addEventListener('click', function () { runImport(false); });
+    document.getElementById('importReplace').addEventListener('click', function () { runImport(true); });
+
+    document.getElementById('copyBtn').addEventListener('click', function () {
+      var toast = document.getElementById('copyToast');
+      var text = summaryText();
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () {
+          toast.textContent = 'Copied.';
+        }, function () {
+          toast.textContent = 'Could not copy. Select the roster and copy it by hand.';
+        });
+      } else {
+        toast.textContent = 'Clipboard unavailable in this browser.';
+      }
+    });
+
+    /* ---------- start ---------- */
+
+    load();
+    el.pot.value = state.pot ? String(state.pot) : '';
+    el.fixedRate.value = state.fixedRate ? String(state.fixedRate) : '';
+    el.cut.value = state.cut ? String(state.cut) : '';
+    el.minHits.value = state.minCount ? String(state.minCount) : '';
+    document.querySelectorAll('[data-basis]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-basis') === state.basis));
+    });
+    document.querySelectorAll('[data-mode]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-mode') === state.mode));
+    });
+    render();
+  })();
+</script>
+</body>
+</html>
