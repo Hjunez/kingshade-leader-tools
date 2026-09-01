@@ -307,6 +307,10 @@
     var CATEGORIES = ['weapons', 'armor', 'temporary', 'medical', 'consumables',
                       'drugs', 'boosters', 'utilities', 'loot'];
 
+    // Torn's faction inventory endpoint accepts at most 100 rows per call.
+    var PAGE_SIZE = 100;
+    var MAX_PAGES_PER_CATEGORY = 10;
+
     var el = {};
     ['apiKey','toggleKey','runBtn','forgetKey','errorBox','okBox','figures','figLoaned',
      'figHolders','figStock','figKinds','loans','loansEmpty','loanHint','loanActions','copyLoans',
@@ -471,8 +475,17 @@
 
         for (var i = 0; i < CATEGORIES.length; i += 1) {
           var category = CATEGORIES[i];
-          var payload = await tornGet('/faction/inventory?cat=' + category + '&limit=1000');
-          var items = Array.isArray(payload.inventory) ? payload.inventory : [];
+          var items = [];
+          // Torn caps this endpoint at 100 rows per call, so page through it.
+          for (var page = 0; page < MAX_PAGES_PER_CATEGORY; page += 1) {
+            var payload = await tornGet('/faction/inventory?cat=' + category +
+              '&limit=' + PAGE_SIZE + '&offset=' + (page * PAGE_SIZE));
+            var batch = Array.isArray(payload.inventory) ? payload.inventory : [];
+            items = items.concat(batch);
+            if (batch.length < PAGE_SIZE) {
+              break;
+            }
+          }
           items.forEach(function (item) {
             var name = typeof item.name === 'string' ? item.name : 'Item ' + item.id;
             var amount = typeof item.amount === 'number' ? item.amount : 1;
