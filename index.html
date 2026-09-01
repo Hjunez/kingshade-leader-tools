@@ -430,14 +430,17 @@
   <div class="keynote">
     <span class="title">First time here?</span>
     <p>Ask KS Leslie needs nothing — just open it. The other three read your faction through Torn's
-      API. Make one Custom Key in Torn under Settings → API Keys and tick these five boxes under
+      API. Make one Custom Key in Torn under Settings → API Keys and tick these four boxes under
       <strong>faction</strong>:</p>
     <p><strong>members</strong> · <strong>rankedwars</strong> · <strong>rankedwarreport</strong> ·
-      <strong>inventory</strong> · <strong>news</strong></p>
-    <p>That one key covers every tool here. Nothing outside faction is needed, and nothing is ever
-      written — these pages only read.</p>
-    <p>Your key stays in your own browser and is only ever sent to Torn. Miss one of the five and you
-      get error 16, which is a tick box, not a broken key.</p>
+      <strong>news</strong></p>
+    <p>Your faction position also needs <strong>faction API access</strong>, which the Leader sets on
+      the position, not on the key.</p>
+    <p>One exception: the armory <em>contents</em> — the list of who is holding what — needs a
+      <strong>Limited</strong> access key instead. Torn requires it for that endpoint. With only a
+      Custom key the Armory page still shows the take-and-return log, and says so.</p>
+    <p>Nothing is ever written — these pages only read. Your key stays in your own browser and is
+      only ever sent to Torn.</p>
   </div>
 
   <footer>

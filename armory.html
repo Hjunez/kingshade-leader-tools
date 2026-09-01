@@ -224,9 +224,14 @@
       <summary>Which key selections this needs</summary>
       <div class="panel-body">
         <dl>
-          <dt>Selections</dt>
-          <dd>faction → <strong>inventory</strong> and faction → <strong>news</strong>. Error 16
-            means one is missing — a tick box, not a broken key.</dd>
+          <dt>Access level</dt>
+          <dd>The activity log works with a <strong>Custom</strong> key that has faction →
+            <strong>news</strong> and faction API access. The armory contents — the actual list of
+            who is holding what — needs a <strong>Limited</strong> access key. That is Torn's rule,
+            not this page's: the faction inventory endpoint is documented as requiring one.</dd>
+          <dt>If you only have a Custom key</dt>
+          <dd>The page still works. You get the log of who took and returned what, and it says
+            plainly that the item list is missing rather than pretending to be empty.</dd>
           <dt>What it reads</dt>
           <dd>The armory contents in all nine categories, plus the recent armory action log.</dd>
           <dt>Storage</dt>
@@ -472,7 +477,9 @@
       try {
         loans = [];
         var stock = new Map();
+        var inventoryError = null;
 
+        try {
         for (var i = 0; i < CATEGORIES.length; i += 1) {
           var category = CATEGORIES[i];
           var items = [];
@@ -504,6 +511,15 @@
             stock.set(key, row);
           });
         }
+        } catch (inventoryFailure) {
+          // The armory endpoint needs a Limited access key. A Custom key cannot reach it, so the
+          // log below still runs and the page explains what is missing rather than failing whole.
+          inventoryError = inventoryFailure instanceof Error
+            ? inventoryFailure.message
+            : String(inventoryFailure);
+          loans = [];
+          stock = new Map();
+        }
 
         var newsPayload = await tornGet('/faction/news?cat=armoryAction&limit=50&sort=DESC&striptags=true');
         var news = Array.isArray(newsPayload.news) ? newsPayload.news : [];
@@ -514,14 +530,24 @@
 
         var holders = new Set(loans.map(function (l) { return l.holder; }));
         var available = [...stock.values()].reduce(function (sum, r) { return sum + r.available; }, 0);
-        el.figures.hidden = false;
+        el.figures.hidden = inventoryError !== null;
         el.figLoaned.textContent = String(loans.length);
         el.figHolders.textContent = String(holders.size);
         el.figStock.textContent = available.toLocaleString('en-US');
         el.figKinds.textContent = String(stock.size);
 
         storeKey(el.apiKey.value.trim());
-        show(el.okBox, 'Audit complete. ' + stock.size + ' distinct items checked.');
+
+        if (inventoryError !== null) {
+          el.loansEmpty.textContent = 'The armory contents need a Limited access key. Your key ' +
+            'read the activity log below, but not the item list.';
+          el.stockEmpty.textContent = 'Needs a Limited access key.';
+          show(el.errorBox, 'Armory contents unavailable: ' + inventoryError +
+            ' — Torn requires a Limited access key for the armory itself. The activity log below ' +
+            'loaded fine.');
+        } else {
+          show(el.okBox, 'Audit complete. ' + stock.size + ' distinct items checked.');
+        }
       } catch (err) {
         show(el.errorBox, err.message);
       } finally {
