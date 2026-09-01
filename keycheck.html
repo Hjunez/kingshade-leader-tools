@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Key Check</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground: #eaedf1; --surface: #ffffff; --surface-2: #f4f6f9;
+    --ink: #14202b; --muted: #5c6d7e; --faint: #8b9aa8;
+    --line: #d3dae1; --line-strong: #b8c3cd;
+    --accent: #a3512a; --accent-ink: #ffffff; --accent-soft: #f2ded4;
+    --good: #1c7355; --good-soft: #dfeee8;
+    --warn: #8c6210; --warn-soft: #f6ecd6;
+    --bad: #a12f2a; --bad-soft: #f6dedc;
+    --shadow: 0 1px 2px rgba(20,32,43,.06), 0 8px 24px rgba(20,32,43,.06);
+    --display: 'Saira Condensed','Arial Narrow',Helvetica,sans-serif;
+    --body: 'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
+    --mono: 'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+      --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+      --line: #26313b; --line-strong: #35434f;
+      --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+      --good: #46a583; --good-soft: #172a24;
+      --warn: #cc9f3f; --warn-soft: #2a2417;
+      --bad: #dd6a61; --bad-soft: #2c1b1a;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+    --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+    --line: #26313b; --line-strong: #35434f;
+    --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+    --good: #46a583; --good-soft: #172a24;
+    --warn: #cc9f3f; --warn-soft: #2a2417;
+    --bad: #dd6a61; --bad-soft: #2c1b1a;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--body); font-size: 15px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 880px; margin: 0 auto; padding: 28px 20px 72px; display: flex; flex-direction: column; gap: 22px; }
+
+  .backbar a {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+    text-decoration: none; border: 1px solid var(--line-strong);
+    border-radius: 3px; padding: 7px 12px; display: inline-block;
+  }
+  .backbar a:hover { color: var(--accent); border-color: var(--accent); }
+  .backbar a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .masthead { padding-bottom: 18px; border-bottom: 2px solid var(--line-strong); }
+  h1 { font-family: var(--display); font-weight: 700; font-size: clamp(30px,5vw,42px); line-height: 1.02; margin: 0; }
+  .masthead p { margin: 8px 0 0; color: var(--muted); max-width: 60ch; }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; box-shadow: var(--shadow); }
+  .panel-head {
+    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+    gap: 8px 16px; padding: 14px 18px; border-bottom: 1px solid var(--line);
+  }
+  .panel-head h2 {
+    font-family: var(--display); font-weight: 600; font-size: 19px;
+    letter-spacing: .04em; text-transform: uppercase; margin: 0;
+  }
+  .panel-head .hint { color: var(--faint); font-size: 13px; margin: 0; }
+  .panel-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+
+  label.lbl {
+    font-family: var(--display); font-weight: 600; font-size: 12px;
+    letter-spacing: .11em; text-transform: uppercase; color: var(--muted);
+    display: block; margin-bottom: 6px;
+  }
+
+  input[type="password"] {
+    font-family: var(--mono); font-size: 15px; color: var(--ink);
+    background: var(--surface-2); border: 1px solid var(--line-strong);
+    border-radius: 3px; padding: 9px 11px; width: 100%; min-width: 0;
+  }
+  input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .btn {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .08em; text-transform: uppercase;
+    background: var(--surface-2); color: var(--ink);
+    border: 1px solid var(--line-strong); border-radius: 3px;
+    padding: 9px 15px; cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn.primary:hover { color: var(--accent-ink); filter: brightness(1.06); }
+  .btn[disabled] { opacity: .55; cursor: default; filter: none; }
+  .btn.quiet { background: transparent; border-color: transparent; color: var(--faint); }
+  .btn.quiet:hover { color: var(--bad); border-color: var(--line); }
+
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .grow { flex: 1 1 200px; min-width: 0; }
+
+  .verdict {
+    border-radius: 4px; padding: 16px 18px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .verdict.all { background: var(--good-soft); border: 1px solid var(--good); }
+  .verdict.some { background: var(--warn-soft); border: 1px solid var(--warn); }
+  .verdict.none { background: var(--bad-soft); border: 1px solid var(--bad); }
+  .verdict .head { font-family: var(--display); font-weight: 700; font-size: 21px; }
+  .verdict.all .head { color: var(--good); }
+  .verdict.some .head { color: var(--warn); }
+  .verdict.none .head { color: var(--bad); }
+  .verdict p { margin: 0; font-size: 14px; max-width: 68ch; }
+
+  .check {
+    border-bottom: 1px solid var(--line); padding: 13px 18px;
+    display: grid; grid-template-columns: 26px 1fr auto; gap: 4px 12px; align-items: start;
+  }
+  .check:last-child { border-bottom: 0; }
+
+  .mark { font-family: var(--mono); font-weight: 600; font-size: 16px; line-height: 1.3; }
+  .mark.ok { color: var(--good); }
+  .mark.no { color: var(--bad); }
+  .mark.skip { color: var(--faint); }
+  .mark.wait { color: var(--muted); }
+
+  .check .what { font-weight: 500; }
+  .check .used {
+    grid-column: 2 / 4; font-size: 13px; color: var(--faint);
+  }
+  .check .detail {
+    grid-column: 2 / 4; font-size: 13px; margin-top: 4px;
+    font-family: var(--mono); color: var(--bad); user-select: all;
+  }
+  .check .fix { grid-column: 2 / 4; font-size: 13px; margin-top: 2px; color: var(--muted); }
+  .check .pill {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .04em;
+    padding: 3px 8px; border-radius: 2px; background: var(--surface-2); color: var(--muted);
+    white-space: nowrap; align-self: start;
+  }
+
+  footer { border-top: 1px solid var(--line); padding-top: 16px; color: var(--faint); font-size: 13px; }
+  footer p { margin: 0 0 6px; max-width: 72ch; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav class="backbar"><a href="./">&larr; All tools</a></nav>
+
+  <header class="masthead">
+    <h1>Key Check</h1>
+    <p>Tries your key against every call these tools make and tells you exactly what works, what
+      does not, and which of the two things is wrong: the key, or your faction position.</p>
+  </header>
+
+  <section class="panel">
+    <div class="panel-body">
+      <div>
+        <label class="lbl" for="apiKey">Torn API Key</label>
+        <div class="toolbar">
+          <input type="password" id="apiKey" class="grow" autocomplete="off" spellcheck="false"
+                 placeholder="Paste the key you want to test">
+          <button type="button" class="btn" id="toggleKey" aria-pressed="false">Show</button>
+          <button type="button" class="btn primary" id="runBtn">Test it</button>
+          <button type="button" class="btn quiet" id="forgetKey">Forget key</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div id="verdict"></div>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Checks</h2>
+      <p class="hint">Seven calls, one per thing the tools need.</p>
+    </div>
+    <div id="checks"></div>
+  </section>
+
+  <section class="panel" id="copyPanel" hidden>
+    <div class="panel-body">
+      <div class="toolbar">
+        <button type="button" class="btn" id="copyBtn">Copy the result</button>
+        <span id="copyToast" style="font-size:13px;color:var(--good)"></span>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p><strong>Two different problems look identical from the outside.</strong> A missing tick box on
+      the key gives error 16. A faction position without permission gives error 7. Only the second
+      needs your Leader — this page tells you which one you have.</p>
+    <p>Nothing is written and nothing is stored on a server. The key is tested and kept in this
+      browser only.</p>
+  </footer>
+</div>
+
+<script>
+  (function () {
+    'use strict';
+
+    var KEY_STORE = 'ks-leader-board-key';
+
+    var CHECKS = [
+      { id: 'members', label: 'Faction member list',
+        used: 'Start page, Member Activity Board, Payout Ledger',
+        path: '/faction/members?striptags=true&limit=1', need: 'faction → members' },
+      { id: 'rankedwars', label: 'Ranked war history',
+        used: 'Payout Ledger — Find wars',
+        path: '/faction/rankedwars?limit=1', need: 'faction → rankedwars' },
+      { id: 'rankedwarreport', label: 'Ranked war report',
+        used: 'Payout Ledger — Load hits',
+        path: null, need: 'faction → rankedwarreport' },
+      { id: 'crimes', label: 'Organised crimes',
+        used: 'OC Roster Board',
+        path: '/faction/crimes?cat=recruiting&limit=1', need: 'faction → crimes' },
+      { id: 'news', label: 'Armory activity log',
+        used: 'Armory Audit — the log',
+        path: '/faction/news?cat=armoryAction&limit=1', need: 'faction → news' },
+      { id: 'inventory', label: 'Armory contents',
+        used: 'Armory Audit — who holds what',
+        path: '/faction/inventory?cat=weapons&limit=1', need: 'armory permission on your position' },
+      { id: 'basic', label: 'Faction basics',
+        used: 'Nothing yet — tells us whether faction access works at all',
+        path: '/faction/basic', need: 'faction API access' }
+    ];
+
+    var el = {
+      apiKey: document.getElementById('apiKey'),
+      toggleKey: document.getElementById('toggleKey'),
+      runBtn: document.getElementById('runBtn'),
+      forgetKey: document.getElementById('forgetKey'),
+      checks: document.getElementById('checks'),
+      verdict: document.getElementById('verdict'),
+      copyPanel: document.getElementById('copyPanel'),
+      copyBtn: document.getElementById('copyBtn'),
+      copyToast: document.getElementById('copyToast')
+    };
+
+    var results = [];
+
+    function readKey() { try { return localStorage.getItem(KEY_STORE) || ''; } catch (e) { return ''; } }
+    function storeKey(v) {
+      try { if (v) localStorage.setItem(KEY_STORE, v); else localStorage.removeItem(KEY_STORE); }
+      catch (e) { /* storage blocked */ }
+    }
+
+    function advice(code, need) {
+      if (code === 16) return 'Tick ' + need + ' on the Custom Key in Torn, then test again.';
+      if (code === 7) return 'This is a faction permission on your position, not a key setting. ' +
+        'Only the Leader can grant it.';
+      if (code === 2) return 'The key itself was rejected. Copy it again, whole, with no spaces.';
+      if (code === 13) return 'The key is disabled after seven days of account inactivity.';
+      if (code === 10) return 'The key owner is in federal jail.';
+      if (code === 18) return 'The key has been paused by its owner.';
+      if (code === 5) return 'Rate limited. Wait a minute and test again.';
+      if (code === 9 || code === 17) return 'Torn is temporarily unavailable. Not your key.';
+      return 'Unexpected. Copy the line above and send it on.';
+    }
+
+    async function call(path) {
+      var key = el.apiKey.value.trim();
+      var joiner = path.indexOf('?') === -1 ? '?' : '&';
+      var response = await fetch('https://api.torn.com/v2' + path + joiner + 'comment=KSKeyCheck',
+        { headers: { Authorization: 'ApiKey ' + key } });
+      var payload = await response.json();
+      return { status: response.status, payload: payload };
+    }
+
+    function row(check, state, code, text) {
+      var block = document.createElement('div');
+      block.className = 'check';
+
+      var mark = document.createElement('span');
+      mark.className = 'mark ' + state;
+      mark.textContent = state === 'ok' ? '✓' : state === 'no' ? '✕' : state === 'wait' ? '·' : '–';
+      block.appendChild(mark);
+
+      var what = document.createElement('span');
+      what.className = 'what';
+      what.textContent = check.label;
+      block.appendChild(what);
+
+      var pill = document.createElement('span');
+      pill.className = 'pill';
+      pill.textContent = state === 'ok' ? 'works'
+        : state === 'no' ? 'error ' + code
+        : state === 'wait' ? 'testing' : 'skipped';
+      block.appendChild(pill);
+
+      var used = document.createElement('span');
+      used.className = 'used';
+      used.textContent = check.used;
+      block.appendChild(used);
+
+      if (state === 'no') {
+        var detail = document.createElement('span');
+        detail.className = 'detail';
+        detail.textContent = 'GET /v2' + (check.path || '') + ' → Torn error ' + code +
+          (text ? ' (' + text + ')' : '');
+        block.appendChild(detail);
+
+        var fix = document.createElement('span');
+        fix.className = 'fix';
+        fix.textContent = advice(code, check.need);
+        block.appendChild(fix);
+      }
+      if (state === 'skip') {
+        var note = document.createElement('span');
+        note.className = 'fix';
+        note.textContent = text || 'Not tested.';
+        block.appendChild(note);
+      }
+      return block;
+    }
+
+    function renderVerdict() {
+      var ok = results.filter(function (r) { return r.state === 'ok'; }).length;
+      var bad = results.filter(function (r) { return r.state === 'no'; });
+      var permission = bad.filter(function (r) { return r.code === 7; }).length;
+      var ticks = bad.filter(function (r) { return r.code === 16; }).length;
+
+      var box = document.createElement('div');
+      box.className = 'verdict ' + (bad.length === 0 ? 'all' : ok === 0 ? 'none' : 'some');
+
+      var head = document.createElement('span');
+      head.className = 'head';
+      head.textContent = bad.length === 0 ? 'Everything works'
+        : ok === 0 ? 'Nothing works with this key'
+        : ok + ' of ' + (ok + bad.length) + ' work';
+      box.appendChild(head);
+
+      var p = document.createElement('p');
+      if (bad.length === 0) {
+        p.textContent = 'Every tool on this site will run with this key.';
+      } else if (ticks > 0 && permission === 0) {
+        p.textContent = 'This is fixable by you: ' + ticks +
+          (ticks === 1 ? ' selection is' : ' selections are') +
+          ' missing on the key. Edit the Custom Key in Torn and tick what the failed rows name.';
+      } else if (permission > 0 && ticks === 0) {
+        p.textContent = 'This is not a key problem. ' + permission +
+          (permission === 1 ? ' call is' : ' calls are') +
+          ' blocked by your faction position. Only the Leader can change that, in Torn, under ' +
+          'faction positions.';
+      } else if (permission > 0 && ticks > 0) {
+        p.textContent = 'Two separate problems: ' + ticks + ' missing on the key, which you fix, ' +
+          'and ' + permission + ' blocked by your faction position, which the Leader fixes.';
+      } else {
+        p.textContent = 'See the failed rows below for what each one needs.';
+      }
+      box.appendChild(p);
+
+      el.verdict.textContent = '';
+      el.verdict.appendChild(box);
+    }
+
+    async function run() {
+      if (!el.apiKey.value.trim()) {
+        el.verdict.textContent = '';
+        var warn = document.createElement('div');
+        warn.className = 'verdict none';
+        var h = document.createElement('span');
+        h.className = 'head';
+        h.textContent = 'Paste a key first';
+        warn.appendChild(h);
+        el.verdict.appendChild(warn);
+        return;
+      }
+
+      el.runBtn.disabled = true;
+      el.runBtn.textContent = 'Testing';
+      el.checks.textContent = '';
+      el.verdict.textContent = '';
+      el.copyPanel.hidden = true;
+      results = [];
+
+      var warId = null;
+
+      for (var i = 0; i < CHECKS.length; i += 1) {
+        var check = CHECKS[i];
+        var placeholder = row(check, 'wait');
+        el.checks.appendChild(placeholder);
+
+        var path = check.path;
+        if (check.id === 'rankedwarreport') {
+          if (warId === null) {
+            var skipped = row(check, 'skip', null,
+              'Needs a past war to test against, and the war history call above did not return one.');
+            el.checks.replaceChild(skipped, placeholder);
+            results.push({ id: check.id, state: 'skip', code: null });
+            continue;
+          }
+          path = '/faction/' + warId + '/rankedwarreport';
+          check = Object.assign({}, check, { path: path });
+        }
+
+        var state, code = null, text = null;
+        try {
+          var out = await call(path);
+          if (out.payload && out.payload.error) {
+            state = 'no';
+            code = out.payload.error.code;
+            text = out.payload.error.error;
+          } else {
+            state = 'ok';
+            if (check.id === 'rankedwars') {
+              var wars = out.payload && out.payload.rankedwars;
+              if (Array.isArray(wars) && wars.length > 0) warId = wars[0].id;
+            }
+          }
+        } catch (networkFailure) {
+          state = 'no';
+          code = 0;
+          text = 'could not reach Torn';
+        }
+
+        el.checks.replaceChild(row(check, state, code, text), placeholder);
+        results.push({ id: check.id, label: check.label, state: state, code: code, text: text });
+      }
+
+      storeKey(el.apiKey.value.trim());
+      renderVerdict();
+      el.copyPanel.hidden = false;
+      el.runBtn.disabled = false;
+      el.runBtn.textContent = 'Test it';
+    }
+
+    el.toggleKey.addEventListener('click', function () {
+      var showing = el.apiKey.type === 'text';
+      el.apiKey.type = showing ? 'password' : 'text';
+      el.toggleKey.textContent = showing ? 'Show' : 'Hide';
+      el.toggleKey.setAttribute('aria-pressed', String(!showing));
+    });
+
+    el.forgetKey.addEventListener('click', function () {
+      storeKey('');
+      el.apiKey.value = '';
+      el.copyToast.textContent = 'Key removed from this browser.';
+    });
+
+    el.runBtn.addEventListener('click', function () { void run(); });
+
+    el.copyBtn.addEventListener('click', function () {
+      var lines = ['KEY CHECK — ' + new Date().toLocaleString(), ''];
+      results.forEach(function (r) {
+        lines.push((r.state === 'ok' ? 'OK    ' : r.state === 'no' ? 'FAIL  ' : 'SKIP  ') +
+          r.label + (r.state === 'no' ? '  — Torn error ' + r.code +
+            (r.text ? ' (' + r.text + ')' : '') : ''));
+      });
+      var text = lines.join('\n');
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () {
+          el.copyToast.textContent = 'Copied.';
+        }, function () {
+          el.copyToast.textContent = 'Could not copy.';
+        });
+      }
+    });
+
+    el.apiKey.value = readKey();
+  })();
+</script>
+</body>
+</html>
