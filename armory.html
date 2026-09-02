@@ -224,14 +224,14 @@
       <summary>Which key selections this needs</summary>
       <div class="panel-body">
         <dl>
-          <dt>Access level</dt>
-          <dd>The activity log works with a <strong>Custom</strong> key that has faction →
-            <strong>news</strong> and faction API access. The armory contents — the actual list of
-            who is holding what — needs a <strong>Limited</strong> access key. That is Torn's rule,
-            not this page's: the faction inventory endpoint is documented as requiring one.</dd>
-          <dt>If you only have a Custom key</dt>
-          <dd>The page still works. You get the log of who took and returned what, and it says
-            plainly that the item list is missing rather than pretending to be empty.</dd>
+          <dt>Key</dt>
+          <dd>A Custom key with faction → <strong>news</strong>, plus faction API access on your
+            position. Torn documents the armory endpoint as needing a Limited access key.</dd>
+          <dt>Faction permission</dt>
+          <dd>Armory access is granted per item category on your faction <em>position</em>, by the
+            Leader, inside Torn. Error 7 means exactly that is missing — no key setting can replace
+            it. The page asks for each category separately, so you see everything you are allowed to
+            see and a list of what you are not.</dd>
           <dt>What it reads</dt>
           <dd>The armory contents in all nine categories, plus the recent armory action log.</dd>
           <dt>Storage</dt>
@@ -335,7 +335,8 @@
 
     function describeError(code) {
       if (code === 2) return 'Torn rejected the key. Check it was copied whole.';
-      if (code === 16) return 'The key is missing a selection. Enable faction → inventory and faction → news on the Custom Key.';
+      if (code === 7) return 'Your faction position is not allowed to see this. It is a faction permission, not a key setting.';
+      if (code === 16) return 'The key is missing a selection for this call.';
       if (code === 13) return 'This key is disabled after seven days of account inactivity.';
       if (code === 10) return 'The key owner is in federal jail, so the key cannot be used.';
       if (code === 18) return 'This key has been paused by its owner.';
@@ -501,19 +502,30 @@
         var stock = new Map();
         var inventoryError = null;
 
-        try {
+        // Armory permission is granted per item category on the faction position, so one category
+        // being denied says nothing about the rest. Ask for each one and keep what comes back.
+        var denied = [];
         for (var i = 0; i < CATEGORIES.length; i += 1) {
           var category = CATEGORIES[i];
           var items = [];
-          // Torn caps this endpoint at 100 rows per call, so page through it.
-          for (var page = 0; page < MAX_PAGES_PER_CATEGORY; page += 1) {
-            var payload = await tornGet('/faction/inventory?cat=' + category +
-              '&limit=' + PAGE_SIZE + '&offset=' + (page * PAGE_SIZE));
-            var batch = Array.isArray(payload.inventory) ? payload.inventory : [];
-            items = items.concat(batch);
-            if (batch.length < PAGE_SIZE) {
-              break;
+          try {
+            // Torn caps this endpoint at 100 rows per call, so page through it.
+            for (var page = 0; page < MAX_PAGES_PER_CATEGORY; page += 1) {
+              var payload = await tornGet('/faction/inventory?cat=' + category +
+                '&limit=' + PAGE_SIZE + '&offset=' + (page * PAGE_SIZE));
+              var batch = Array.isArray(payload.inventory) ? payload.inventory : [];
+              items = items.concat(batch);
+              if (batch.length < PAGE_SIZE) {
+                break;
+              }
             }
+          } catch (categoryFailure) {
+            var code = categoryFailure && categoryFailure.tornCode;
+            if (code === 7 || code === 16) {
+              denied.push(category);
+              continue;
+            }
+            throw categoryFailure;
           }
           items.forEach(function (item) {
             var name = typeof item.name === 'string' ? item.name : 'Item ' + item.id;
@@ -533,18 +545,36 @@
             stock.set(key, row);
           });
         }
-        } catch (inventoryFailure) {
-          // The armory endpoint needs a Limited access key. A Custom key cannot reach it, so the
-          // log below still runs and the page explains what is missing rather than failing whole.
-          inventoryError = inventoryFailure instanceof Error
-            ? inventoryFailure.message
-            : String(inventoryFailure);
-          loans = [];
-          stock = new Map();
+
+        if (denied.length === CATEGORIES.length) {
+          inventoryError = 'Torn refused every armory category with error 7, which means this ' +
+            'account does not have armory permission on its faction position. The Leader grants ' +
+            'that in Torn under faction positions — no API key can substitute for it.';
+        } else if (denied.length > 0) {
+          inventoryError = 'No permission for: ' + denied.join(', ') +
+            '. Everything else below is complete. The Leader can enable those categories on your ' +
+            'faction position in Torn.';
         }
 
-        var newsPayload = await tornGet('/faction/news?cat=armoryAction&limit=50&sort=DESC&striptags=true');
-        var news = Array.isArray(newsPayload.news) ? newsPayload.news : [];
+        // The activity log needs Faction API Access on the position, which is a different
+        // permission from armory access. If it is refused, keep everything the armory read
+        // already produced instead of throwing the whole audit away.
+        var news = [];
+        var newsError = null;
+        try {
+          var newsPayload = await tornGet(
+            '/faction/news?cat=armoryAction&limit=50&sort=DESC&striptags=true');
+          news = Array.isArray(newsPayload.news) ? newsPayload.news : [];
+        } catch (newsFailure) {
+          var newsCode = newsFailure && newsFailure.tornCode;
+          if (newsCode === 7 || newsCode === 16) {
+            newsError = 'The armory activity log needs Faction API Access on your faction ' +
+              'position. That is a separate permission from armory access, so it can be missing ' +
+              'while the item lists above read fine.';
+          } else {
+            throw newsFailure;
+          }
+        }
 
         renderLoans();
         renderStock(stock);
@@ -552,7 +582,7 @@
 
         var holders = new Set(loans.map(function (l) { return l.holder; }));
         var available = [...stock.values()].reduce(function (sum, r) { return sum + r.available; }, 0);
-        el.figures.hidden = inventoryError !== null;
+        el.figures.hidden = loans.length === 0 && stock.size === 0;
         el.figLoaned.textContent = String(loans.length);
         el.figHolders.textContent = String(holders.size);
         el.figStock.textContent = available.toLocaleString('en-US');
@@ -560,13 +590,23 @@
 
         storeKey(el.apiKey.value.trim());
 
+        var notices = [];
         if (inventoryError !== null) {
-          el.loansEmpty.textContent = 'The armory item list did not load. The exact reason from ' +
-            'Torn is in the red box above — send that line on and it can be fixed.';
-          el.stockEmpty.textContent = 'Not loaded.';
-          show(el.errorBox, 'Armory contents: ' + inventoryError);
-        } else {
-          show(el.okBox, 'Audit complete. ' + stock.size + ' distinct items checked.');
+          if (stock.size === 0) {
+            el.loansEmpty.textContent = 'No armory access.';
+            el.stockEmpty.textContent = 'No armory access.';
+          }
+          notices.push(inventoryError);
+        }
+        if (newsError !== null) {
+          notices.push(newsError);
+        }
+        if (notices.length > 0) {
+          show(el.errorBox, notices.join('\n\n'));
+        }
+        if (stock.size > 0) {
+          show(el.okBox, 'Read ' + stock.size + ' distinct items across ' +
+            (CATEGORIES.length - denied.length) + ' of ' + CATEGORIES.length + ' categories.');
         }
       } catch (err) {
         show(el.errorBox, err instanceof Error ? err.message : String(err));
