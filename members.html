@@ -397,6 +397,10 @@
             web address.</dd>
           <dt>Writes</dt>
           <dd>None. This page only reads. It never attacks, sends, spends or changes anything.</dd>
+          <dt>Position order</dt>
+          <dd>Sorting by position follows the faction's ranking, not the alphabet: Leader,
+            Co-leader, Sgt at Arms, Warden, Recruiter, Chainbreaker, Prospect, Recruit, Outcast.
+            A position the page does not recognise sorts last.</dd>
           <dt>Call tag</dt>
           <dd>Every request is tagged <code>KSLeaderBoard</code>, so you can recognise it in your own
             API key log.</dd>
@@ -475,6 +479,32 @@
     var members = [];
     var sortKey = 'last';
     var sortDir = 1; /* 1 = most stale first for time, ascending for text */
+
+    /* The faction's own ranking, highest authority first. Sorting by position has to follow this
+       and not the alphabet, or Leader lands between Chainbreaker and Outcast.
+       Torn returns the position as free text, so a position added to the faction later is not in
+       this map. Those sort last as a group instead of disappearing or landing somewhere wrong. */
+    var POSITION_RANK = {
+      'leader': 1,
+      'co-leader': 2,
+      'coleader': 2,
+      'co leader': 2,
+      'sgt at arms': 3,
+      'warden': 4,
+      'recruiter': 5,
+      'chainbreaker': 6,
+      'prospect': 7,
+      'recruit': 8,
+      'outcast': 9
+    };
+    var UNRANKED_POSITION = 50;
+
+    function positionRank(name) {
+      var key = String(name || '').trim().toLowerCase();
+      return Object.prototype.hasOwnProperty.call(POSITION_RANK, key)
+        ? POSITION_RANK[key]
+        : UNRANKED_POSITION;
+    }
 
     var el = {
       apiKey: document.getElementById('apiKey'),
@@ -670,7 +700,13 @@
       copy.sort(function (a, b) {
         var result;
         if (sortKey === 'name') result = a.name.localeCompare(b.name, 'en', { sensitivity: 'base' });
-        else if (sortKey === 'position') result = a.position.localeCompare(b.position, 'en', { sensitivity: 'base' });
+        else if (sortKey === 'position') {
+          result = positionRank(a.position) - positionRank(b.position);
+          /* Same rank: unknown positions fall back to the alphabet, then name, so the order
+             is stable rather than whatever the API happened to return. */
+          if (result === 0) result = a.position.localeCompare(b.position, 'en', { sensitivity: 'base' });
+          if (result === 0) result = a.name.localeCompare(b.name, 'en', { sensitivity: 'base' });
+        }
         else if (sortKey === 'state') result = a.state.localeCompare(b.state, 'en', { sensitivity: 'base' });
         else if (sortKey === 'level') result = b.level - a.level;
         else if (sortKey === 'days') result = b.days - a.days;
