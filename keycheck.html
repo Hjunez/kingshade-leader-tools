@@ -229,7 +229,7 @@
         path: '/faction/news?cat=armoryAction&limit=1', need: 'faction → news' },
       { id: 'inventory', label: 'Armory contents',
         used: 'Armory Audit — who holds what',
-        path: '/faction/inventory?cat=weapons&limit=1', need: 'armory permission on your position' },
+        path: '/faction/inventory?cat=weapons&limit=1', need: 'faction → inventory' },
       { id: 'basic', label: 'Faction basics',
         used: 'Nothing yet — tells us whether faction access works at all',
         path: '/faction/basic', need: 'faction API access' }
@@ -257,8 +257,9 @@
 
     function advice(code, need) {
       if (code === 16) return 'Tick ' + need + ' on the Custom Key in Torn, then test again.';
-      if (code === 7) return 'This is a faction permission on your position, not a key setting. ' +
-        'Only the Leader can grant it.';
+      if (code === 7) return 'Your faction position is missing Faction API Access. That is set on ' +
+        'the position in Torn, not on the key, and only the Leader can grant it. Seeing the same ' +
+        'data inside Torn does not give it — the two permission lists are separate.';
       if (code === 2) return 'The key itself was rejected. Copy it again, whole, with no spaces.';
       if (code === 13) return 'The key is disabled after seven days of account inactivity.';
       if (code === 10) return 'The key owner is in federal jail.';
@@ -350,11 +351,12 @@
       } else if (permission > 0 && ticks === 0) {
         p.textContent = 'This is not a key problem. ' + permission +
           (permission === 1 ? ' call is' : ' calls are') +
-          ' blocked by your faction position. Only the Leader can change that, in Torn, under ' +
-          'faction positions.';
+          ' blocked because your faction position lacks Faction API Access. Ask the Leader to add ' +
+          'it to your position in Torn, then test again.';
       } else if (permission > 0 && ticks > 0) {
         p.textContent = 'Two separate problems: ' + ticks + ' missing on the key, which you fix, ' +
-          'and ' + permission + ' blocked by your faction position, which the Leader fixes.';
+          'and ' + permission + ' blocked because your position lacks Faction API Access, which ' +
+          'the Leader adds.';
       } else {
         p.textContent = 'See the failed rows below for what each one needs.';
       }

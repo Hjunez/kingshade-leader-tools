@@ -12,6 +12,7 @@
     --line: #d3dae1; --line-strong: #b8c3cd;
     --accent: #a3512a; --accent-ink: #ffffff; --accent-soft: #f2ded4;
     --good: #1c7355; --good-soft: #dfeee8;
+    --stop: #b3453e; --warn: #8a6410;
     --shadow: 0 1px 2px rgba(20,32,43,.06), 0 8px 24px rgba(20,32,43,.06);
     --shadow-lift: 0 2px 4px rgba(20,32,43,.08), 0 14px 34px rgba(20,32,43,.12);
     --display: 'Saira Condensed','Arial Narrow',Helvetica,sans-serif;
@@ -26,6 +27,7 @@
       --line: #26313b; --line-strong: #35434f;
       --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
       --good: #46a583; --good-soft: #172a24;
+      --stop: #e0796f; --warn: #d0a545;
       --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
       --shadow-lift: 0 2px 4px rgba(0,0,0,.5), 0 14px 34px rgba(0,0,0,.45);
     }
@@ -37,6 +39,7 @@
     --line: #26313b; --line-strong: #35434f;
     --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
     --good: #46a583; --good-soft: #172a24;
+    --stop: #e0796f; --warn: #d0a545;
     --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
     --shadow-lift: 0 2px 4px rgba(0,0,0,.5), 0 14px 34px rgba(0,0,0,.45);
   }
@@ -194,6 +197,29 @@
   .card.planned .name { color: var(--muted); font-size: 21px; }
   .card.planned .what { color: var(--faint); }
   .card.planned .tag { background: transparent; color: var(--faint); border: 1px solid var(--line-strong); }
+
+  /* ---- access state ---- */
+
+  .card.locked { background: var(--surface-2); box-shadow: none; }
+  .card.locked .name { color: var(--muted); }
+  .card.locked .what { color: var(--faint); }
+  .card.locked .go { color: var(--faint); }
+  a.card.locked:hover, a.card.locked:focus-visible { border-color: var(--line-strong); }
+
+  .tag.blocked { background: transparent; color: var(--stop); border: 1px solid currentColor; }
+  .tag.partial { background: transparent; color: var(--warn); border: 1px solid currentColor; }
+  .tag.checking, .tag.unknown { background: transparent; color: var(--faint); border: 1px solid var(--line-strong); }
+
+  .card .lock {
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--muted);
+    border-top: 1px solid var(--line);
+    padding-top: 10px;
+    margin-top: 2px;
+  }
+
+  .card .lock b { font-weight: 600; color: var(--ink); }
 
   .keynote {
     background: var(--accent-soft);
@@ -445,11 +471,12 @@
       <strong>faction</strong>:</p>
     <p><strong>members</strong> · <strong>rankedwars</strong> · <strong>rankedwarreport</strong> ·
       <strong>crimes</strong> · <strong>news</strong></p>
-    <p>Your faction position also needs <strong>faction API access</strong>, which the Leader sets on
-      the position, not on the key.</p>
-    <p>One exception: the armory <em>contents</em> — the list of who is holding what — needs a
-      <strong>Limited</strong> access key instead. Torn requires it for that endpoint. With only a
-      Custom key the Armory page still shows the take-and-return log, and says so.</p>
+    <p>Ticking the boxes is only half of it. Your faction position also needs
+      <strong>Faction API Access</strong>, which the Leader sets on the position in Torn, not on the
+      key. Without it, crimes, the armory log and the armory contents all come back refused even
+      though every box is ticked and you can see the same data in Torn.</p>
+    <p>Sign in above and the cards below will tell you which tools your key actually opens, and why
+      any of them are closed.</p>
     <p>Nothing is ever written — these pages only read. Your key stays in your own browser and is
       only ever sent to Torn.</p>
   </div>
@@ -468,6 +495,31 @@
 
   var KEY_STORE = 'ks-leader-board-key';
   var ME_STORE = 'ks-leader-me';
+
+  // One probe per distinct Torn call the tools make, beyond the member list this page
+  // already reads. limit=1 keeps each one as small as Torn allows.
+  var PROBES = [
+    { id: 'rankedwars', path: '/faction/rankedwars?limit=1' },
+    { id: 'crimes', path: '/faction/crimes?cat=recruiting&limit=1' },
+    { id: 'news', path: '/faction/news?cat=armoryAction&limit=1' },
+    { id: 'inventory', path: '/faction/inventory?cat=weapons&limit=1' }
+  ];
+
+  // Cards not listed here need nothing beyond the member list, or no API at all,
+  // so they are never greyed out.
+  var TOOLS = [
+    { href: 'payout.html', needs: ['rankedwars'] },
+    { href: 'history.html', needs: ['rankedwars'] },
+    { href: 'oc.html', needs: ['crimes'] },
+    { href: 'armory.html', needs: ['news', 'inventory'] }
+  ];
+
+  var PART_NAME = {
+    rankedwars: 'The war history',
+    crimes: 'The crime list',
+    news: 'The take-and-return log',
+    inventory: 'The contents list'
+  };
 
   var el = {};
   ['welcome','connectLine','wKey','wConnect','pickLine','wMe','wSaveMe','helloLine','wName',
@@ -501,6 +553,125 @@
     if (code === 18) return 'That key has been paused by its owner.';
     if (code === 5) return 'Too many calls in the last minute. Try again shortly.';
     return 'Torn returned error ' + code + '.';
+  }
+
+  // ---- what this key can open ----
+
+  function whyBlocked(code) {
+    if (code === 7) return 'needs <b>Faction API Access</b>, which the Leader sets on your ' +
+      'faction position in Torn. It is not a key setting, so you cannot fix it yourself.';
+    if (code === 16) return 'needs a tick box your key is missing. Edit the Custom Key in Torn ' +
+      'under Settings → API Keys and Key Check will name the one.';
+    if (code === 5) return 'could not be checked — Torn rate limited the check. Refresh in a minute.';
+    if (code === 0) return 'could not be checked — Torn could not be reached.';
+    return 'is blocked by Torn error ' + code + '. Key Check explains what it means.';
+  }
+
+  // A call that could not be reached tells us nothing about permission. Saying "no access"
+  // on a network blip would be a guess, so those cards stay open and say they are unchecked.
+  function isUnchecked(code) { return code === 0 || code === 5; }
+
+  function lockLine(tool, probe) {
+    var failed = tool.needs.filter(function (id) { return !probe[id].ok; });
+    if (failed.length === 0) return null;
+
+    var codes = failed.map(function (id) { return probe[id].code; });
+    var sameCode = codes.every(function (c) { return c === codes[0]; });
+    var whole = failed.length === tool.needs.length;
+    var state = codes.every(isUnchecked) ? 'unknown' : whole ? 'blocked' : 'partial';
+
+    // Whole card affected for one reason: say it once, without naming the parts.
+    if (whole && sameCode) {
+      return { state: state, html: 'This ' + whyBlocked(codes[0]) };
+    }
+
+    // Otherwise name each missing part, so a half-working card says which half.
+    return {
+      state: state,
+      html: failed.map(function (id) {
+        return PART_NAME[id] + ' ' + whyBlocked(probe[id].code);
+      }).join(' ')
+    };
+  }
+
+  function cardFor(href) {
+    return document.querySelector('.grid a.card[href="' + href + '"]');
+  }
+
+  function clearAccess() {
+    TOOLS.forEach(function (tool) {
+      var card = cardFor(tool.href);
+      if (!card) return;
+      card.classList.remove('locked');
+      var tag = card.querySelector('.tag');
+      if (tag) { tag.className = 'tag'; tag.textContent = 'Live'; }
+      var lock = card.querySelector('.lock');
+      if (lock) lock.remove();
+    });
+  }
+
+  function markChecking() {
+    TOOLS.forEach(function (tool) {
+      var card = cardFor(tool.href);
+      if (!card) return;
+      var tag = card.querySelector('.tag');
+      if (tag) { tag.className = 'tag checking'; tag.textContent = 'Checking'; }
+    });
+  }
+
+  function applyAccess(probe) {
+    TOOLS.forEach(function (tool) {
+      var card = cardFor(tool.href);
+      if (!card) return;
+
+      var tag = card.querySelector('.tag');
+      var old = card.querySelector('.lock');
+      if (old) old.remove();
+      card.classList.remove('locked');
+
+      var verdict = lockLine(tool, probe);
+      if (verdict === null) {
+        if (tag) { tag.className = 'tag'; tag.textContent = 'Live'; }
+        return;
+      }
+
+      if (tag) {
+        tag.className = 'tag ' + verdict.state;
+        tag.textContent = verdict.state === 'blocked' ? 'No access'
+          : verdict.state === 'partial' ? 'Partly' : 'Not checked';
+      }
+      if (verdict.state === 'blocked') card.classList.add('locked');
+
+      var lock = document.createElement('span');
+      lock.className = 'lock';
+      lock.innerHTML = verdict.html;
+      card.appendChild(lock);
+    });
+  }
+
+  async function probeOne(key, item) {
+    try {
+      var response = await fetch('https://api.torn.com/v2' + item.path + '&comment=KSLeaderHub',
+        { headers: { Authorization: 'ApiKey ' + key } });
+      var payload = await response.json();
+      if (payload && payload.error) {
+        // Force a number. The code is later placed in innerHTML, so nothing from Torn
+        // may reach the page as text.
+        var code = typeof payload.error.code === 'number' ? payload.error.code : -1;
+        return { ok: false, code: code };
+      }
+      return { ok: true, code: null };
+    } catch (err) {
+      return { ok: false, code: 0 };
+    }
+  }
+
+  async function probeAccess(key) {
+    markChecking();
+    var outcomes = await Promise.all(PROBES.map(function (item) { return probeOne(key, item); }));
+    var probe = {};
+    PROBES.forEach(function (item, index) { probe[item.id] = outcomes[index]; });
+    applyAccess(probe);
   }
 
   function sinceText(seconds) {
@@ -582,6 +753,7 @@
     el.helloLine.hidden = true;
     el.presence.hidden = true;
     el.wActions.hidden = true;
+    clearAccess();
   }
 
   async function loadMembers(key) {
@@ -607,6 +779,7 @@
       write(KEY_STORE, key);
       note('');
       renderSignedIn();
+      void probeAccess(key);
     } catch (err) {
       note('Could not reach Torn. Check your connection.', true);
     }
