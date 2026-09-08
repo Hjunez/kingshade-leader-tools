@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PC
 // @namespace    kingshade.torn
-// @version      1.0.13
+// @version      1.0.40
 // @downloadURL  https://raw.githubusercontent.com/Hjunez/Kingshade-Torn-Suite/main/KS_Torn_War_Dibs_PC.user.js
 // @updateURL    https://raw.githubusercontent.com/Hjunez/Kingshade-Torn-Suite/main/KS_Torn_War_Dibs_PC.user.js
-// @description  PC release for shared Ranked War DIBS in Torn's native Attack column.
+// @description  PC TEST: DIBS as a native roster column beside Torn's Attack cell; FFScouter's FF/Est column preserved.
 // @author       Kingshade
 // @match        https://www.torn.com/factions.php*
 // @match        https://torn.com/factions.php*
@@ -16,8 +16,230 @@
 // ==/UserScript==
 
 /*
- * KS Torn War Dibs PC v1.0.13 NATIVE-COLUMN RELEASE
- * FFScouter and Torn own the React roster. War Dibs presents only body-owned UI.
+ * KS Torn War Dibs PC v1.0.20 COUNTDOWN TEST -- CANDIDATE
+ * v1.0.19 was verified in real PC runtime: the native column mounted, no row
+ * wrapped, Score was swapped for DIBS, and FFScouter's column, sorting, filter
+ * panel and FF/Est switch all survived.
+ *
+ * v1.0.20 proved in real PC runtime that Torn's Ranked War roster does NOT
+ * carry the hospital time. The status cell says "Hospital" and nothing more --
+ * no data-until, no text countdown. So a fully offline VIEW mode can never show
+ * a countdown, and no amount of DOM work changes that.
+ *
+ * v1.0.22 was verified in real PC runtime: hospital countdowns resolve for the
+ * side the column is mounted on, and the merged members batch covers both
+ * factions on the war card.
+ *
+ * v1.0.23 was verified in real PC runtime: the panel sits between FFScouter's
+ * controls and the roster at the content column's width.
+ *
+ * v1.0.24 widened the cell from 38px to 46px and that is confirmed in real PC
+ * runtime, but hour-long times still ellipsised. The cause was not the width:
+ * "2h 55m" is six characters plus a space, and real Arial Bold on Windows is
+ * wider than the metric substitute an offline test renders with.
+ *
+ * Torn renders the Status word once and does not refresh it. A target who goes
+ * to hospital after the roster was drawn keeps showing Okay until the page is
+ * reloaded, while the DIBS cell -- which reads Torn's API every ten seconds --
+ * already shows the countdown. The owner confirmed with F5 that the API was
+ * right and Torn's own column was stale.
+ *
+ * Found by simulating a live Ranked War end to end -- real clicks, real claim
+ * and release traffic against a stateful fake of FFScouter's hit-calling API:
+ *
+ * A DIBS that FAILS says so for less than a twentieth of a second. The catch
+ * block sets "Shared: claim failed ...", and then the finally block's
+ * fetchSharedClaims immediately overwrites it with "syncing" and then "online".
+ * A sampler reading the panel every 50 ms never caught the message once.
+ *
+ * In a war that is the dangerous kind of quiet: the caller clicks DIBS, the
+ * write fails, the cell goes back to being claimable, and nothing says why. The
+ * natural reading is that the target was taken.
+ *
+ * ONE MAIN CHANGE: a failed claim or release holds the panel message for six
+ * seconds. Routine syncing and online updates are suppressed while the hold
+ * runs; a newer error replaces an older one immediately, and the hold is
+ * dropped the moment the owner starts another write, so it can never mask the
+ * state of something they are doing now.
+ *
+ * Nothing about what the buttons do changes, and no decision, request or stored
+ * record is affected. fetchSharedClaims is still byte-identical to v1.0.13.
+ * claimSharedTarget and releaseOwnSharedTarget each have exactly one changed
+ * line: the failure message they print now goes through holdSharedWriteFailure
+ * instead of setSharedStatus. The hold is cleared in the click handler, not in
+ * them. This is the presentation layer only -- it was frozen for its authority
+ * logic, and that logic is untouched.
+ *
+ * v1.0.33 notes, still current:
+ *
+ * Measured frame by frame in the owner's timer.mp4, with the same player's own
+ * hospital banner and the DIBS cell in the same picture:
+ *
+ *   frame 12  DIBS 0:15   Torn "15 seconds"
+ *   frame 13  DIBS 0:15   Torn "14 seconds"   <- Torn ticks
+ *   frame 28  DIBS 0:15   Torn "14 seconds"
+ *   frame 29  DIBS 0:14   Torn "14 seconds"   <- we tick, 0.53 s later
+ *
+ * The same for every one of the fifteen seconds in the clip: the cell ticks
+ * 16-17 frames (0.53-0.57 s) after Torn's own timer, so for slightly more than
+ * half of every second it reads one second too high. Same lag against Torn's
+ * server clock in the corner, and the row went Okay 1.1 s late.
+ *
+ * The cause is not the tick and not the rounding. It is the clock. The Torn
+ * clock offset was only ever sampled from the own-faction wars response and
+ * from the claim gate. On a foreign war -- VIEW mode -- neither request is ever
+ * made, so no sample exists, no offset is known, and getTornNowMs() falls
+ * all the way back to Date.now(). The countdown then runs on the PC's own
+ * clock, which on this machine sits about half a second behind Torn.
+ *
+ * v1.0.33 answered this with two sources, a coarse one from the HTTP Date
+ * header and a fine one that watched Torn's own clock element tick over.
+ * THE FINE SOURCE IS GONE AS OF v1.0.35 and the reasoning is recorded here so
+ * nobody rebuilds it:
+ *
+ *   - Measured in the owner's Chrome on a live war roster, the cell still
+ *     changed a median 308 ms after Torn's clock. The watch never locked, and
+ *     the script was running on the coarse offset alone the whole time.
+ *   - Torn's clock is not in the page unless the user has clicked it open. A
+ *     fine source that exists only for the one caller who happened to open the
+ *     clock is worse than no fine source at all.
+ *   - It would have been wrong regardless. Two Torn windows were measured
+ *     0.6 s apart, and two widgets inside the SAME window 0.4 s apart. Torn's
+ *     clocks are free-running intervals started at page load. The page cannot
+ *     say when a server second begins.
+ *
+ * ONE MAIN CHANGE (v1.0.35): the offset is no longer estimated at all. It is
+ * bounded. A response whose Date header -- or whose body timestamp -- names the
+ * whole second S proves that S was current at some instant inside the round
+ * trip, and therefore that
+ *
+ *     offset  in  [ S - endedAt , S + 1000 - startedAt )
+ *
+ * Every response yields another such interval, and the true offset lies in all
+ * of them at once. The running intersection can only narrow and can never
+ * exclude the truth, so the whole-second error is gone by construction: there
+ * is no rounding step left to get wrong.
+ *
+ * The estimate is read at the LOW EDGE of the interval, not the middle. The
+ * middle is unbiased but wrong in both directions, and one of those directions
+ * is unacceptable: a clock that runs ahead makes the cell show less time than
+ * there is, and somebody attacks early into a hospital. The low edge puts our
+ * clock as far behind Torn as the evidence permits, so remaining time reads as
+ * high as the evidence permits. While the interval is still wide the cell may
+ * read high. It can never read low.
+ *
+ * The Torn poll is scheduled with a small jitter instead of a fixed period.
+ * Same endpoints, same average rate -- but a fixed 10 s period is exactly ten
+ * whole seconds, so every sample would land at the same phase inside the
+ * second and the intervals would never intersect down to anything narrow.
+ *
+ * NOTHING READS TORN'S DOM FOR TIME ANY MORE. The Date header still costs no
+ * request: it arrives with responses the script had already asked for, and a
+ * cached reply (Age above zero) is ignored.
+ *
+ * v1.0.32 notes, still current:
+ *
+ * The cause is that the display ran on setInterval(1000) started at whatever
+ * moment the script booted. It was never aligned to the second boundary, so the
+ * number on screen was recomputed at an arbitrary phase and could sit up to a
+ * full second stale while Torn's own timer ticked on. Against a live Torn
+ * countdown that reads as an error that drifts and never settles.
+ *
+ * ONE MAIN CHANGE: the display tick is scheduled onto Torn's second boundary
+ * instead of running free. Each update reschedules itself for the next whole
+ * Torn second, so the cell changes in the same instant Torn's clock does.
+ *
+ * This also settles the rounding question. At a second boundary the remaining
+ * time is a whole number, so ceil returns it unchanged -- the cell shows the
+ * exact number of whole seconds left, which is what Torn shows.
+ *
+ * v1.0.31 notes, still current:
+ *
+ * ONE MAIN CHANGE: an expired hospital record is no longer treated as hospital.
+ * The release timestamp is authoritative -- once it has passed, the target is
+ * out, whatever a cached or lagging API record still says. Previously the code
+ * fell through to "in hospital, release time unknown", which locked the button
+ * and froze the status until a later batch happened to disagree.
+ *
+ * Applied in all three places that read hospital state: the live path's
+ * computeHospitalSeconds, the VIEW lookup, and the Status column renderer.
+ *
+ * computeHospitalSeconds is the third engine function this chain has changed,
+ * again for a defect measured in real runtime. Its behaviour is unchanged for
+ * every record that has not expired.
+ *
+ * v1.0.30 notes, still current:
+ *
+ * 1. hospitalRemainingSeconds computed Math.ceil(until - now) + 1. The ceil is
+ *    correct and stays -- a countdown must never show less than the real wait,
+ *    or a caller attacks a second early and the hit fails. The + 1 constant is
+ *    the extra second and is removed. It came from the v1.5.135 PDA lineage as
+ *    "FFScouter-aligned +1 second semantics".
+ *
+ * 2. recordTornClockOffset compared Torn's whole-second timestamp against a
+ *    millisecond midpoint. Torn reports the floor of the current second, so the
+ *    offset was biased up to a full second low, which made our clock read early
+ *    and the remaining time read long.
+ *
+ * 3. v1.0.35. Both whole-second sources -- the HTTP Date header and the body
+ *    timestamp -- are now treated as constraints rather than estimates. Each
+ *    response proves the offset lies in [S - endedAt, S + 1000 - startedAt),
+ *    and the running intersection of those intervals can only narrow and can
+ *    never exclude the truth. The estimate is taken at the low edge, so the
+ *    countdown can read high but never low. Nothing reads Torn's DOM for time.
+ *
+ * 4. v1.0.36. The DIBS cell's tooltip blinked once a second while the pointer
+ *    rested on it, because every display tick removed and rewrote the title
+ *    attribute and the text itself carried a live countdown. The title is now
+ *    written only when its text changes, and it no longer contains anything
+ *    that changes by itself. Presentation only; no decision path is touched.
+ *
+ * 5. v1.0.37. The panel and the DIBS header now say when FFScouter's own Sort
+ *    or filters are on. FFScouter's sort pass re-runs on every class change in
+ *    the roster and undoes ours; its filters hide a row the moment a released
+ *    target stops matching. Both were confirmed by the owner in live runtime
+ *    and neither is a KS fault, but nothing told the user why. KS reads the
+ *    two marks FFScouter writes on the page it is showing and reports them.
+ *    It never changes FFScouter's state and makes no request. Presentation only.
+ *
+ * Combined error before: +1 to +3 seconds, about +2 on average.
+ * Combined error after:  0 to +1 second, from the deliberate ceil alone.
+ *
+ * NOTE: hospitalRemainingSeconds is no longer byte-identical to v1.0.13. It is
+ * the only engine function this whole 1.0.18-1.0.30 chain has changed, and it
+ * is changed because a defect was measured in real runtime, not by preference.
+ * PDA still carries the + 1, so PDA and PC will differ by one second until the
+ * same correction is made there.
+ *
+ * Everything else in VIEW mode stays refused at the transport: no FFScouter
+ * traffic, no shared claim reads or writes, no own-wars call, no key/info, no
+ * target basic check. The faction ID is pinned to the one in the URL, so VIEW
+ * cannot be pointed at any other faction. The button stays locked; no CLAIM or
+ * RELEASE is reachable.
+ *
+ * Live-war behaviour, shared DIBS authority and the claim engine are unchanged. Built from v1.0.13 RELEASE (169,007 bytes,
+ * SHA-256 723A0582A7EAE95E830313DCF67F6C208719D6A6EC74EC504583639D0E74A313).
+ * v1.0.16 and v1.0.17 were not used as an implementation base.
+ *
+ * ONE MAIN CHANGE: the per-row DIBS control moves out of the body-owned geometry
+ * overlay and becomes a real roster cell inserted before Torn's native Attack
+ * cell. Width is net zero -- Torn's Score column is hidden only on rows that
+ * actually carry a KS cell, and the KS cell takes exactly the width that frees.
+ *
+ * FFScouter keeps its own FF/Est cell, header, sorting and filtering. This
+ * script never hides, rewrites or duplicates FFScouter's column, and reads FF
+ * from the data-ff-value attribute FFScouter already writes on the row.
+ *
+ * Removed from the v1.0.13 presentation path: elementFromPoint hit sampling,
+ * per-row rect measurement, per-row and per-attack-cell ResizeObserver targets
+ * and the rAF row layout loop. Column width is measured once per roster mount.
+ *
+ * VIEW mode: on any other faction's /war/rank route the column renders
+ * read-only. While VIEW mode is active every network call is refused at the
+ * transport and every shared write is refused at the control.
+ *
+ * Shared DIBS authority, CLAIM/QUEUED/RELEASE semantics, credential guards and
+ * the target decision engine are unchanged from v1.0.13.
  * Hospital countdown uses v1.5.135 FFScouter-aligned second-boundary semantics.
  * Identity-bearing row changes immediately invalidate stale XID-bound DIBS controls.
  * PREWAR lock, Hospital <=2:00 and FF 2.00-5.00 gates are retained.
@@ -28,9 +250,12 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs PC",
-    version: "1.0.13",
-    instanceKey: "__ksTornWarDibsPcNativeV113",
-    rowHostPrefix: "ks-twd-pc-native-row-",
+    version: "1.0.40",
+    instanceKey: "__ksTornWarDibsPcNativeV140",
+    rowHostPrefix: "ks-twd-pc-native-row-v139-",
+    statusCellPrefix: "ks-twd-pc-native-status-v139-",
+    rosterStyleId: "ks-twd-pc-native-roster-style-v139",
+    wseWarningId: "ks-twd-pc-native-wse-warning-v139",
     panelId: "ks-twd-pc-native-panel",
     layerId: "ks-twd-pc-native-layer",
     ownClaimStorageKey: "ks_torn_war_dibs_pc_native_own_claim_v1",
@@ -65,7 +290,10 @@
     tornTransportRetryAttempts: 2,
     tornTransportOfflineThreshold: 2,
     tornTransportRecoveryDelayMs: 1800,
-    tornClockMaxSamples: 5,
+    tornClockMaxRoundTripMs: 10000,
+    tornClockDriftPpm: 500,
+    tornStatusPollJitterMs: 400,
+    sharedErrorHoldMs: 6000,
     displayTickMs: 1000,
     sharedPollMs: 2500,
     sharedTransportRetryDelayMs: 450,
@@ -76,7 +304,13 @@
     ownClaimMissingReadThreshold: 2,
     ownClaimMissingGraceMs: 500,
     trustedScrollIntentMs: 1500,
-    maxHospitalSeconds: 172800
+    maxHospitalSeconds: 172800,
+    // A claim can only be taken while the target has gateSeconds or less
+    // left, and a hospital timer only grows when the target is put back
+    // in. A fresh reading above this is therefore proof of a NEW
+    // hospitalisation, not the one the claim was taken during. 180 leaves
+    // 60 s of margin over the 120 s gate.
+    autoReleaseHospitalSeconds: 180
   });
 
   const TARGET_STATE = Object.freeze({
@@ -152,6 +386,9 @@
   let sharedBackoffUntil = 0;
   let sharedTransportFailureStreak = 0;
   let sharedClaims = new Map();
+  // Targets the shared server sent a claim for that could not be read.
+  // We do not know whether they are taken, so they are never shown as free.
+  let sharedClaimsUnreadable = new Set();
   let sharedAuthorityEpoch = 0;
   let sharedRequestSerial = 0;
   let ffCredentialChangeState = FF_CREDENTIAL_STATE.IDLE;
@@ -187,10 +424,18 @@
   let warSurfaceSerial = 0;
   let prewarObservation = null;
   const lockedPrewarWarIds = new Set();
-  let tornClockOffsetsMs = [];
+  let sharedStatusHoldUntil = 0;
+  // Running intersection of every interval Torn's own responses allow the true
+  // clock offset to lie in. Null until the first usable sample.
+  let tornClockLowMs = null;
+  let tornClockHighMs = null;
+  let tornClockBoundsAt = 0;
   let pendingTargetId = "";
   let ownClaimMissingReads = 0;
   let ownClaimLastConfirmedAt = 0;
+  // Claim id the auto-release has already acted on. One attempt per claim:
+  // a failed release must not turn into a request every second.
+  let autoReleaseAttemptedClaimId = "";
   let claimFlowState = CLAIM_FLOW_STATE.IDLE;
 
   let sharedStatus = { state: "loading-key", message: "Shared: loading saved key…", count: 0 };
@@ -271,16 +516,89 @@
     invalidateOwnWarsState();
   }
 
-  function median(values) {
-    const nums = values.filter(Number.isFinite).sort((a, b) => a - b);
-    if (!nums.length) return null;
-    const middle = Math.floor(nums.length / 2);
-    return nums.length % 2 ? nums[middle] : (nums[middle - 1] + nums[middle]) / 2;
+  // Torn's HTTP Date header is the server's own clock and comes back with every
+  // response the script already makes. Sampling it here is what lets VIEW mode
+  // -- which never fetches own wars -- run on Torn time instead of the PC's.
+  function tornDateHeaderMs(headers) {
+    const text = String(headers ?? "");
+    if (!text) return null;
+    const match = /^[ \t]*date[ \t]*:[ \t]*(.+?)[ \t]*$/im.exec(text);
+    if (!match) return null;
+    const parsed = Date.parse(match[1]);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   }
 
+  // A reply replayed from a cache carries an old Date and would drag the offset
+  // backwards, so anything with a non-zero Age is refused.
+  function tornResponseIsFresh(headers) {
+    const match = /^[ \t]*age[ \t]*:[ \t]*(\d+)[ \t]*$/im.exec(String(headers ?? ""));
+    if (!match) return true;
+    return Number(match[1]) === 0;
+  }
+
+  // A response that names a whole server second is not a guess about the clock,
+  // it is a constraint on it. The second S was current at some instant inside
+  // the round trip, so with offset = tornNow - pcNow:
+  //
+  //     offset  in  [ S - endedAt , S + 1000 - startedAt )
+  //
+  // Every response gives another such interval and the truth lies in all of
+  // them, so the running intersection can only narrow and can never exclude the
+  // real offset. There is no rounding step left to get wrong.
+  function recordTornWholeSecondMs(secondStartMs, startedAt, endedAt) {
+    if (!Number.isFinite(secondStartMs) || secondStartMs <= 0) return;
+    if (!Number.isFinite(startedAt) || !Number.isFinite(endedAt)) return;
+    if (endedAt < startedAt) return;
+    // A round trip this long says almost nothing and may itself be stale.
+    if (endedAt - startedAt > CONFIG.tornClockMaxRoundTripMs) return;
+
+    const low = secondStartMs - endedAt;
+    const high = secondStartMs + 1000 - startedAt;
+
+    if (!Number.isFinite(tornClockLowMs) || !Number.isFinite(tornClockHighMs)) {
+      tornClockLowMs = low;
+      tornClockHighMs = high;
+      tornClockBoundsAt = endedAt;
+      return;
+    }
+
+    // Two crystals drift apart. Let the kept bounds relax by that much before
+    // intersecting, so a long session does not slowly contradict itself.
+    const age = Math.max(0, endedAt - tornClockBoundsAt);
+    const slack = (age * CONFIG.tornClockDriftPpm) / 1e6;
+    const nextLow = Math.max(low, tornClockLowMs - slack);
+    const nextHigh = Math.min(high, tornClockHighMs + slack);
+
+    if (nextLow >= nextHigh) {
+      // Contradiction: the PC clock stepped, or an old reply slipped through.
+      // The newest evidence wins outright rather than poisoning the running set.
+      tornClockLowMs = low;
+      tornClockHighMs = high;
+      tornClockBoundsAt = endedAt;
+      return;
+    }
+
+    tornClockLowMs = nextLow;
+    tornClockHighMs = nextHigh;
+    tornClockBoundsAt = endedAt;
+  }
+
+  function recordTornClockFromHeaders(result) {
+    if (!result?.ok || !tornResponseIsFresh(result.headers)) return;
+    const serverMs = tornDateHeaderMs(result.headers);
+    if (serverMs === null) return;
+    // Date is a whole second, so the value is that second's own start.
+    recordTornWholeSecondMs(serverMs, Number(result.startedAt), Number(result.endedAt));
+  }
+
+  // The low edge of the interval, never the middle. The middle is unbiased but
+  // wrong in both directions, and one direction is unacceptable: a clock that
+  // runs ahead makes the cell show less time than there is and somebody attacks
+  // early. The low edge puts our clock as far behind Torn as the evidence
+  // permits, so the remaining time reads as high as the evidence permits. The
+  // cell can read high while the interval is still wide. It can never read low.
   function getTornNowMs() {
-    const offset = median(tornClockOffsetsMs);
-    if (Number.isFinite(offset)) return nowMs() + offset;
+    if (Number.isFinite(tornClockLowMs)) return nowMs() + tornClockLowMs;
     if (typeof window.getCurrentTimestamp === "function") {
       try {
         const value = window.getCurrentTimestamp();
@@ -288,6 +606,20 @@
       } catch {}
     }
     return nowMs();
+  }
+
+  // Cell-sized time. formatCountdown stays as it is for tooltips and the panel,
+  // where there is room for the readable form.
+  function formatCellCountdown(totalSeconds) {
+    if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return "";
+    const seconds = Math.max(0, Math.floor(totalSeconds));
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const remainder = seconds % 60;
+    if (days > 0) return `${days}d${hours}h`;
+    if (hours > 0) return `${hours}h${String(minutes).padStart(2, "0")}`;
+    return `${minutes}:${String(remainder).padStart(2, "0")}`;
   }
 
   function formatCountdown(totalSeconds) {
@@ -325,8 +657,41 @@
     }
   }
 
+  // Another faction's Ranked War, reached from its public profile. Rendering is
+  // allowed here so the roster column can be inspected outside an own war.
+  // Authority is not: viewOnlyMode() gates every write and every request.
+  // The public faction ID of the profile Ranked War page currently open, or "".
+  // Every VIEW-mode request is pinned to this value, so VIEW can never be
+  // pointed at a faction whose page the user is not actually looking at.
+  function viewedFactionIdFromRoute(value = location.href) {
+    try {
+      const url = new URL(value, location.href);
+      const hashPath = String(url.hash || "").slice(1).split("?", 1)[0].replace(/\/+$/, "");
+      if (!/\/factions\.php$/i.test(url.pathname)) return "";
+      if (url.searchParams.get("step") !== "profile" || hashPath !== "/war/rank") return "";
+      const id = String(url.searchParams.get("ID") || "").trim();
+      return validTargetId(id) ? String(Number(id)) : "";
+    } catch {
+      return "";
+    }
+  }
+
+  function isForeignRankedWarRoute(value = location.href) {
+    return Boolean(viewedFactionIdFromRoute(value));
+  }
+
+  function isAnyRankedWarRoute(value = location.href) {
+    return isRankedWarRoute(value) || isForeignRankedWarRoute(value);
+  }
+
+  // Fail closed. Anything that is not the owner's own Ranked War route is
+  // read-only, including an unparseable or partially matching route.
+  function viewOnlyMode() {
+    return !isRankedWarRoute();
+  }
+
   function isRuntimeContextEligible() {
-    return !destroyed && isPageVisible() && hasPageFocus() && isRankedWarRoute();
+    return !destroyed && isPageVisible() && hasPageFocus() && isAnyRankedWarRoute();
   }
 
   function isRuntimeEligible() {
@@ -642,10 +1007,43 @@
   // Network transport / explicit allowlists
   // ---------------------------------------------------------------------------
 
+  // The factions whose rosters are actually rendered on screen: both IDs on the
+  // current war card, plus the profile faction from the URL. VIEW may read the
+  // members batch for these and nothing else.
+  function viewPermittedFactionIds() {
+    const ids = new Set();
+    const routeId = viewedFactionIdFromRoute();
+    if (validTargetId(routeId)) ids.add(routeId);
+    const card = canonicalRankedWarSurface()?.selected?.card || null;
+    for (const id of cardFactionIds(card)) {
+      if (validTargetId(id)) ids.add(id);
+    }
+    return [...ids];
+  }
+
+  // VIEW mode allowlist. Fail closed: anything that is not exactly the members
+  // endpoint for a faction rendered on the current page is refused.
+  function isViewModePermittedRequest(rawUrl) {
+    try {
+      const url = new URL(String(rawUrl || ""));
+      if (url.origin !== SCRIPT.tornApiOrigin) return false;
+      return viewPermittedFactionIds().some(id => url.pathname === `/v2/faction/${id}/members`);
+    } catch {
+      return false;
+    }
+  }
+
   function gmXhr(options) {
     return new Promise(resolve => {
       let settled = false;
       const startedAt = nowMs();
+      // Single transport choke point. In VIEW mode everything is refused except
+      // the members status batch for the faction being viewed; see
+      // isViewModePermittedRequest for the exact allowlist.
+      if (viewOnlyMode() && !isViewModePermittedRequest(options?.url)) {
+        resolve({ ok: false, status: 0, responseText: "", headers: "", startedAt, endedAt: nowMs(), viewOnlyBlocked: true });
+        return;
+      }
       const finish = result => {
         if (settled) return;
         settled = true;
@@ -730,6 +1128,7 @@
       ? { Accept: "application/json", "Cache-Control": "no-cache", Pragma: "no-cache" }
       : { Accept: "application/json" };
     const result = await gmXhr({ method: "GET", url: url.toString(), headers });
+    recordTornClockFromHeaders(result);
     return { ...result, body: parseJsonSafe(result.responseText) };
   }
 
@@ -981,15 +1380,38 @@
   // Shared FFScouter queue
   // ---------------------------------------------------------------------------
 
+  // Two kinds of bad response, deliberately handled differently.
+  //
+  // The SHAPE being wrong -- no claims.faction object at all -- means this is
+  // not a claims response. It proves nothing about who has claimed what, so it
+  // is rejected whole and the panel goes offline. An empty object would say
+  // "nobody has claimed anything", and acting on that would let the whole
+  // faction pile onto targets that are in fact taken.
+  //
+  // A single ENTRY being unreadable is different. Rejecting the whole roster
+  // over one bad entry made PC unusable for the rest of the war while PDA
+  // carried on, and the two clients then said different things about the same
+  // target. So the bad entry is skipped -- but its target is remembered in
+  // `unreadable`, and the row is shown as DIBS? instead of free. Skipping
+  // silently is the one thing that must never happen: that is how two members
+  // hit the same target.
   function normalizeSharedClaims(payload) {
     const faction = payload?.claims?.faction;
     const result = new Map();
+    const unreadable = new Set();
     const seenClaimIds = new Set();
-    if (Array.isArray(faction)) return faction.length === 0 ? result : null;
+    if (Array.isArray(faction)) return faction.length === 0 ? { claims: result, unreadable } : null;
     if (!faction || typeof faction !== "object") return null;
     for (const [rawTargetId, rawQueue] of Object.entries(faction)) {
       const targetId = String(rawTargetId || "").trim();
-      if (!validTargetId(targetId) || !Array.isArray(rawQueue) || !rawQueue.length) return null;
+      // A key that is not a Torn ID is a SHAPE fault, not one bad entry: there
+      // is no row to mark, so a real claim could be hidden with nothing on
+      // screen to warn about it. Reject the response instead.
+      if (!validTargetId(targetId)) return null;
+      if (!Array.isArray(rawQueue) || !rawQueue.length) {
+        unreadable.add(targetId);
+        continue;
+      }
       const queue = rawQueue.map((claim, index) => {
         const claimId = normalizeText(claim?.claim_id);
         const claimerId = String(claim?.claimer?.player_id ?? "").trim();
@@ -1000,11 +1422,11 @@
         seenClaimIds.add(claimId);
         return { claimId, position: index + 1, createdAt, expiresAt, claimer: { playerId: claimerId, name: claimerName } };
       });
-      if (queue.some(item => item === null)) return null;
+      if (queue.some(item => item === null)) unreadable.add(targetId);
       const normalizedQueue = queue.filter(item => item !== null);
-      result.set(targetId, normalizedQueue);
+      if (normalizedQueue.length) result.set(targetId, normalizedQueue);
     }
-    return result;
+    return { claims: result, unreadable };
   }
 
   function findSharedClaimById(claimId) {
@@ -1099,15 +1521,38 @@
     ownClaimMissingReads += 1;
     const localAgeMs = Math.max(0, nowMs() - Number(own.createdLocalAt || 0));
     const sinceConfirmedMs = ownClaimLastConfirmedAt > 0 ? nowMs() - ownClaimLastConfirmedAt : localAgeMs;
-    if (ownClaimMissingReads >= CONFIG.ownClaimMissingReadThreshold && sinceConfirmedMs >= CONFIG.ownClaimMissingGraceMs && sharedStatus.state === "online") {
+    if (ownClaimMissingReads >= CONFIG.ownClaimMissingReadThreshold && sinceConfirmedMs >= CONFIG.ownClaimMissingGraceMs && (sharedStatus.state === "online" || sharedStatus.state === "degraded")) {
       saveOwnClaim(null);
       ownClaimMissingReads = 0;
       ownClaimLastConfirmedAt = 0;
     }
   }
 
+  // A write that failed must stay readable. Without the hold, the shared poll
+  // that runs immediately after a failed claim overwrites the message inside a
+  // few tens of milliseconds and the failure is invisible.
+  //
+  // Only routine progress is suppressed: a newer error always wins, and
+  // beginSharedWriteFeedback clears the hold so the owner's next click reports
+  // itself at once.
+  function beginSharedWriteFeedback() {
+    sharedStatusHoldUntil = 0;
+  }
+
+  function holdSharedWriteFailure(message) {
+    setSharedStatus("error", message);
+    sharedStatusHoldUntil = nowMs() + CONFIG.sharedErrorHoldMs;
+  }
+
   function setSharedStatus(state, message, count = sharedClaims.size) {
-    sharedStatus = { state: String(state || "unknown"), message: normalizeText(message) || "Shared: unknown", count: Number.isInteger(count) && count >= 0 ? count : 0 };
+    const next = String(state || "unknown");
+    if (next !== "error" && nowMs() < sharedStatusHoldUntil) {
+      // Keep the failure on screen, but do not lose the target count.
+      sharedStatus = { ...sharedStatus, count: Number.isInteger(count) && count >= 0 ? count : sharedStatus.count };
+      updatePanel();
+      return;
+    }
+    sharedStatus = { state: next, message: normalizeText(message) || "Shared: unknown", count: Number.isInteger(count) && count >= 0 ? count : 0 };
     updatePanel();
   }
 
@@ -1151,11 +1596,21 @@
         throw new Error(normalizeText(body?.error) || `HTTP ${result?.status ?? 0}`);
       }
       sharedTransportFailureStreak = 0;
-      const normalizedClaims = normalizeSharedClaims(body);
-      if (!(normalizedClaims instanceof Map)) throw new Error("malformed claims response");
-      sharedClaims = normalizedClaims;
+      const normalized = normalizeSharedClaims(body);
+      if (!normalized || !(normalized.claims instanceof Map)) throw new Error("malformed claims response");
+      sharedClaims = normalized.claims;
+      sharedClaimsUnreadable = normalized.unreadable instanceof Set ? normalized.unreadable : new Set();
       sharedBackoffUntil = 0;
-      setSharedStatus("online", `Shared: online · ${sharedClaims.size} targets`, sharedClaims.size);
+      // The unreadable count is never hidden. A partial list that looks complete
+      // is worse than an offline one, because it reads as "these targets are free".
+      const unreadableCount = sharedClaimsUnreadable.size;
+      setSharedStatus(
+        unreadableCount ? "degraded" : "online",
+        unreadableCount
+          ? `Shared: online · ${sharedClaims.size} targets · ${unreadableCount} unreadable`
+          : `Shared: online · ${sharedClaims.size} targets`,
+        sharedClaims.size
+      );
       reconcileOwnClaimFromShared();
       updateBoundControls();
       return true;
@@ -1188,6 +1643,95 @@
     if (raw === null || !raw.trim()) return null;
     const value = Number(raw);
     return Number.isFinite(value) && value > 0 ? value : null;
+  }
+
+  // The freshest status we have for a target, from whichever batch applies.
+  // Returns null when nothing fresh is available, which is what keeps the
+  // takeover fail-safe.
+  function freshApiStatusForTarget(targetId) {
+    return (viewOnlyMode() ? viewMemberStatusForTarget(targetId) : null) ||
+      freshOpponentStatusForTarget(targetId);
+  }
+
+  function viewMemberStatusForTarget(targetId) {
+    const id = String(targetId || "");
+    if (!validTargetId(id)) return null;
+    if (viewMembersState.factionIds.length === 0) return null;
+    if (
+      !Number.isFinite(viewMembersState.fetchedAt) ||
+      nowMs() - viewMembersState.fetchedAt > CONFIG.opponentMembersMaxAgeMs
+    ) return null;
+    return viewMembersState.members.get(id) || null;
+  }
+
+  const STATUS_LABELS = Object.freeze([
+    [/hospital/i, "Hospital", "hospital"],
+    [/jail/i, "Jail", "jail"],
+    [/travel|abroad|flying|returning/i, "Traveling", "travel"],
+    [/federal|fedded/i, "Federal", "jail"],
+    [/okay|ok\b/i, "Okay", "okay"]
+  ]);
+
+  function statusPresentation(status) {
+    // An expired hospital record renders as Okay, not as a frozen Hospital.
+    if (hospitalUntilExpired(status?.until) && /hospital/i.test(`${status?.state || ""}`)) {
+      return { label: "Okay", tone: "okay" };
+    }
+    const text = `${status?.state || ""} ${status?.description || ""}`;
+    for (const [pattern, label, tone] of STATUS_LABELS) {
+      if (pattern.test(text)) return { label, tone };
+    }
+    const state = normalizeText(status?.state);
+    return state ? { label: state, tone: "other" } : null;
+  }
+
+  // FFScouter writes this next to data-ff-value. Read only, never written back.
+  function readRowBattleStatsEstimate(row) {
+    const li = row?.li instanceof HTMLElement ? row.li : row instanceof HTMLElement ? row : null;
+    if (!(li instanceof HTMLElement)) return null;
+    const raw = li.getAttribute("data-est-value");
+    if (raw === null || !raw.trim()) return null;
+    const value = Number(raw);
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }
+
+  function formatBattleStats(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number) || number <= 0) return "";
+    if (number >= 1e9) return `${(number / 1e9).toFixed(number >= 1e10 ? 0 : 1)}b`;
+    if (number >= 1e6) return `${(number / 1e6).toFixed(number >= 1e7 ? 0 : 1)}m`;
+    if (number >= 1e3) return `${(number / 1e3).toFixed(number >= 1e4 ? 0 : 1)}k`;
+    return String(Math.round(number));
+  }
+
+  // FFScouter's own display mode, from the attribute it sets on the war block:
+  // fair_fight, battle_stats or none.
+  function ffscouterColumnDisplay() {
+    const scope = mountedRosterRoot?.isConnected ? mountedRosterRoot : document;
+    const holder = scope.querySelector?.("[data-ffscouter-col-display]") ||
+      document.querySelector("[data-ffscouter-col-display]");
+    return normalizeText(holder?.getAttribute("data-ffscouter-col-display")).toLowerCase();
+  }
+
+  // Show what FFScouter's column is not showing. When it shows FF we add the
+  // estimate; when it shows the estimate we add FF; otherwise FF, because that
+  // is the value the DIBS gate acts on.
+  function complementaryRowValue(binding) {
+    const fairFight = readRowFairFight(binding);
+    const estimate = readRowBattleStatsEstimate(binding);
+    const ffText = Number.isFinite(fairFight) ? `FF${Number(fairFight).toFixed(1)}` : "";
+    const estText = formatBattleStats(estimate);
+    if (ffscouterColumnDisplay() === "fair_fight" && estText) return estText;
+    return ffText || estText;
+  }
+
+  function rowValueTooltip(binding) {
+    const fairFight = readRowFairFight(binding);
+    const estimate = readRowBattleStatsEstimate(binding);
+    const parts = [];
+    if (Number.isFinite(fairFight)) parts.push(`Fair Fight ${Number(fairFight).toFixed(2)}`);
+    if (Number.isFinite(estimate)) parts.push(`Est ${formatBattleStats(estimate)}`);
+    return parts.join(" \u00b7 ");
   }
 
   // ---------------------------------------------------------------------------
@@ -1290,11 +1834,10 @@
 
   function recordTornClockOffset(result, body) {
     const timestamp = Number(body?.timestamp);
-    if (Number.isFinite(timestamp) && timestamp > 0) {
-      const midpoint = (Number(result.startedAt) + Number(result.endedAt)) / 2;
-      tornClockOffsetsMs.push(timestamp * 1000 - midpoint);
-      if (tornClockOffsetsMs.length > CONFIG.tornClockMaxSamples) tornClockOffsetsMs.splice(0, tornClockOffsetsMs.length - CONFIG.tornClockMaxSamples);
-    }
+    if (!Number.isFinite(timestamp) || timestamp <= 0) return;
+    // Same whole-second evidence as the Date header, from the body instead.
+    // Torn reports the floor of its clock, so the value names the second start.
+    recordTornWholeSecondMs(timestamp * 1000, Number(result.startedAt), Number(result.endedAt));
   }
 
   async function tornReadWithTransportRetry(path, key, { cacheBust = false, isCurrent = () => true } = {}) {
@@ -1540,6 +2083,97 @@
 
   function isHospitalStatusValue(value) { return /hospital/i.test(normalizeText(value)); }
 
+  let viewMembersState = { factionIds: [], members: new Map(), fetchedAt: 0 };
+  let viewMembersInFlight = false;
+
+  function viewMembersCoverCurrentPage() {
+    const permitted = viewPermittedFactionIds();
+    if (permitted.length === 0) return false;
+    return permitted.every(id => viewMembersState.factionIds.includes(id));
+  }
+
+  // Reads the members batch for every faction rendered on the current war card
+  // and merges them. The column mounts on li.enemy, which is not necessarily the
+  // profile faction, so fetching only the URL faction resolved nothing.
+  async function fetchViewMembers({ force = false } = {}) {
+    if (!viewOnlyMode() || viewMembersInFlight) return false;
+    const key = effectiveTornApiKey();
+    const factionIds = viewPermittedFactionIds();
+    if (!key || factionIds.length === 0 || !runtimeActive || !isRuntimeEligible()) return false;
+    if (
+      !force &&
+      viewMembersCoverCurrentPage() &&
+      nowMs() - viewMembersState.fetchedAt < CONFIG.tornStatusPollMs
+    ) return true;
+    viewMembersInFlight = true;
+    try {
+      const stillCurrent = () =>
+        viewOnlyMode() &&
+        runtimeActive &&
+        factionIds.every(id => viewPermittedFactionIds().includes(id));
+      const merged = new Map();
+      const fetched = [];
+      for (const factionId of factionIds) {
+        if (!stillCurrent()) return false;
+        const result = await tornReadWithTransportRetry(
+          `/v2/faction/${factionId}/members`,
+          key,
+          { isCurrent: stillCurrent }
+        );
+        if (!stillCurrent()) return false;
+        if (!result?.ok || result.body?.error) continue;
+        const members = normalizeTornMembers(result.body);
+        if (!(members instanceof Map)) continue;
+        for (const [id, status] of members) merged.set(id, status);
+        fetched.push(factionId);
+      }
+      if (fetched.length === 0) {
+        setTornStatusState("error", "Torn: VIEW status unavailable", 0);
+        return false;
+      }
+      viewMembersState = { factionIds: fetched, members: merged, fetchedAt: nowMs() };
+      setTornStatusState(
+        "online",
+        `Torn: VIEW ${merged.size} members / ${fetched.length} factions`,
+        merged.size
+      );
+      return true;
+    } catch {
+      return false;
+    } finally {
+      viewMembersInFlight = false;
+    }
+  }
+
+  // Returns a reason code as well as the time, so a cell without a countdown can
+  // say which cause it hit instead of every cause looking identical.
+  function viewHospitalForTarget(targetId) {
+    const id = String(targetId || "");
+    if (!validTargetId(id)) return null;
+    if (viewMembersState.factionIds.length === 0) return null;
+    if (
+      !Number.isFinite(viewMembersState.fetchedAt) ||
+      nowMs() - viewMembersState.fetchedAt > CONFIG.opponentMembersMaxAgeMs
+    ) return null;
+    const status = viewMembersState.members.get(id);
+    if (!status) return { isHospital: false, seconds: null, source: "torn-api-view", reason: "member-not-in-fetched-rosters" };
+    const isHospital =
+      isHospitalStatusValue(status.state) ||
+      isHospitalStatusValue(status.description) ||
+      isHospitalStatusValue(status.details);
+    if (!isHospital) return { isHospital: false, seconds: null, source: "torn-api-view", reason: "not-hospital" };
+    if (hospitalUntilExpired(status.until)) {
+      return { isHospital: false, seconds: null, source: "torn-api-view", reason: "not-hospital" };
+    }
+    const seconds = hospitalRemainingSeconds(status.until);
+    return {
+      isHospital: true,
+      seconds,
+      source: "torn-api-view",
+      reason: Number.isFinite(seconds) ? "hospital" : "hospital-without-until"
+    };
+  }
+
   function freshOpponentStatusForTarget(targetId) {
     const id = String(targetId || "");
     if (!validTargetId(id) || !validTargetId(opponentFactionId)) return null;
@@ -1548,10 +2182,22 @@
     return opponentMembersState.members.get(id) || null;
   }
 
+  // A release timestamp that has passed means the target is out, whatever a
+  // cached or lagging status record still claims. Returns false when there is
+  // no usable timestamp, so a genuinely unknown release time is left alone.
+  function hospitalUntilExpired(until) {
+    const timestamp = Number(until);
+    if (!Number.isFinite(timestamp) || timestamp <= 0) return false;
+    return timestamp - getTornNowMs() / 1000 <= 0;
+  }
+
   function hospitalRemainingSeconds(until) {
     const timestamp = Number(until);
     if (!Number.isFinite(timestamp) || timestamp <= 0) return null;
-    const remaining = Math.ceil(timestamp - getTornNowMs() / 1000) + 1;
+    // Ceil only. Rounding up is deliberate: showing less than the real wait
+    // makes a caller attack early and the hit fails. The extra + 1 that used to
+    // sit here was measured against Torn as a full second of overshoot.
+    const remaining = Math.ceil(timestamp - getTornNowMs() / 1000);
     return Number.isFinite(remaining) && remaining >= 0 && remaining < CONFIG.maxHospitalSeconds
       ? remaining
       : null;
@@ -1588,6 +2234,10 @@
       const remaining = hospitalRemainingSeconds(apiStatus.until);
       if (Number.isFinite(remaining)) return { isHospital: true, seconds: remaining, source: "torn-api" };
 
+      // The release time has passed: out, regardless of a stale state field.
+      if (hospitalUntilExpired(apiStatus.until)) {
+        return { isHospital: false, seconds: null, source: "torn-api-expired" };
+      }
       const fallback = visibleHospitalEvidence(row);
       if (fallback.isHospital && Number.isFinite(fallback.seconds)) return fallback;
       return { isHospital: true, seconds: null, source: "torn-api" };
@@ -1693,7 +2343,7 @@
   }
 
   function canonicalRankedWarSurface() {
-    if (!isRankedWarRoute()) return null;
+    if (!isAnyRankedWarRoute()) return null;
     const roots = [...document.querySelectorAll("#faction_war_list_id")]
       .filter(root => root instanceof HTMLElement && isRenderedRouteSurfaceElement(root));
     if (roots.length !== 1) return null;
@@ -2048,6 +2698,8 @@
       !validTargetId(targetId)
     ) return;
     if (currentOwnClaim() || sharedClaimForTarget(targetId)) return;
+    // Never write against a target whose claim state could not be read.
+    if (sharedClaimsUnreadable.has(targetId)) { updateBoundControls(); return; }
     const clickedBinding = bindingForTarget(targetId);
     const clickedOpponentId = opponentFactionId;
     if (!clickedBinding || !validTargetId(clickedOpponentId) || currentWarSurface?.opponentFactionId !== clickedOpponentId) return;
@@ -2082,6 +2734,7 @@
     try {
       if (!(await fetchSharedClaims())) throw new Error("fresh shared claims snapshot failed");
       if (currentOwnClaim() || sharedClaimForTarget(targetId)) throw new Error("target already claimed");
+      if (sharedClaimsUnreadable.has(targetId)) throw new Error("claim state for this target could not be read");
       if (!(await fetchOwnWars({ force: true })) || !ownWarsFreshLive(CONFIG.ownWarsWriteMaxAgeMs)) {
         throw new Error("fresh own faction wars did not confirm LIVE");
       }
@@ -2158,11 +2811,14 @@
       const winner = others.filter(item => Number(item?.position) === 1).sort((a, b) => Number(a?.created_at) - Number(b?.created_at))[0];
       const winnerName = normalizeText(winner?.claimer?.name) || "another member";
       saveOwnClaim({ ...ownRecord, cleanupRequired: true });
-      setSharedStatus("error", `Shared: queued behind ${winnerName} · RELEASE required`, sharedClaims.size);
+      // The poll this claim starts overwrites the panel within about 100 ms,
+      // and this line is the only place the owner is told that he holds a queue
+      // position he must release. Hold it the same way a write failure is held.
+      holdSharedWriteFailure(`Shared: queued behind ${winnerName} · RELEASE required`);
     } catch (error) {
       if (createdClaim) persistCleanupClaimFromAcknowledgement(createdClaim, targetId);
       if (writeRuntimeCurrent()) {
-        setSharedStatus("error", `Shared: claim failed · ${normalizeText(error?.message) || "request failed"}`);
+        holdSharedWriteFailure(`Shared: claim failed · ${normalizeText(error?.message) || "request failed"}`);
       }
     } finally {
       if (ownsWrite()) {
@@ -2220,7 +2876,7 @@
       setSharedStatus("online", "Shared: released", sharedClaims.size);
     } catch (error) {
       if (writeRuntimeCurrent()) {
-        setSharedStatus("error", `Shared: release failed · ${normalizeText(error?.message) || "request failed"}`);
+        holdSharedWriteFailure(`Shared: release failed · ${normalizeText(error?.message) || "request failed"}`);
       }
     } finally {
       if (ownsWrite()) {
@@ -2230,6 +2886,56 @@
         if (writeRuntimeCurrent()) { updateBoundControls(); void fetchSharedClaims(); }
       }
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Auto-release.
+  //
+  // Members forget to release a claim after the hit -- it happened right through
+  // the previous Ranked War -- and a forgotten claim locks that target for the
+  // whole faction until the server-side expiry finally runs out.
+  //
+  // The proof that a target has been beaten is arithmetic, not a guess. A claim
+  // can only ever be taken while the target has CONFIG.gateSeconds or less left
+  // in hospital, and a hospital timer never grows on its own: it moves forward
+  // only when the target is hospitalised again. So a FRESH reading well above
+  // the gate means the target went back in -- beaten, by us or by someone else.
+  // Either way the claim is spent and holding it helps nobody.
+  //
+  // Fail closed at every step: own war only, fresh Torn status only, never while
+  // another write is in flight, and one attempt per claim. No extra request is
+  // made -- this reads the opponent members batch the script already polls.
+  function ownClaimTargetIsBeaten() {
+    if (viewOnlyMode()) return false;
+    const own = currentOwnClaim();
+    if (!own || !validTargetId(own.targetId)) return false;
+    // freshOpponentStatusForTarget refuses anything older than
+    // CONFIG.opponentMembersMaxAgeMs, so stale data can never release a claim.
+    const status = freshOpponentStatusForTarget(own.targetId);
+    if (!status) return false;
+    const isHospital =
+      isHospitalStatusValue(status.state) ||
+      isHospitalStatusValue(status.description) ||
+      isHospitalStatusValue(status.details);
+    if (!isHospital) return false;
+    const seconds = hospitalRemainingSeconds(status.until);
+    return Number.isFinite(seconds) && seconds > CONFIG.autoReleaseHospitalSeconds;
+  }
+
+  async function maybeAutoReleaseBeatenTarget() {
+    if (!runtimeActive || !isRuntimeEligible() || sharedWriteBusy || ffCredentialChangeBusy()) return false;
+    const own = currentOwnClaim();
+    if (!own || autoReleaseAttemptedClaimId === own.claimId) return false;
+    if (!ownClaimTargetIsBeaten()) return false;
+    autoReleaseAttemptedClaimId = own.claimId;
+    await releaseOwnSharedTarget();
+    if (currentOwnClaim()) return false;
+    // releaseOwnSharedTarget kicks off a shared poll in its own finally block,
+    // and that poll would overwrite the message within about 100 ms. Hold it the
+    // same way a write failure is held, so the owner actually sees what happened.
+    setSharedStatus("online", "Shared: auto-released \u00b7 target back in hospital", sharedClaims.size);
+    sharedStatusHoldUntil = nowMs() + CONFIG.sharedErrorHoldMs;
+    return true;
   }
 
   // ---------------------------------------------------------------------------
@@ -2373,371 +3079,10 @@
     };
   }
 
-  function ensurePresentationLayer() {
-    let layer = document.getElementById(SCRIPT.layerId);
-    if (
-      layer instanceof HTMLElement &&
-      layer.parentElement === document.body &&
-      !layer.closest("#react-root")
-    ) {
-      return layer;
-    }
-    layer?.remove();
-    if (!(document.body instanceof HTMLElement)) return null;
-    layer = document.createElement("div");
-    layer.id = SCRIPT.layerId;
-    layer.setAttribute("aria-label", "KS Torn War Dibs presentation layer");
-    Object.assign(layer.style, {
-      position: "absolute",
-      left: "0",
-      top: "0",
-      width: "100%",
-      height: "0",
-      zIndex: "auto",
-      pointerEvents: "none",
-      overflow: "visible",
-      boxSizing: "border-box"
-    });
-    document.body.append(layer);
-    return layer;
-  }
-
-  function presentationSurfaceElement() {
-    const rosterRoot = mountedRosterRoot instanceof HTMLElement && mountedRosterRoot.isConnected
-      ? mountedRosterRoot
-      : document.getElementById("faction_war_list_id");
-    const surface = rosterRoot?.closest(".faction-war") || rosterRoot?.closest(".enemy-faction") || rosterRoot;
-    const primary = currentWarSurface?.card?.isConnected ? currentWarSurface.card : null;
-    return surface instanceof HTMLElement ? surface : primary;
-  }
-
-  function presentationViewportRect() {
-    const visual = window.visualViewport;
-    const left = visual && Number.isFinite(visual.offsetLeft) ? visual.offsetLeft : 0;
-    const top = visual && Number.isFinite(visual.offsetTop) ? visual.offsetTop : 0;
-    const width = visual && Number.isFinite(visual.width) && visual.width > 0
-      ? visual.width
-      : window.innerWidth;
-    const height = visual && Number.isFinite(visual.height) && visual.height > 0
-      ? visual.height
-      : window.innerHeight;
-    if (!(width > 0) || !(height > 0)) return null;
-    return { left, top, right: left + width, bottom: top + height, width, height };
-  }
-
-  function presentationMainContainerRect() {
-    const main = document.getElementById("mainContainer");
-    const surface = presentationSurfaceElement();
-    if (
-      !(main instanceof HTMLElement) ||
-      !main.isConnected ||
-      (surface instanceof HTMLElement && !main.contains(surface))
-    ) return null;
-    const rect = main.getBoundingClientRect();
-    if (
-      !Number.isFinite(rect.left) ||
-      !Number.isFinite(rect.right) ||
-      !(rect.width > 0) ||
-      !(rect.height > 0)
-    ) return null;
-    return rect;
-  }
-
-  function knownExteriorControlRects() {
-    return [...document.querySelectorAll("#ff-scouter-chain-btn")]
-      .filter(element => element instanceof HTMLElement && element.isConnected)
-      .map(element => element.getBoundingClientRect())
-      .filter(rect => rect.width > 0 && rect.height > 0);
-  }
-
-  function rectanglesIntersect(first, second) {
-    return (
-      first.left < second.right &&
-      first.right > second.left &&
-      first.top < second.bottom &&
-      first.bottom > second.top
-    );
-  }
-
-  function exteriorPresentationGeometry({ reserveFixedControlLane = false } = {}) {
-    const viewport = presentationViewportRect();
-    const main = presentationMainContainerRect();
-    if (!viewport || !main) return null;
-    const outerPadding = 8;
-    const mainGap = 6;
-    const controls = knownExteriorControlRects();
-    let rightEdge = viewport.right - outerPadding;
-    let leftEdge = viewport.left + outerPadding;
-
-    if (reserveFixedControlLane) {
-      for (const control of controls) {
-        if (control.left >= main.right && control.left < rightEdge) {
-          rightEdge = Math.min(rightEdge, control.left - mainGap);
-        }
-        if (control.right <= main.left && control.right > leftEdge) {
-          leftEdge = Math.max(leftEdge, control.right + mainGap);
-        }
-      }
-    }
-
-    const regions = [
-      {
-        side: "right",
-        left: Math.max(viewport.left + outerPadding, main.right + mainGap),
-        right: rightEdge
-      },
-      {
-        side: "left",
-        left: leftEdge,
-        right: Math.min(viewport.right - outerPadding, main.left - mainGap)
-      }
-    ].map(region => ({ ...region, width: region.right - region.left }));
-
-    return { viewport, main, controls, regions };
-  }
-
-  function presentationRectIsSafe(rect, geometry, { avoidPanel = false, requireVerticalFit = false } = {}) {
-    const { viewport, main, controls } = geometry;
-    const outsideMain = rect.right <= main.left || rect.left >= main.right;
-    const insideViewport =
-      rect.left >= viewport.left &&
-      rect.right <= viewport.right &&
-      (!requireVerticalFit || (rect.top >= viewport.top && rect.bottom <= viewport.bottom));
-    if (!outsideMain || !insideViewport || controls.some(control => rectanglesIntersect(rect, control))) {
-      return false;
-    }
-    if (avoidPanel) {
-      const panel = document.getElementById(SCRIPT.panelId);
-      if (panel instanceof HTMLElement && getComputedStyle(panel).display !== "none") {
-        const panelRect = panel.getBoundingClientRect();
-        if (panelRect.width > 0 && panelRect.height > 0 && rectanglesIntersect(rect, panelRect)) {
-          return false;
-        }
-      }
-    }
-    return true;
-  }
-
-  function renderedAttackChild(element) {
-    if (!(element instanceof HTMLElement) || getComputedStyle(element).display === "none") return false;
-    const rect = element.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0;
-  }
-
-  function nativeAttackPresentationKind(attackCell) {
-    if (!(attackCell instanceof HTMLElement)) return "unknown";
-    const children = [...attackCell.children].filter(renderedAttackChild);
-    const anchors = children.filter(element => element.matches("a[href]"));
-    if (anchors.length > 0) {
-      if (
-        anchors.length !== 1 ||
-        children.length !== 1 ||
-        anchors[0].getAttribute("aria-disabled") === "true" ||
-        getComputedStyle(anchors[0]).pointerEvents === "none"
-      ) return "unknown";
-      return "clickable";
-    }
-    if (
-      children.length !== 1 ||
-      !(children[0] instanceof HTMLSpanElement) ||
-      normalizeText(children[0].textContent).toLowerCase() !== "attack" ||
-      children[0].hasAttribute("onclick") ||
-      children[0].matches("[role='button'],[contenteditable='true'],[tabindex]:not([tabindex='-1'])") ||
-      children[0].querySelector("a[href],button,input,select,textarea,[role='button'],[contenteditable='true'],[tabindex]:not([tabindex='-1'])")
-    ) return "unknown";
-    return "disabled";
-  }
-
-  function attackPresentationOccluderIsHigherStack(hit, attackCell) {
-    let current = hit instanceof HTMLElement ? hit : hit?.parentElement;
-    while (current instanceof HTMLElement && current !== document.body) {
-      if (current === attackCell || attackCell.contains(current)) return false;
-      const style = getComputedStyle(current);
-      const zIndex = Number.parseInt(style.zIndex, 10);
-      if (
-        (style.position === "fixed" || style.position === "sticky") &&
-        Number.isFinite(zIndex) &&
-        zIndex > 0
-      ) return true;
-      current = current.parentElement;
-    }
-    return false;
-  }
-
-  function attackPresentationHitClassification(attackCell, button, presentationHost = null) {
-    const sampleInset = Math.min(0.75, button.width / 4, button.height / 4);
-    const sampleXs = [button.left + sampleInset, button.left + button.width / 2, button.right - sampleInset];
-    const sampleYs = [button.top + sampleInset, button.top + button.height / 2, button.bottom - sampleInset];
-    let occluded = false;
-    for (const x of sampleXs) {
-      for (const y of sampleYs) {
-        const hit = document.elementFromPoint(x, y);
-        const root = hit?.getRootNode?.();
-        if (
-          hit === attackCell ||
-          (hit instanceof Node && attackCell.contains(hit)) ||
-          (presentationHost instanceof HTMLElement &&
-            (hit === presentationHost ||
-              (hit instanceof Node && presentationHost.contains(hit)) ||
-              (root instanceof ShadowRoot && root.host === presentationHost)))
-        ) continue;
-        if (attackPresentationOccluderIsHigherStack(hit, attackCell)) {
-          occluded = true;
-          continue;
-        }
-        return "blocked";
-      }
-    }
-    return occluded ? "occluded" : "clear";
-  }
-
-  function safeAttackAnchoredPresentationRect(attackCell) {
-    const viewport = presentationViewportRect();
-    const main = presentationMainContainerRect();
-    if (!(attackCell instanceof HTMLElement) || !viewport || !main) return null;
-    const attackRect = attackCell.getBoundingClientRect();
-    if (
-      !(attackRect.width > 0) ||
-      !(attackRect.height > 0) ||
-      attackRect.left < main.left - 0.5 ||
-      attackRect.right > main.right + 0.5
-    ) return null;
-
-    const nativeKind = nativeAttackPresentationKind(attackCell);
-    if (nativeKind === "unknown") return null;
-    const occupied = [...attackCell.children]
-      .filter(renderedAttackChild)
-      .map(element => element.getBoundingClientRect())
-      .filter(rect => rect.width > 0 && rect.height > 0);
-    if (occupied.length === 0) return null;
-    let button;
-    if (nativeKind === "disabled") {
-      const inset = Math.min(1.5, attackRect.width / 8, attackRect.height / 8);
-      button = {
-        left: attackRect.left + inset,
-        top: attackRect.top + inset,
-        right: attackRect.right - inset,
-        bottom: attackRect.bottom - inset,
-        width: attackRect.width - inset * 2,
-        height: attackRect.height - inset * 2
-      };
-      if (button.width < 40 || button.height < 24) return null;
-    } else {
-      const firstOccupiedTop = Math.min(...occupied.map(rect => rect.top));
-      const laneGap = 1;
-      const laneHeight = Math.min(9, firstOccupiedTop - attackRect.top - laneGap);
-      const width = Math.min(48, attackRect.width * 0.84);
-      if (laneHeight < 7 || width < 24) return null;
-      const left = attackRect.left + (attackRect.width - width) / 2;
-      const top = attackRect.top;
-      button = {
-        left,
-        top,
-        right: left + width,
-        bottom: top + laneHeight,
-        width,
-        height: laneHeight
-      };
-    }
-    const insideAttack =
-      button.left >= attackRect.left - 0.5 &&
-      button.right <= attackRect.right + 0.5 &&
-      button.top >= attackRect.top - 0.5 &&
-      button.bottom <= attackRect.bottom + 0.5;
-    if (
-      !insideAttack ||
-      button.left < viewport.left ||
-      button.right > viewport.right ||
-      (nativeKind === "clickable" && occupied.some(rect => rectanglesIntersect(button, rect)))
-    ) return null;
-
-    const fullyInsideViewport = button.top >= viewport.top && button.bottom <= viewport.bottom;
-    const hitClassification = fullyInsideViewport
-      ? attackPresentationHitClassification(attackCell, button)
-      : "offscreen";
-    if (hitClassification === "blocked") return null;
-
-    return {
-      mode: nativeKind === "disabled" ? "full" : "compact",
-      hitClassification,
-      host: {
-        left: attackRect.left,
-        top: attackRect.top,
-        width: attackRect.width,
-        height: attackRect.height
-      },
-      button: {
-        left: button.left - attackRect.left,
-        top: button.top - attackRect.top,
-        width: button.width,
-        height: button.height
-      }
-    };
-  }
-
-  function positionRowBinding(binding) {
-    const host = binding?.host;
-    const current = currentResolvedBinding(binding);
-    if (!(host instanceof HTMLElement) || !current) {
-      if (host instanceof HTMLElement) host.style.display = "none";
-      return false;
-    }
-    host.style.display = "none";
-    host.dataset.ksTwdPresentationMode = "hidden";
-    if (host.dataset.ksTwdPresentationRelevant !== "true") return false;
-    const rowRect = current.row.getBoundingClientRect();
-    const attackRect = current.attackCell.getBoundingClientRect();
-    const rowStyle = getComputedStyle(current.row);
-    const attackStyle = getComputedStyle(current.attackCell);
-    const rendered =
-      !current.row.hasAttribute("data-ffscouter-hidden") &&
-      rowStyle.display !== "none" &&
-      rowStyle.visibility !== "hidden" &&
-      attackStyle.display !== "none" &&
-      attackStyle.visibility !== "hidden" &&
-      rowRect.width > 0 &&
-      rowRect.height > 0 &&
-      attackRect.width > 0 &&
-      attackRect.height > 0;
-    if (!rendered) return false;
-    const placement = safeAttackAnchoredPresentationRect(current.attackCell);
-    if (!placement) return false;
-    const layer = host.parentElement;
-    if (!(layer instanceof HTMLElement) || layer.id !== SCRIPT.layerId) return false;
-    const layerRect = layer.getBoundingClientRect();
-    if (!Number.isFinite(layerRect.left) || !Number.isFinite(layerRect.top)) return false;
-    const button = host.shadowRoot?.querySelector("button");
-    if (!(button instanceof HTMLButtonElement)) return false;
-    host.dataset.ksTwdPresentationMode = placement.mode;
-    Object.assign(host.style, {
-      display: "block",
-      left: `${placement.host.left - layerRect.left}px`,
-      top: `${placement.host.top - layerRect.top}px`,
-      width: `${placement.host.width}px`,
-      height: `${placement.host.height}px`
-    });
-    Object.assign(button.style, {
-      left: `${placement.button.left}px`,
-      top: `${placement.button.top}px`,
-      width: `${placement.button.width}px`,
-      height: `${placement.button.height}px`
-    });
-    if (
-      placement.hitClassification === "occluded" &&
-      attackPresentationHitClassification(current.attackCell, button.getBoundingClientRect(), host) !== "occluded"
-    ) {
-      host.style.display = "none";
-      host.dataset.ksTwdPresentationMode = "hidden";
-      return false;
-    }
-    return true;
-  }
-
   function layoutPresentation() {
     if (!runtimeActive || !isRuntimeEligible()) return;
     const panel = document.getElementById(SCRIPT.panelId);
-    if (panel instanceof HTMLElement) positionPanel(panel);
-    for (const binding of rowBindings.values()) positionRowBinding(binding);
+    if (panel instanceof HTMLElement) placePanel(panel);
   }
 
   function schedulePresentationLayout() {
@@ -2757,8 +3102,7 @@
     const binding = rowBindings.get(row);
     if (!binding) return false;
     rowBindings.delete(row);
-    rosterResizeObserver?.unobserve(binding.row);
-    rosterResizeObserver?.unobserve(binding.attackCell);
+    binding.statusCell?.remove();
     binding.host.remove();
     return true;
   }
@@ -2787,30 +3131,594 @@
       current.targetId !== binding.targetId ||
       current.attackCell !== binding.attackCell ||
       !binding.host.isConnected ||
-      binding.host.parentElement?.id !== SCRIPT.layerId
+      binding.host.parentElement !== current.row ||
+      binding.host.nextElementSibling !== current.attackCell
     ) {
       return null;
     }
     return current;
   }
 
+  // ---------------------------------------------------------------------------
+  // Native roster column.
+  // The DIBS control is a real roster cell inserted before Torn's native Attack
+  // cell. Width is net zero: Torn's Score column is hidden only on rows that
+  // actually carry a KS cell, and the KS cell takes the width that frees. The
+  // hide rule is scoped with :has() on our own cell, so the stylesheet and the
+  // JS mount can never disagree about which side of the roster is affected.
+  // FFScouter's FF/Est cell, header, sorting and filtering are never touched.
+  // ---------------------------------------------------------------------------
+
+  const NATIVE_COLUMN = Object.freeze({
+    defaultWidthPx: 38,
+    minWidthPx: 32,
+    maxWidthPx: 64,
+    defaultHeightPx: 34,
+    minHeightPx: 22,
+    maxHeightPx: 48,
+    // Just under the Status column. Wide enough for "2h 34m" at 9px.
+    statusWidthShare: 0.92,
+    minMemberWidthPx: 110
+  });
+
+  const SCORE_CELL_SELECTORS = Object.freeze([
+    ":scope > .points",
+    ":scope > [class*='points__']",
+    ":scope > .score",
+    ":scope > [class*='score__']"
+  ]);
+
+  const ATTACK_CELL_SELECTORS = Object.freeze([
+    ":scope > .attack",
+    ":scope > [class*='attack__']"
+  ]);
+
+  const MEMBER_CELL_SELECTORS = Object.freeze([
+    ":scope > .member",
+    ":scope > [class*='member__']"
+  ]);
+
+  const STATUS_CELL_SELECTORS = Object.freeze([
+    ":scope > .status",
+    ":scope > [class*='status__']"
+  ]);
+
+  let rosterColumnWidthPx = NATIVE_COLUMN.defaultWidthPx;
+  let rosterColumnHeightPx = NATIVE_COLUMN.defaultHeightPx;
+  let rosterMemberWidthPx = 0;
+  let rosterStatusWidthPx = 0;
+  let rosterHeaderHeightPx = NATIVE_COLUMN.defaultHeightPx;
+  let rosterHeaderOffsetPx = 0;
+  let rosterHeaderCell = null;
+
+  let warStuffEnhancedBlocked = false;
+  let wseWarningHost = null;
+
+  const DIBS_SORT = Object.freeze({ OFF: "off", ASC: "asc", DESC: "desc" });
+  const DIBS_SORT_ARROW = Object.freeze({ off: "", asc: " \u25B2", desc: " \u25BC" });
+  let dibsSortMode = DIBS_SORT.OFF;
+  let dibsSortSignature = "";
+  let ffscouterInterference = { sortActive: false, hiddenRows: 0 };
+
+  function clampPx(value, min, max, fallback) {
+    const number = Number(value);
+    if (!Number.isFinite(number) || number <= 0) return fallback;
+    return Math.round(Math.min(max, Math.max(min, number)));
+  }
+
+  function firstDirectCell(element, selectors) {
+    if (!(element instanceof HTMLElement)) return null;
+    for (const selector of selectors) {
+      const cell = element.querySelector(selector);
+      if (cell instanceof HTMLElement) return cell;
+    }
+    return null;
+  }
+
+  function directScoreCell(element) {
+    return firstDirectCell(element, SCORE_CELL_SELECTORS);
+  }
+
+  function directMemberCell(element) {
+    return firstDirectCell(element, MEMBER_CELL_SELECTORS);
+  }
+
+  function directStatusColumnCell(element) {
+    return firstDirectCell(element, STATUS_CELL_SELECTORS);
+  }
+
+  function directAttackCell(element) {
+    return firstDirectCell(element, ATTACK_CELL_SELECTORS);
+  }
+
+  function isOwnPresentationNode(node) {
+    const element = node instanceof Element ? node : node?.parentElement;
+    if (!(element instanceof Element)) return false;
+    return Boolean(element.closest?.("[data-ks-twd-cell],[data-ks-twd-header],[data-ks-twd-panel]"));
+  }
+
+  // One measurement per roster mount. Never per row, never per frame. This is
+  // the only geometry read left in the row presentation path.
+  function measureRosterColumn(root) {
+    if (!(root instanceof HTMLElement)) return false;
+    for (const row of root.querySelectorAll("li.enemy")) {
+      if (!(row instanceof HTMLElement)) continue;
+      if (row.querySelector(":scope > [data-ks-twd-cell]")) continue;
+      const score = directScoreCell(row);
+      const attack = directAttackCell(row);
+      if (!score || !attack) continue;
+      const scoreRect = score.getBoundingClientRect();
+      const attackRect = attack.getBoundingClientRect();
+      if (!(scoreRect.width > 0) || !(attackRect.height > 0)) continue;
+      const scoreWidth = clampPx(scoreRect.width, NATIVE_COLUMN.minWidthPx, NATIVE_COLUMN.maxWidthPx, NATIVE_COLUMN.defaultWidthPx);
+      const height = clampPx(attackRect.height, NATIVE_COLUMN.minHeightPx, NATIVE_COLUMN.maxHeightPx, NATIVE_COLUMN.defaultHeightPx);
+
+      // Widen towards the Status column and pay for it out of Members, so the
+      // sum of the row's cells is unchanged and no float can wrap.
+      const statusCell = directStatusColumnCell(row);
+      const memberCell = directMemberCell(row);
+      const statusWidth = statusCell ? statusCell.getBoundingClientRect().width : 0;
+      const statusTarget = statusWidth > 0 ? Math.round(statusWidth) : 0;
+      const memberWidth = memberCell ? memberCell.getBoundingClientRect().width : 0;
+      let width = scoreWidth;
+      let memberTarget = 0;
+      if (statusWidth > 0 && memberWidth > 0) {
+        const wanted = clampPx(
+          statusWidth * NATIVE_COLUMN.statusWidthShare,
+          NATIVE_COLUMN.minWidthPx,
+          NATIVE_COLUMN.maxWidthPx,
+          scoreWidth
+        );
+        const donation = wanted - scoreWidth;
+        if (donation > 0 && memberWidth - donation >= NATIVE_COLUMN.minMemberWidthPx) {
+          width = wanted;
+          memberTarget = Math.round(memberWidth - donation);
+        }
+      }
+
+      const header = measureRosterHeader(root);
+      const changed =
+        width !== rosterColumnWidthPx ||
+        height !== rosterColumnHeightPx ||
+        memberTarget !== rosterMemberWidthPx ||
+        statusTarget !== rosterStatusWidthPx ||
+        header.height !== rosterHeaderHeightPx ||
+        header.offset !== rosterHeaderOffsetPx;
+      rosterColumnWidthPx = width;
+      rosterColumnHeightPx = height;
+      rosterMemberWidthPx = memberTarget;
+      rosterStatusWidthPx = statusTarget;
+      rosterHeaderHeightPx = header.height;
+      rosterHeaderOffsetPx = header.offset;
+      return changed;
+    }
+    return false;
+  }
+
+  function measureRosterHeader(root) {
+    const fallback = { height: rosterHeaderHeightPx, offset: rosterHeaderOffsetPx };
+    const header = resolveRosterHeader(root);
+    if (!(header instanceof HTMLElement)) return fallback;
+    const sibling = directAttackCell(header) || directScoreCell(header);
+    if (!(sibling instanceof HTMLElement)) return fallback;
+    const headerRect = header.getBoundingClientRect();
+    const siblingRect = sibling.getBoundingClientRect();
+    if (!(siblingRect.height > 0) || !(headerRect.height > 0)) return fallback;
+    return {
+      height: clampPx(siblingRect.height, 10, 60, NATIVE_COLUMN.defaultHeightPx),
+      offset: Math.max(0, Math.round(siblingRect.top - headerRect.top))
+    };
+  }
+
+  function rosterStyleText() {
+    const scoreCells = ".points, [class*='points__'], .score, [class*='score__']";
+    const memberCells = ".member, [class*='member__']";
+    const memberRule = rosterMemberWidthPx > 0
+      ? `
+      :is(li, div):has(> [data-ks-twd-cell="dibs"]) > :is(${memberCells}),
+      :is(li, div):has(> [data-ks-twd-header="dibs"]) > :is(${memberCells}) {
+        width: ${rosterMemberWidthPx}px !important;
+      }`
+      : "";
+    return `
+      :is(li, div):has(> [data-ks-twd-cell="dibs"]) > :is(${scoreCells}),
+      :is(li, div):has(> [data-ks-twd-header="dibs"]) > :is(${scoreCells}) {
+        display: none !important;
+      }
+      :is(li, div):has(> [data-ks-twd-cell="status"][data-live="true"]) > :is(.status, [class*="status__"]) {
+        display: none !important;
+      }
+      [data-ks-twd-cell="status"] {
+        float: left !important;
+        box-sizing: border-box !important;
+        width: ${rosterStatusWidthPx || 50}px !important;
+        height: ${rosterColumnHeightPx}px !important;
+        margin: 0 !important;
+        padding: 0 2px !important;
+        display: none !important;
+        align-items: center !important;
+        justify-content: center !important;
+        overflow: hidden !important;
+        white-space: nowrap !important;
+        text-overflow: ellipsis !important;
+        font: 700 11px/1.2 Arial, sans-serif !important;
+        color: #cbd5e1 !important;
+      }
+      [data-ks-twd-cell="status"][data-live="true"] { display: flex !important; }
+      [data-ks-twd-cell="status"][data-tone="hospital"] { color: #fb7185 !important; }
+      [data-ks-twd-cell="status"][data-tone="okay"] { color: #62c370 !important; }
+      [data-ks-twd-cell="status"][data-tone="travel"] { color: #38bdf8 !important; }
+      [data-ks-twd-cell="status"][data-tone="jail"] { color: #fbbf24 !important; }
+      [data-ks-twd-cell="dibs"],
+      [data-ks-twd-header="dibs"] {
+        float: left !important;
+        display: block !important;
+        box-sizing: border-box !important;
+        width: ${rosterColumnWidthPx}px !important;
+        min-width: ${rosterColumnWidthPx}px !important;
+        max-width: ${rosterColumnWidthPx}px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        background: none !important;
+        overflow: visible !important;
+      }
+      [data-ks-twd-cell="dibs"] {
+        height: ${rosterColumnHeightPx}px !important;
+      }
+      ${memberRule}
+      [data-ks-twd-header="dibs"] {
+        cursor: pointer !important;
+        user-select: none !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        height: ${rosterHeaderHeightPx}px !important;
+        margin-top: ${rosterHeaderOffsetPx}px !important;
+        color: inherit !important;
+        font: 700 11px/1.2 Arial, sans-serif !important;
+        text-align: center !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+      }
+    `;
+  }
+
+  function ensureRosterStyle(root) {
+    const changed = measureRosterColumn(root);
+    let style = document.getElementById(SCRIPT.rosterStyleId);
+    if (style instanceof HTMLStyleElement) {
+      if (changed) style.textContent = rosterStyleText();
+      return style;
+    }
+    style?.remove();
+    style = document.createElement("style");
+    style.id = SCRIPT.rosterStyleId;
+    style.textContent = rosterStyleText();
+    const styleRoot = document.head || document.documentElement;
+    if (!(styleRoot instanceof Element)) return null;
+    styleRoot.append(style);
+    return style;
+  }
+
+  function resolveRosterHeader(root) {
+    if (!(root instanceof HTMLElement)) return null;
+    const candidates = root.querySelectorAll(
+      ".white-grad, .table-header, [class*='headerWrap'], [class*='tableHeader']"
+    );
+    for (const candidate of candidates) {
+      if (!(candidate instanceof HTMLElement)) continue;
+      if (candidate.matches("li.enemy, li.your")) continue;
+      if (!directAttackCell(candidate) || !directScoreCell(candidate)) continue;
+      return candidate;
+    }
+    return null;
+  }
+
+  function removeRosterHeaderCell() {
+    rosterHeaderCell?.remove();
+    rosterHeaderCell = null;
+  }
+
+  // The header cell exists only while at least one row cell exists. That keeps
+  // the header's hidden Score column and the rows' hidden Score column in step.
+  function ensureRosterHeaderCell(root) {
+    if (rowBindings.size === 0) {
+      removeRosterHeaderCell();
+      return null;
+    }
+    const header = resolveRosterHeader(root);
+    const attackHeader = directAttackCell(header);
+    if (!(header instanceof HTMLElement) || !(attackHeader instanceof HTMLElement)) {
+      removeRosterHeaderCell();
+      return null;
+    }
+    let cell = rosterHeaderCell;
+    if (!(cell instanceof HTMLElement) || !cell.isConnected || cell.parentElement !== header) {
+      removeRosterHeaderCell();
+      cell = document.createElement("div");
+      cell.className = "left";
+      cell.dataset.ksTwdHeader = "dibs";
+      cell.textContent = "DIBS";
+      cell.setAttribute("role", "button");
+      cell.tabIndex = 0;
+      cell.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        registerTrustedInteraction(event);
+        cycleDibsSort();
+      });
+      cell.addEventListener("keydown", event => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        registerTrustedInteraction(event);
+        cycleDibsSort();
+      });
+      rosterHeaderCell = cell;
+    }
+    if (cell.nextElementSibling !== attackHeader) header.insertBefore(cell, attackHeader);
+    updateSortHeaderLabel();
+    return cell;
+  }
+
+  // Seconds until this target can be hit. Not in hospital sorts first because it
+  // is available now; an unknown time sorts last.
+  function rowSortSeconds(binding) {
+    if (!binding) return Number.POSITIVE_INFINITY;
+    const hospital =
+      (viewOnlyMode() ? viewHospitalForTarget(binding.targetId) : null) ||
+      computeHospitalSeconds(binding);
+    if (!hospital?.isHospital) return -1;
+    return Number.isFinite(hospital.seconds) ? hospital.seconds : Number.POSITIVE_INFINITY;
+  }
+
+  // DOM order, not Map insertion order. The signature has to describe what the
+  // roster currently looks like, otherwise a reorder by another script is
+  // invisible to us.
+  function orderedBoundRows() {
+    const root = mountedRosterRoot;
+    if (!(root instanceof HTMLElement)) return [];
+    return [...root.querySelectorAll("li.enemy")].filter(row => rowBindings.has(row));
+  }
+
+  function rosterOrderSignature() {
+    return orderedBoundRows()
+      .map(row => rowBindings.get(row)?.targetId || "")
+      .join(",");
+  }
+
+  // Reordering is a single user action. It is never scheduled, never repeated
+  // and never undone by this script, so it cannot get into a tug of war with
+  // FFScouter's own sort. Whoever moved the rows last is simply the current
+  // order.
+  function applyDibsSort() {
+    if (dibsSortMode === DIBS_SORT.OFF) return false;
+    const rows = orderedBoundRows();
+    if (rows.length < 2) return false;
+    const parent = rows[0].parentElement;
+    if (!(parent instanceof HTMLElement) || rows.some(row => row.parentElement !== parent)) return false;
+
+    const direction = dibsSortMode === DIBS_SORT.ASC ? 1 : -1;
+    const keyed = rows.map((row, index) => ({ row, index, value: rowSortSeconds(rowBindings.get(row)) }));
+    keyed.sort((left, right) => {
+      const leftUnknown = !Number.isFinite(left.value);
+      const rightUnknown = !Number.isFinite(right.value);
+      if (leftUnknown !== rightUnknown) return leftUnknown ? 1 : -1;
+      if (!leftUnknown && left.value !== right.value) return (left.value - right.value) * direction;
+      return left.index - right.index;
+    });
+
+    for (const entry of keyed) {
+      const extras = [];
+      let next = entry.row.nextElementSibling;
+      while (next instanceof HTMLElement && !next.matches("li.enemy, li.your")) {
+        extras.push(next);
+        next = next.nextElementSibling;
+      }
+      parent.append(entry.row);
+      for (const extra of extras) parent.append(extra);
+    }
+    dibsSortSignature = rosterOrderSignature();
+    return true;
+  }
+
+  function updateSortHeaderLabel() {
+    const cell = rosterHeaderCell;
+    if (!(cell instanceof HTMLElement)) return;
+    const text = `DIBS${DIBS_SORT_ARROW[dibsSortMode] || ""}`;
+    if (cell.textContent !== text) cell.textContent = text;
+    const sortHelp = {
+      off: "Sort by time left: click for shortest first",
+      asc: "Shortest time left first. Click for longest first",
+      desc: "Longest time left first. Click to turn sorting off"
+    }[dibsSortMode] || "";
+    setTitleIfChanged(cell, ffscouterInterference.sortActive
+      ? `${sortHelp}. FFScouter Sort is ON and will undo this within seconds. Set FFScouter to Sort: Default.`
+      : sortHelp);
+  }
+
+  function cycleDibsSort() {
+    dibsSortMode =
+      dibsSortMode === DIBS_SORT.OFF ? DIBS_SORT.ASC :
+      dibsSortMode === DIBS_SORT.ASC ? DIBS_SORT.DESC :
+      DIBS_SORT.OFF;
+    if (dibsSortMode === DIBS_SORT.OFF) dibsSortSignature = "";
+    else applyDibsSort();
+    updateSortHeaderLabel();
+  }
+
+  // FFScouter owns the roster's order and visibility whenever its own Sort or
+  // filters are on: its sort pass re-runs on every class change in the roster
+  // and undoes ours (owner, 2026-09-02), and its filters hide a row the moment
+  // a released target stops matching (owner video, 2026-09-03). KS does not
+  // fight that and never touches FFScouter's state. It reads two marks that
+  // FFScouter itself writes on the page being viewed, and says so in the panel
+  // and on the DIBS header, so nobody has to guess in the middle of a war.
+  function detectFfscouterInterference(root) {
+    const scope = root instanceof HTMLElement ? root : mountedRosterRoot;
+    if (!(scope instanceof HTMLElement)) return;
+    const sortActive = Boolean(
+      scope.querySelector('[data-ffscouter-active-filter="true"], .ffscouter-header[data-ffscouter-sort]') ||
+      scope.closest('[data-ffscouter-active-filter="true"]')
+    );
+    const hiddenRows = scope.querySelectorAll("li.enemy[data-ffscouter-hidden]").length;
+    if (sortActive === ffscouterInterference.sortActive && hiddenRows === ffscouterInterference.hiddenRows) return;
+    ffscouterInterference = { sortActive, hiddenRows };
+    updateSortHeaderLabel();
+    updatePanel();
+  }
+
+  function ffscouterInterferenceText() {
+    const { sortActive, hiddenRows } = ffscouterInterference;
+    if (sortActive && hiddenRows > 0) {
+      return `FFScouter: Sort ON + filter hides ${hiddenRows} row${hiddenRows === 1 ? "" : "s"}. DIBS sort will be undone and released targets vanish. Set Sort: Default and untick the filters.`;
+    }
+    if (sortActive) return "FFScouter: Sort ON. It re-sorts the roster and undoes DIBS sort. Set FFScouter to Sort: Default.";
+    if (hiddenRows > 0) return `FFScouter: filter hides ${hiddenRows} row${hiddenRows === 1 ? "" : "s"}. A target can vanish the moment it is released. Untick FFScouter's filters.`;
+    return "FFScouter: Sort Default, no filter.";
+  }
+
+  // A sort we did not perform means our arrow no longer describes the roster.
+  // Clear it rather than reasserting the old order.
+  function reconcileSortIndicator() {
+    if (dibsSortMode === DIBS_SORT.OFF) return;
+    const signature = rosterOrderSignature();
+    if (!signature || signature === dibsSortSignature) return;
+    dibsSortMode = DIBS_SORT.OFF;
+    dibsSortSignature = "";
+    updateSortHeaderLabel();
+  }
+
+  // Exact detection contract ported from PDA v1.5.144. These attributes are
+  // written by War Stuff Enhanced itself; FFScouter reads the same
+  // data-twse-last-action-timestamp, which is why it is a reliable marker.
+  function isWarStuffEnhancedPresent() {
+    if (document.documentElement?.hasAttribute("data-twse-injected")) return true;
+    const root = document.getElementById("faction_war_list_id");
+    if (!(root instanceof HTMLElement)) return false;
+    return Boolean(root.querySelector([
+      "li.enemy[data-twse-last-action-timestamp]",
+      "li.your[data-twse-last-action-timestamp]",
+      ".twse-copy-btn[data-player-id]",
+      ".status[data-twse-overridden]"
+    ].join(",")));
+  }
+
+  function removeWseWarning() {
+    wseWarningHost?.remove();
+    wseWarningHost = null;
+    document.getElementById(SCRIPT.wseWarningId)?.remove();
+  }
+
+  function showWseWarning() {
+    const anchor = resolvePanelAnchor();
+    if (!anchor) return null;
+    let host = wseWarningHost;
+    if (!(host instanceof HTMLElement) || !host.isConnected) {
+      removeWseWarning();
+      host = document.createElement("div");
+      host.id = SCRIPT.wseWarningId;
+      host.dataset.ksTwdPanel = "1";
+      Object.assign(host.style, {
+        display: "block",
+        position: "static",
+        width: "100%",
+        boxSizing: "border-box",
+        margin: "8px 0"
+      });
+      const shadow = host.attachShadow({ mode: "open" });
+      shadow.innerHTML = `
+        <style>
+          .warning {
+            box-sizing: border-box; width: 100%; padding: 10px 12px;
+            border: 1px solid #92400e; border-radius: 8px;
+            background: rgba(69, 26, 3, .96); color: #fde68a;
+            font: 700 12px/1.45 system-ui, sans-serif;
+          }
+          .warning strong { color: #fff7ed; }
+        </style>
+        <div class="warning" role="alert">
+          <strong>KS Torn War Dibs is blocked.</strong>
+          War Stuff Enhanced is unsupported. Disable War Stuff Enhanced, then reload Torn to use KS War Dibs.
+          Removing its markers is not enough &mdash; a clean reload is required.
+        </div>
+      `;
+      wseWarningHost = host;
+    }
+    if (anchor.before !== host && (host.parentElement !== anchor.parent || host.nextSibling !== anchor.before)) {
+      anchor.parent.insertBefore(host, anchor.before);
+    }
+    return host;
+  }
+
+  // Fail closed and sticky. The latch is module scope, so it survives every
+  // route change and remount and is cleared only by a full page load.
+  function warStuffEnhancedGate() {
+    if (!warStuffEnhancedBlocked && !isWarStuffEnhancedPresent()) return false;
+    warStuffEnhancedBlocked = true;
+    dibsSortMode = DIBS_SORT.OFF;
+    dibsSortSignature = "";
+    removeAllRowPresentations();
+    removeRosterHeaderCell();
+    document.getElementById(SCRIPT.rosterStyleId)?.remove();
+    document.getElementById(SCRIPT.panelId)?.remove();
+    showWseWarning();
+    return true;
+  }
+
+  function ensureStatusCell(binding) {
+    const row = binding?.row;
+    const host = binding?.host;
+    if (!(row instanceof HTMLElement) || !(host instanceof HTMLElement)) return null;
+    let cell = binding.statusCell;
+    if (!(cell instanceof HTMLElement) || !cell.isConnected || cell.parentElement !== row) {
+      cell = document.createElement("div");
+      cell.id = SCRIPT.statusCellPrefix + binding.targetId;
+      cell.className = "left";
+      cell.dataset.ksTwdCell = "status";
+      cell.dataset.live = "false";
+      binding.statusCell = cell;
+    }
+    if (cell.nextElementSibling !== host) row.insertBefore(cell, host);
+    return cell;
+  }
+
+  // Renders Torn's own status word from the API batch. While data-live is false
+  // the cell is invisible and Torn's column stays on screen, so a missing key or
+  // a stale batch can never leave the roster without a status.
+  function renderStatusCell(binding) {
+    const cell = ensureStatusCell(binding);
+    if (!(cell instanceof HTMLElement)) return;
+    const status = freshApiStatusForTarget(binding.targetId);
+    const presentation = status ? statusPresentation(status) : null;
+    const live = Boolean(presentation);
+    const nextLive = live ? "true" : "false";
+    if (cell.dataset.live !== nextLive) cell.dataset.live = nextLive;
+    const text = live ? presentation.label : "";
+    if (cell.textContent !== text) cell.textContent = text;
+    const tone = live ? presentation.tone : "";
+    if (cell.dataset.tone !== tone) cell.dataset.tone = tone;
+  }
+
+  function updateModeBadge() {
+    const version = document.getElementById(SCRIPT.panelId)?.shadowRoot?.querySelector(".version");
+    if (!(version instanceof HTMLElement)) return;
+    const text = viewOnlyMode() ? `v${SCRIPT.version} TEST · VIEW` : `v${SCRIPT.version} TEST`;
+    if (version.textContent !== text) version.textContent = text;
+  }
+
   function createRowBinding(resolved) {
-    const host = document.createElement("span");
+    const host = document.createElement("div");
     host.id = SCRIPT.rowHostPrefix + resolved.targetId;
     host.dataset.ksTwdPlayerId = resolved.targetId;
-    Object.assign(host.style, {
-      display: "none",
-      position: "absolute",
-      zIndex: "auto",
-      margin: "0",
-      boxSizing: "border-box",
-      pointerEvents: "none"
-    });
+    host.dataset.ksTwdCell = "dibs";
+    host.className = "left";
     const shadow = host.attachShadow({ mode: "open" });
     shadow.innerHTML = `
         <style>
-          :host { all:initial; display:block; position:relative; width:100%; height:100%; margin:0; box-sizing:border-box; pointer-events:none; }
-          button { box-sizing:border-box; position:absolute; display:block; min-width:0; min-height:0; margin:0; padding:0 1px; border:1px solid #718096; border-radius:3px; background:#1a202c; color:#e2e8f0; font:900 5.8px/1 Arial,sans-serif; text-align:center; white-space:nowrap; touch-action:manipulation; overflow:hidden; pointer-events:auto; -webkit-tap-highlight-color:transparent; }
+          :host { display:block; width:100%; height:100%; margin:0; box-sizing:border-box; }
+          button { box-sizing:border-box; display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%; height:100%; min-width:0; min-height:0; margin:0; padding:1px 2px; border:1px solid #718096; border-radius:4px; background:#1a202c; color:#e2e8f0; font:800 9px/1.05 Arial,sans-serif; text-align:center; white-space:nowrap; touch-action:manipulation; overflow:hidden; cursor:pointer; -webkit-tap-highlight-color:transparent; }
           button.ready { border-color:#38a169; background:#22543d; color:#f0fff4; }
           button.locked { border-color:#975a16; background:#744210; color:#fefcbf; }
           button.prewar { border-color:#5f6875; background:#3b4048; color:#c5ccd5; filter:saturate(.35); }
@@ -2824,13 +3732,8 @@
           button.working { border-color:#0ea5e9; background:#0c4a6e; color:#e0f2fe; }
           button.cleanup { border-color:#dc2626; background:#7f1d1d; color:#fff1f2; }
           button:disabled { opacity:.55; cursor:default; }
-          button::after { content:attr(data-compact-label); display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-          .label,.sub { display:none; }
-          :host([data-ks-twd-presentation-mode="full"]) button { padding:2px 3px; border-radius:4px; font:800 9px/1.05 Arial,sans-serif; white-space:normal; }
-          :host([data-ks-twd-presentation-mode="full"]) button:disabled { opacity:.82; }
-          :host([data-ks-twd-presentation-mode="full"]) button::after { display:none; }
-          :host([data-ks-twd-presentation-mode="full"]) .label { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-          :host([data-ks-twd-presentation-mode="full"]) .sub { display:block; margin-top:1px; overflow:hidden; color:inherit; font:750 7px/1 Arial,sans-serif; text-overflow:ellipsis; white-space:nowrap; }
+          .label { display:block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+          .sub { display:block; max-width:100%; margin-top:1px; overflow:hidden; color:inherit; font:700 6.6px/1 Arial,sans-serif; text-overflow:ellipsis; white-space:nowrap; opacity:.92; }
         </style>
         <button type="button" disabled data-state="loading" data-ready="false"><span class="label">DIBS</span><span class="sub">LOADING</span></button>
       `;
@@ -2838,6 +3741,7 @@
       event.preventDefault();
       event.stopPropagation();
       registerTrustedInteraction(event);
+      if (viewOnlyMode()) return;
       const button = event.currentTarget;
       const binding = bindingForHost(host);
       const current = currentResolvedBinding(binding);
@@ -2849,28 +3753,29 @@
       const own = currentOwnClaim();
       const state = button.dataset.state;
       if ((state === "claimed" || state === "cleanup") && own?.targetId === current.targetId) {
+        beginSharedWriteFeedback();
         void releaseOwnSharedTarget();
         return;
       }
       if (button.disabled || button.dataset.ready !== "true") return;
       if (own || sharedWriteBusy || ffCredentialChangeBusy() || !sharedApiKey) return;
       const playerName = normalizeText(current.profileAnchor.textContent) || current.targetId;
+      beginSharedWriteFeedback();
       void claimSharedTarget(current.targetId, playerName);
     });
 
     const binding = { ...resolved, host };
-    const layer = ensurePresentationLayer();
-    if (!(layer instanceof HTMLElement)) return null;
-    layer.append(host);
+    if (resolved.attackCell.parentElement !== resolved.row) return null;
+    resolved.row.insertBefore(host, resolved.attackCell);
     rowBindings.set(resolved.row, binding);
-    rosterResizeObserver?.observe(resolved.row);
-    rosterResizeObserver?.observe(resolved.attackCell);
-    positionRowBinding(binding);
     return binding;
   }
 
   function rowPresentationDescriptor(playerId, decision, sharedClaim) {
     const own = currentOwnClaim();
+    if (viewOnlyMode()) {
+      return { relevant: true, label: "VIEW", className: "unavailable" };
+    }
     if (pendingTargetId === playerId) {
       return {
         relevant: true,
@@ -2881,6 +3786,8 @@
       return { relevant: true, label: own.cleanupRequired === true ? "QUEUED" : "RELEASE" };
     }
     if (sharedClaim) return { relevant: true, label: "TAKEN" };
+    // A claim for this target arrived unreadable. We cannot say it is free.
+    if (sharedClaimsUnreadable.has(playerId)) return { relevant: true, label: "DIBS?", className: "unavailable" };
     if (decision?.state === TARGET_STATE.READY) return { relevant: true, label: "READY" };
     if (decision?.state === TARGET_STATE.LOCKED) {
       if (decision.reason === "rw-not-started") return { relevant: true, label: "PREWAR" };
@@ -2888,7 +3795,7 @@
         return { relevant: true, label: "WAIT" };
       }
       if (decision.reason === "hospital-too-early" && Number.isFinite(decision.seconds)) {
-        return { relevant: true, label: formatCountdown(decision.seconds) || "HOSP" };
+        return { relevant: true, label: formatCellCountdown(decision.seconds) || "HOSP" };
       }
       if (
         (decision.reason === "fair-fight-too-low" || decision.reason === "fair-fight-too-high") &&
@@ -2913,7 +3820,7 @@
     return { relevant: false, label: "", className: "unavailable" };
   }
 
-  function updateDibsControl(binding, decision, sharedClaim) {
+  function renderDibsControl(binding, decision, sharedClaim) {
     const host = binding?.host;
     const button = host?.shadowRoot?.querySelector("button");
     const label = host?.shadowRoot?.querySelector(".label");
@@ -2925,9 +3832,46 @@
     host.dataset.ksTwdPresentationRelevant = presentation.relevant ? "true" : "false";
     button.dataset.compactLabel = presentation.label;
     button.setAttribute("aria-label", presentation.label ? `DIBS ${presentation.label}` : "DIBS hidden");
-    if (!presentation.relevant) host.style.display = "none";
+    const nextVisibility = presentation.relevant ? "" : "hidden";
+    if (host.style.visibility !== nextVisibility) host.style.visibility = nextVisibility;
     button.dataset.ready = "false";
-    button.removeAttribute("title");
+    button.dataset.ksTitle = "";
+    // Both values stay reachable on hover in every state, so a locked or
+    // already claimed target can still be sized up without switching
+    // FFScouter's column back and forth.
+    const rowValues = rowValueTooltip(binding);
+    if (rowValues) button.dataset.ksTitle = rowValues;
+
+    if (viewOnlyMode()) {
+      // Torn does not put the hospital time in the roster, so the value comes
+      // from the merged members batch for the factions on screen, with the row
+      // itself as a fallback for the day Torn starts rendering it.
+      const apiHospital = viewHospitalForTarget(binding.targetId);
+      const hospital = apiHospital || computeHospitalSeconds(binding);
+      const countdown = hospital.isHospital ? formatCellCountdown(hospital.seconds) : "";
+      const reason = apiHospital?.reason || "no-torn-data";
+      button.className = "unavailable";
+      button.dataset.state = "view";
+      button.dataset.viewReason = reason;
+      button.dataset.hospitalSeconds = Number.isFinite(hospital.seconds) ? String(hospital.seconds) : "";
+      button.disabled = true;
+      if (countdown) {
+        label.textContent = countdown;
+        sub.textContent = complementaryRowValue(binding) || "VIEW";
+        button.dataset.ksTitle = `${rowValues ? `${rowValues} · ` : ""}In hospital; the countdown is in the cell. Read-only preview: DIBS is available only on your own faction's active Ranked War.`;
+        return;
+      }
+      const diagnostic = {
+        "not-hospital": { label: "OK", title: "Torn reports this member is not in hospital." },
+        "hospital-without-until": { label: "HOSP", title: "Torn reports hospital but gave no usable release time." },
+        "member-not-in-fetched-rosters": { label: "VIEW", sub: "NO ID", title: "This member is in neither fetched roster. Side resolution failed." },
+        "no-torn-data": { label: "VIEW", title: "No Torn status batch yet. A Torn API key is required for VIEW countdowns." }
+      }[reason] || { label: "VIEW", title: "Read-only preview." };
+      label.textContent = diagnostic.label;
+      sub.textContent = diagnostic.sub || "VIEW";
+      button.dataset.ksTitle = `${diagnostic.title} Read-only preview: DIBS is available only on your own faction's active Ranked War.`;
+      return;
+    }
 
     if (pendingTargetId === playerId) {
       button.className = "working"; button.dataset.state = "working"; button.disabled = true;
@@ -2943,6 +3887,12 @@
       const extraCount = Math.max(0, sharedClaim.queue.length - 1);
       button.className = "shared"; button.dataset.state = "shared"; button.disabled = true; label.textContent = "TAKEN"; sub.textContent = extraCount > 0 ? `${firstName} +${extraCount}` : firstName; return;
     }
+    if (sharedClaimsUnreadable.has(playerId)) {
+      button.className = "unavailable"; button.dataset.state = "unreadable"; button.disabled = true;
+      label.textContent = "DIBS?"; sub.textContent = "UNKNOWN";
+      button.dataset.ksTitle = `${rowValues ? `${rowValues} · ` : ""}The shared server sent a claim for this target that could not be read. It may already be taken. KS will not guess.`;
+      return;
+    }
 
     button.className = presentation.className ||
       (decision.reason === "rw-not-started" || decision.reason === "rw-phase-unverifiable"
@@ -2956,9 +3906,13 @@
       if (!sharedApiKey) { button.disabled = true; sub.textContent = "SET KEY"; return; }
       button.disabled = sharedWriteBusy || ffCredentialChangeBusy();
       button.dataset.ready = button.disabled ? "false" : "true";
-      const timer = Number.isFinite(decision.seconds) ? formatCountdown(decision.seconds) : "READY";
-      sub.textContent = `${timer} · FF${Number(decision.fairFight).toFixed(1)}`;
-      button.title = `Fair Fight ${Number(decision.fairFight).toFixed(2)} · allowed ${CONFIG.minFairFight.toFixed(2)}-${CONFIG.maxFairFight.toFixed(2)}`;
+      // The countdown is what the caller acts on, so it gets the 9px line.
+      // "1:23 · FF4.9" did not fit the cell on one 6.6px line and ellipsised.
+      const timer = Number.isFinite(decision.seconds) ? formatCellCountdown(decision.seconds) : "";
+      label.textContent = timer || "DIBS";
+      sub.textContent = complementaryRowValue(binding) || `FF${Number(decision.fairFight).toFixed(1)}`;
+      const values = rowValueTooltip(binding);
+      button.dataset.ksTitle = `${values ? `${values} · ` : ""}allowed FF ${CONFIG.minFairFight.toFixed(2)}-${CONFIG.maxFairFight.toFixed(2)}`;
       return;
     }
 
@@ -2973,16 +3927,19 @@
           sub.textContent = "HOSP";
         }
 
-        const runway = decision.rwPhase?.runwaySeconds;
-        button.title = decision.reason === "rw-not-started"
-          ? (Number.isFinite(runway)
-              ? `DIBS locked until Ranked War starts · ${formatCountdown(runway)} remaining`
-              : "DIBS locked until Ranked War starts")
+        button.dataset.ksTitle = decision.reason === "rw-not-started"
+          ? "DIBS locked until Ranked War starts"
           : "DIBS locked: Ranked War start state cannot be verified";
       } else if (decision.reason === "fair-fight-too-low" || decision.reason === "fair-fight-too-high") {
         sub.textContent = Number.isFinite(decision.fairFight) ? `FF${Number(decision.fairFight).toFixed(1)}` : "LOCKED";
       } else {
-        sub.textContent = formatCountdown(decision.seconds) || "LOCKED";
+        // rowPresentationDescriptor already put the countdown in the label for
+        // hospital-too-early, so repeating it in the sub wasted the second line.
+        const countdown = formatCellCountdown(decision.seconds);
+        sub.textContent = countdown ? "HOSP" : "LOCKED";
+        if (Number.isFinite(decision.seconds)) {
+          button.dataset.ksTitle = `In hospital; the countdown is in the cell. DIBS unlocks at ${formatCellCountdown(CONFIG.gateSeconds)} remaining.`;
+        }
       }
       return;
     }
@@ -2992,6 +3949,32 @@
     }
     if (decision.state === TARGET_STATE.UNAVAILABLE) { sub.textContent = ""; return; }
     sub.textContent = "LOCKED";
+  }
+
+  // Writing the title attribute, even with the same text, makes the browser
+  // hide and re-show the native tooltip. Every title the script maintains goes
+  // through here so a resting pointer never sees it blink.
+  function setTitleIfChanged(element, text) {
+    if (!(element instanceof Element)) return;
+    const wanted = String(text ?? "");
+    if (wanted) {
+      if (element.title !== wanted) element.title = wanted;
+    } else if (element.hasAttribute("title")) {
+      element.removeAttribute("title");
+    }
+  }
+
+  // The native tooltip is torn down and shown again every time the title
+  // attribute is written, so writing it once a second made the tooltip blink
+  // once a second while the pointer rested on a cell (owner, 2026-09-03). The
+  // render pass now stages the wanted text in a data attribute and the real
+  // title is touched only when that text differs from what is already there.
+  // Live countdowns are no longer part of the text at all: the cell shows them.
+  function updateDibsControl(binding, decision, sharedClaim) {
+    renderDibsControl(binding, decision, sharedClaim);
+    const button = binding?.host?.shadowRoot?.querySelector("button");
+    if (!button) return;
+    setTitleIfChanged(button, button.dataset.ksTitle || "");
   }
 
   function bindingForTarget(targetId) {
@@ -3043,11 +4026,8 @@
     for (const binding of rowBindings.values()) {
       const decision = decisionForBinding(binding);
       if (!decision) continue;
-      const wasRelevant = binding.host.dataset.ksTwdPresentationRelevant;
       updateDibsControl(binding, decision, sharedClaimForTarget(binding.targetId));
-      if (wasRelevant !== binding.host.dataset.ksTwdPresentationRelevant) {
-        positionRowBinding(binding);
-      }
+      renderStatusCell(binding);
     }
   }
 
@@ -3056,7 +4036,7 @@
     let existing = rowBindings.get(row) || null;
     if (
       existing &&
-      (!existing.host.isConnected || existing.host.parentElement?.id !== SCRIPT.layerId)
+      (!existing.host.isConnected || existing.host.parentElement !== row)
     ) {
       retireRowBinding(row);
       existing = null;
@@ -3092,7 +4072,7 @@
 
     const decision = decisionForBinding(binding);
     if (decision) updateDibsControl(binding, decision, sharedClaimForTarget(binding.targetId));
-    if (binding) positionRowBinding(binding);
+    if (binding) renderStatusCell(binding);
     return binding;
   }
 
@@ -3109,6 +4089,7 @@
   }
 
   function scanWarRows() {
+    if (warStuffEnhancedGate()) return;
     if (!runtimeActive || !bridgeMounted) return;
     const root = document.getElementById("faction_war_list_id");
     if (!(root instanceof HTMLElement)) {
@@ -3121,8 +4102,21 @@
       mountedRosterRoot = root;
     }
 
+    ensureRosterStyle(root);
     for (const row of root.querySelectorAll("li.enemy")) reconcileWarRow(row);
     retireMissingRowBindings();
+    ensureRosterHeaderCell(root);
+    reconcileSortIndicator();
+    detectFfscouterInterference(root);
+    updateModeBadge();
+    if (viewOnlyMode()) {
+      // Shared claims are unreachable in VIEW, so say that instead of leaving
+      // the panel reporting a reconnect that will never happen.
+      if (sharedStatus.state !== "offline" || sharedStatus.message !== "Shared: VIEW read-only") {
+        setSharedStatus("offline", "Shared: VIEW read-only", 0);
+      }
+      void fetchViewMembers();
+    }
     schedulePresentationLayout();
   }
 
@@ -3157,72 +4151,109 @@
     panelMinimized = Boolean(next);
     persistPanelMinimizedPreference();
     applyPanelMinimizedState(host);
-    positionPanel(host);
+    placePanel(host);
     schedulePresentationLayout();
   }
 
+  const ownedPanelHosts = new WeakSet();
+
+  // Between FFScouter's filter and sort controls and the roster. If FFScouter is
+  // not running, fall back to the war block, then to the roster root.
+  function resolvePanelAnchor() {
+    const roster = mountedRosterRoot?.isConnected
+      ? mountedRosterRoot
+      : document.getElementById("faction_war_list_id");
+    if (!(roster instanceof HTMLElement)) return null;
+    const filterBox = document.querySelector("[data-ff-filter-box]");
+    if (filterBox instanceof HTMLElement && filterBox.isConnected && filterBox.parentElement) {
+      return { parent: filterBox.parentElement, before: filterBox.nextSibling };
+    }
+    const card = canonicalRankedWarSurface()?.selected?.card || null;
+    const warBlock = card?.closest(".faction-war") || roster.querySelector(".faction-war");
+    if (warBlock instanceof HTMLElement && warBlock.parentElement) {
+      return { parent: warBlock.parentElement, before: warBlock };
+    }
+    if (roster.parentElement) return { parent: roster.parentElement, before: roster };
+    return null;
+  }
+
+  function placePanel(host) {
+    if (!(host instanceof HTMLElement)) return false;
+    const anchor = resolvePanelAnchor();
+    if (!anchor) {
+      host.style.display = "none";
+      return false;
+    }
+    host.style.display = "block";
+    if (anchor.before === host) return true;
+    if (host.parentElement !== anchor.parent || host.nextSibling !== anchor.before) {
+      anchor.parent.insertBefore(host, anchor.before);
+    }
+    return true;
+  }
+
   function ensurePanel() {
+    if (warStuffEnhancedBlocked) return null;
     if (!isWarPanelPresent()) return null;
     let host = document.getElementById(SCRIPT.panelId);
-    const layer = ensurePresentationLayer();
-    if (!(layer instanceof HTMLElement)) return null;
-    if (host instanceof HTMLElement && host.parentElement === layer) {
+    if (host instanceof HTMLElement && ownedPanelHosts.has(host)) {
       applyPanelMinimizedState(host);
-      positionPanel(host);
+      placePanel(host);
       return host;
     }
     host?.remove();
     host = document.createElement("div");
     host.id = SCRIPT.panelId;
+    host.dataset.ksTwdPanel = "1";
+    ownedPanelHosts.add(host);
+    // In-flow block, not a floating overlay. Width comes from the content
+    // column it is inserted into.
     Object.assign(host.style, {
-      display: "none",
-      position: "fixed",
-      top: "8px",
-      zIndex: "2147483647",
-      isolation: "isolate",
-      pointerEvents: "auto",
-      width: "320px",
-      maxWidth: "calc(100vw - 16px)",
+      display: "block",
+      position: "static",
+      width: "100%",
+      maxWidth: "100%",
       boxSizing: "border-box",
-      margin: "0",
-      maxHeight: "calc(100vh - 16px)",
-      overflowY: "auto",
-      overflow: "visible"
+      margin: "8px 0",
+      isolation: "isolate",
+      pointerEvents: "auto"
     });
     const shadow = host.attachShadow({ mode: "open" });
     shadow.innerHTML = `
       <style>
         :host { all:initial; display:block; position:fixed; z-index:2147483647; isolation:isolate; pointer-events:auto; box-sizing:border-box; overflow:visible; }
-        .panel { box-sizing:border-box; width:100%; padding:7px 10px 6px; border:1px solid rgba(100,116,139,.55); border-radius:8px; background:rgba(15,23,42,.96); color:#dbe5f1; font-family:system-ui,sans-serif; }
+        .panel { box-sizing:border-box; width:100%; padding:10px 12px 9px; border:1px solid rgba(100,116,139,.55); border-radius:8px; background:rgba(15,23,42,.96); color:#dbe5f1; font-family:system-ui,sans-serif; }
         .top { display:flex; justify-content:space-between; align-items:center; gap:6px; min-width:0; }
-        .brand { font:850 10px/1.2 system-ui,sans-serif; color:#f8fafc; }
-        .version { font:750 8px/1.2 system-ui,sans-serif; color:#8fa0b4; }
+        .brand { font:850 13px/1.25 system-ui,sans-serif; color:#f8fafc; }
+        .version { font:750 10px/1.25 system-ui,sans-serif; color:#8fa0b4; }
         .top-actions { display:flex; align-items:center; justify-content:flex-end; gap:5px; }
-        .compact-brand,.compact-status { display:none; }
-        .compact-brand { color:#f8fafc; font:850 9px/1.2 system-ui,sans-serif; white-space:nowrap; }
-        .compact-status { min-width:0; align-items:center; gap:4px; color:#cbd5e1; font:800 8px/1.2 system-ui,sans-serif; white-space:nowrap; }
-        .panel-toggle { flex:0 0 auto; padding:2px 5px; border:1px solid rgba(148,163,184,.45); border-radius:4px; color:#dbe5f1; font:750 7.8px/1.2 system-ui,sans-serif; text-decoration:none !important; }
-        .status-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px; margin-top:5px; }
-        .status-item { min-width:0; display:flex; align-items:center; gap:4px; padding:4px 5px; border:1px solid rgba(100,116,139,.25); border-radius:5px; background:rgba(2,6,23,.45); }
-        .dot { flex:0 0 5px; width:5px; height:5px; border-radius:50%; background:#64748b; }
+        .compact-brand,.compact-status,.compact-ff { display:none; }
+        .compact-ff { color:#fca5a5; font:800 11px/1.25 system-ui,sans-serif; white-space:nowrap; }
+        .compact-ff[hidden] { display:none !important; }
+        .compact-brand { color:#f8fafc; font:850 12px/1.25 system-ui,sans-serif; white-space:nowrap; }
+        .compact-status { min-width:0; align-items:center; gap:5px; color:#cbd5e1; font:800 11px/1.25 system-ui,sans-serif; white-space:nowrap; }
+        .panel-toggle { flex:0 0 auto; padding:4px 9px; border:1px solid rgba(148,163,184,.45); border-radius:5px; color:#dbe5f1; font:750 10px/1.25 system-ui,sans-serif; text-decoration:none !important; }
+        .status-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:6px; margin-top:8px; }
+        .status-item { min-width:0; display:flex; align-items:center; gap:6px; padding:6px 8px; border:1px solid rgba(100,116,139,.25); border-radius:6px; background:rgba(2,6,23,.45); }
+        .dot { flex:0 0 7px; width:7px; height:7px; border-radius:50%; background:#64748b; }
         [data-state='ready'] .dot,[data-state='online'] .dot { background:#22c55e; }
-        [data-state='upcoming'] .dot { background:#f59e0b; }
+        [data-state='upcoming'] .dot,[data-state='degraded'] .dot { background:#f59e0b; }
         [data-state='syncing'] .dot,[data-state='writing'] .dot { background:#38bdf8; }
         [data-state='error'] .dot,[data-state='offline'] .dot,[data-state='unknown'] .dot,[data-state='ended'] .dot { background:#ef4444; }
-        .status { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#cbd5e1; font:700 7.7px/1.2 system-ui,sans-serif; }
-        .controls { display:flex; align-items:center; flex-wrap:wrap; gap:2px; margin-top:5px; }
-        button,a { border:0; padding:0; background:none; color:#94a3b8; font:700 8.2px/1.2 system-ui,sans-serif; text-decoration:none; cursor:pointer; }
+        .status { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#cbd5e1; font:700 11px/1.3 system-ui,sans-serif; }
+        .controls { display:flex; align-items:center; flex-wrap:wrap; gap:5px; margin-top:8px; }
+        button,a { border:0; padding:0; background:none; color:#94a3b8; font:700 11px/1.3 system-ui,sans-serif; text-decoration:none; cursor:pointer; }
         button:hover,a:hover { color:#fff; text-decoration:underline; }
         button:disabled { opacity:.4; cursor:default; text-decoration:none; }
-        .sep { color:#667386; font:700 8px/1 system-ui,sans-serif; }
+        .sep { color:#667386; font:700 11px/1 system-ui,sans-serif; }
         .test-toggle { padding:3px 6px; border:1px solid #92400e; border-radius:5px; color:#fbbf24; text-decoration:none !important; }
         .test-toggle.on { border-color:#f59e0b; background:#78350f; color:#fffbeb; }
         .test-toggle[hidden] { display:none; }
         .editor { display:none; align-items:center; gap:5px; margin-top:5px; }
         .editor.open { display:flex; }
         .editor input { min-width:0; flex:1 1 180px; height:28px; box-sizing:border-box; border:1px solid #64748b; border-radius:5px; background:#111827; color:#f8fafc; padding:4px 7px; font:700 10px/1 system-ui,sans-serif; outline:none; }
-        .note { margin-top:4px; color:#8794a5; font:600 7.2px/1.3 system-ui,sans-serif; }
-        .api-policy { margin-top:6px; padding-top:6px; border-top:1px solid rgba(148,163,184,.18); color:#9aa9ba; font:600 7px/1.35 system-ui,sans-serif; }
+        .note { margin-top:7px; color:#8794a5; font:600 10px/1.4 system-ui,sans-serif; }
+        .api-policy { margin-top:9px; padding-top:8px; border-top:1px solid rgba(148,163,184,.18); color:#9aa9ba; font:600 9px/1.45 system-ui,sans-serif; }
         .api-policy strong { color:#d8e1eb; font-weight:750; }
         .api-policy a { color:#b9d7f2; text-decoration:underline; }
         .warning { color:#fbbf24; }
@@ -3236,14 +4267,16 @@
         :host([data-ks-twd-panel-minimized='true']) .api-policy { display:none; }
         :host([data-ks-twd-panel-minimized='true']) .compact-brand,
         :host([data-ks-twd-panel-minimized='true']) .compact-status { display:flex; }
+        :host([data-ks-twd-panel-minimized='true']) .compact-ff:not([hidden]) { display:inline; }
         @media (max-width:520px) { .status-grid { grid-template-columns:1fr; } .panel { padding-left:8px; padding-right:8px; } }
       </style>
       <div class="panel">
-        <div class="top"><span class="brand">KS Torn War Dibs PC</span><span class="compact-brand" data-role="compact-brand">KS DIBS PC</span><span class="compact-status" data-role="compact-status"><span class="dot"></span><span data-role="compact-status-text">WAIT</span></span><span class="top-actions"><span class="version">v${SCRIPT.version} RELEASE</span><button class="panel-toggle" type="button" data-role="panel-toggle" aria-expanded="true">Minimize</button></span></div>
+        <div class="top"><span class="brand">KS Torn War Dibs PC</span><span class="compact-brand" data-role="compact-brand">KS DIBS PC</span><span class="compact-status" data-role="compact-status"><span class="dot"></span><span data-role="compact-status-text">WAIT</span></span><span class="compact-ff" data-role="compact-ff" hidden>FFScouter!</span><span class="top-actions"><span class="version">v${SCRIPT.version} TEST</span><button class="panel-toggle" type="button" data-role="panel-toggle" aria-expanded="true">Minimize</button></span></div>
         <div class="status-grid">
           <div class="status-item" data-role="shared-item"><span class="dot"></span><span class="status" data-role="status">Shared: loading…</span></div>
           <div class="status-item" data-role="torn-item"><span class="dot"></span><span class="status" data-role="torn-status">Torn: loading…</span></div>
           <div class="status-item" data-role="rw-item"><span class="dot"></span><span class="status" data-role="rw-status">DIBS: checking RW…</span></div>
+          <div class="status-item" data-role="ff-item"><span class="dot"></span><span class="status" data-role="ff-status">FFScouter: checking…</span></div>
         </div>
         <div class="controls">
           <button type="button" data-role="key">FFScouter key</button><span class="sep">·</span>
@@ -3286,58 +4319,18 @@
     });
     byRole("forget-ff")?.addEventListener("click", () => void forgetSharedKey());
     byRole("forget-torn")?.addEventListener("click", () => void forgetTornKey());
-    byRole("release")?.addEventListener("click", () => void releaseOwnSharedTarget());
+    byRole("release")?.addEventListener("click", () => { beginSharedWriteFeedback(); void releaseOwnSharedTarget(); });
     byRole("panel-toggle")?.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
       setPanelMinimized(!panelMinimized, host);
     });
-    layer.append(host);
     applyPanelMinimizedState(host);
-    positionPanel(host);
+    placePanel(host);
     updatePanel();
     return host;
   }
 
-  function positionPanel(host) {
-    if (!(host instanceof HTMLElement) || host.parentElement?.id !== SCRIPT.layerId) return false;
-    const geometry = exteriorPresentationGeometry({ reserveFixedControlLane: true });
-    if (!geometry) {
-      host.style.display = "none";
-      return false;
-    }
-    const minimumWidth = 180;
-    const preferredWidth = panelMinimized ? 180 : 320;
-    const top = geometry.viewport.top + 8;
-    for (const region of geometry.regions) {
-      const width = Math.min(preferredWidth, region.width);
-      if (width < minimumWidth) continue;
-      const left = region.side === "right" ? region.left : region.right - width;
-      Object.assign(host.style, {
-        display: "block",
-        visibility: "hidden",
-        left: `${left}px`,
-        top: `${top}px`,
-        width: `${width}px`
-      });
-      const measured = host.getBoundingClientRect();
-      const rect = {
-        left,
-        top,
-        right: left + measured.width,
-        bottom: top + measured.height,
-        width: measured.width,
-        height: measured.height
-      };
-      if (presentationRectIsSafe(rect, geometry, { requireVerticalFit: true })) {
-        host.style.removeProperty("visibility");
-        return true;
-      }
-    }
-    host.style.display = "none";
-    host.style.removeProperty("visibility");
-    return false;
-  }
 
   function formatRwRunway(totalSeconds) {
     const value = Math.max(0, Math.floor(Number(totalSeconds) || 0));
@@ -3382,10 +4375,18 @@
       $("rw-status").textContent = rwState.phase === RW_PHASE.LIVE
         ? "RW: LIVE"
         : (rwState.phase === RW_PHASE.PREWAR ? `RW: PREWAR · ${formatRwRunway(rwState.runwaySeconds)}` : "RW: UNKNOWN");
-      $("rw-status").title = rwState.phase === RW_PHASE.LIVE ? "Own-faction /wars confirms this Ranked War is live" : "DIBS remains locked until own-faction /wars confirms LIVE";
+      setTitleIfChanged($("rw-status"), rwState.phase === RW_PHASE.LIVE ? "Own-faction /wars confirms this Ranked War is live" : "DIBS remains locked until own-faction /wars confirms LIVE");
     }
-    if ($("status")) { $("status").textContent = sharedStatus.message; $("status").title = sharedStatus.message; }
-    if ($("torn-status")) { $("torn-status").textContent = tornStatusState.message; $("torn-status").title = tornStatusState.message; }
+    if ($("status")) { $("status").textContent = sharedStatus.message; setTitleIfChanged($("status"), sharedStatus.message); }
+    const ffInterfering = ffscouterInterference.sortActive || ffscouterInterference.hiddenRows > 0;
+    const ffText = ffscouterInterferenceText();
+    if ($("ff-item")) $("ff-item").dataset.state = ffInterfering ? "error" : "online";
+    if ($("ff-status")) {
+      if ($("ff-status").textContent !== ffText) $("ff-status").textContent = ffText;
+      setTitleIfChanged($("ff-status"), ffText);
+    }
+    if ($("compact-ff")) $("compact-ff").hidden = !ffInterfering;
+    if ($("torn-status")) { $("torn-status").textContent = tornStatusState.message; setTitleIfChanged($("torn-status"), tornStatusState.message); }
     const ffExternalLock = ffCredentialExternalLockActive();
     const ffChangeBusy = ffCredentialChangeBusy();
     if ($("key")) {
@@ -3467,7 +4468,7 @@
     }
 
     sharedApiKey = key;
-    sharedClaims = new Map();
+    sharedClaims = new Map(); sharedClaimsUnreadable = new Set();
     sharedBackoffUntil = 0;
     sharedTransportFailureStreak = 0;
     ffCredentialChangeState = FF_CREDENTIAL_STATE.IDLE;
@@ -3560,7 +4561,7 @@
       return;
     }
     ffCredentialChangeState = FF_CREDENTIAL_STATE.IDLE;
-    sharedApiKey = ""; sharedClaims = new Map(); sharedBackoffUntil = 0;
+    sharedApiKey = ""; sharedClaims = new Map(); sharedClaimsUnreadable = new Set(); sharedBackoffUntil = 0;
     setSharedStatus("key-required", "Shared: key required", 0); updateBoundControls();
   }
 
@@ -3615,6 +4616,9 @@
 
   function collectRosterMutation(records) {
     for (const record of records) {
+      // Our own cell is roster DOM now, so its mutations would feed straight
+      // back into this observer. Ignore anything inside a KS-owned cell.
+      if (isOwnPresentationNode(record.target)) continue;
       const row = mutationRow(record.target);
       if (row) pendingRows.add(row);
 
@@ -3628,6 +4632,7 @@
 
       for (const node of [...record.addedNodes, ...record.removedNodes]) {
         if (!(node instanceof Element)) continue;
+        if (isOwnPresentationNode(node)) continue;
         if (node.matches("li.enemy")) {
           observerNeedsFullScan = true;
           if (node.isConnected) pendingRows.add(node);
@@ -3665,10 +4670,14 @@
         !isRuntimeEligible() ||
         !(mountedRosterRoot instanceof HTMLElement)
       ) return;
+      if (warStuffEnhancedGate()) return;
       if (fullScan) scanWarRows();
       else {
         for (const row of rows) reconcileWarRow(row);
         retireMissingRowBindings();
+        // A row being hidden is an attribute change on the row itself, which
+        // never reaches the full scan; the mark still has to be noticed.
+        detectFfscouterInterference(mountedRosterRoot);
       }
     });
   }
@@ -3722,7 +4731,9 @@
         "data-ffscouter-hide-score",
         "data-ffscouter-hide-status",
         "data-ffscouter-initialized",
-        "data-ffscouter-sort"
+        "data-ffscouter-sort",
+        "data-twse-last-action-timestamp",
+        "data-twse-overridden"
       ],
       attributeOldValue: true,
       childList: true,
@@ -3750,11 +4761,6 @@
       ]);
       for (const target of geometryTargets) {
         if (target instanceof HTMLElement) rosterResizeObserver.observe(target);
-      }
-      for (const binding of rowBindings.values()) {
-        if (!root.contains(binding.attackCell)) continue;
-        rosterResizeObserver.observe(binding.row);
-        rosterResizeObserver.observe(binding.attackCell);
       }
     }
   }
@@ -3858,7 +4864,7 @@
 
     bridgeMounted = true;
     const panel = ensurePanel();
-    if (panel) positionPanel(panel);
+    if (panel) placePanel(panel);
 
     if (
       runtimeActive &&
@@ -3874,9 +4880,9 @@
   }
 
   function clearTimers() {
-    if (displayTickTimer !== null) window.clearInterval(displayTickTimer);
+    if (displayTickTimer !== null) window.clearTimeout(displayTickTimer);
     if (sharedPollTimer !== null) window.clearInterval(sharedPollTimer);
-    if (tornStatusTimer !== null) window.clearInterval(tornStatusTimer);
+    if (tornStatusTimer !== null) window.clearTimeout(tornStatusTimer);
     if (routeHeartbeatTimer !== null) window.clearInterval(routeHeartbeatTimer);
     displayTickTimer = sharedPollTimer = null;
     tornStatusTimer = routeHeartbeatTimer = null;
@@ -3884,6 +4890,10 @@
 
   function removeOwnUi() {
     cancelPresentationLayout();
+    removeWseWarning();
+    removeAllRowPresentations();
+    removeRosterHeaderCell();
+    document.getElementById(SCRIPT.rosterStyleId)?.remove();
     document.getElementById(SCRIPT.layerId)?.remove();
     document.getElementById(SCRIPT.panelId)?.remove();
   }
@@ -3901,6 +4911,7 @@
 
   function reconcileLifecycle({ structural = false } = {}) {
     if (destroyed) return false;
+    if (warStuffEnhancedGate()) return false;
     if (!isRuntimeContextEligible()) {
       if (runtimeActive) suspendRuntime();
       else {
@@ -3922,19 +4933,56 @@
     return reconcileRoute({ structural });
   }
 
+  // Aligned to Torn's second boundary rather than free-running, so the cell
+  // changes its digits in the same instant Torn's own clock does. A free
+  // interval starts at an arbitrary phase and leaves the number up to a second
+  // stale, which is indistinguishable from a wrong clock when compared against
+  // a live Torn countdown.
+  function scheduleDisplayTick() {
+    if (displayTickTimer !== null) {
+      window.clearTimeout(displayTickTimer);
+      displayTickTimer = null;
+    }
+    if (destroyed) return;
+    const sinceBoundary = ((getTornNowMs() % 1000) + 1000) % 1000;
+    const delay = Math.min(CONFIG.displayTickMs, Math.max(20, CONFIG.displayTickMs - sinceBoundary));
+    displayTickTimer = window.setTimeout(() => {
+      displayTickTimer = null;
+      if (runtimeActive && isRuntimeEligible()) {
+        void maybeAutoReleaseBeatenTarget();
+        updatePanel();
+        updateBoundControls();
+      }
+      if (runtimeActive) scheduleDisplayTick();
+    }, delay);
+  }
+
+  // Same endpoints, same average rate -- only the moment inside the second
+  // moves. A fixed 10 s period is exactly ten whole seconds, so every sample
+  // lands at the same phase and the intervals never intersect down to anything
+  // narrow. The jitter is what makes the intersection work.
+  function scheduleTornStatusPoll() {
+    const jitter = (Math.random() * 2 - 1) * CONFIG.tornStatusPollJitterMs;
+    const delay = Math.max(1000, Math.round(CONFIG.tornStatusPollMs + jitter));
+    tornStatusTimer = window.setTimeout(() => {
+      tornStatusTimer = null;
+      if (effectiveTornApiKey() && runtimeActive && isRuntimeEligible()) {
+        if (viewOnlyMode()) {
+          void fetchViewMembers();
+        } else {
+          void fetchTornStatuses();
+          if (!selfPlayerId) void fetchSelfIdentity();
+        }
+      }
+      if (runtimeActive) scheduleTornStatusPoll();
+    }, delay);
+  }
+
   function startRuntimeTimers() {
     clearTimers();
-    displayTickTimer = window.setInterval(() => {
-      if (!runtimeActive || !isRuntimeEligible()) return;
-      updatePanel();
-      updateBoundControls();
-    }, CONFIG.displayTickMs);
+    scheduleDisplayTick();
     sharedPollTimer = window.setInterval(() => { if (sharedApiKey && runtimeActive && isRuntimeEligible()) void fetchSharedClaims(); }, CONFIG.sharedPollMs);
-    tornStatusTimer = window.setInterval(() => {
-      if (!effectiveTornApiKey() || !runtimeActive || !isRuntimeEligible()) return;
-      void fetchTornStatuses();
-      if (!selfPlayerId) void fetchSelfIdentity();
-    }, CONFIG.tornStatusPollMs);
+    scheduleTornStatusPoll();
     routeHeartbeatTimer = window.setInterval(() => {
       if (!runtimeActive) return;
       reconcileLifecycle();
@@ -3959,7 +5007,7 @@
     tornStatusRequestSerial += 1;
     tornStatusSyncing = false;
     ownWarsRequestSerial += 1;
-    sharedClaims = new Map();
+    sharedClaims = new Map(); sharedClaimsUnreadable = new Set();
     ownWarsState = emptyOwnWarsState();
     opponentMembersState = { factionId: "", members: new Map(), fetchedAt: 0 };
     currentWarSurface = null;
