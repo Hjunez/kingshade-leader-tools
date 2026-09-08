@@ -173,10 +173,12 @@
     transition: transform .14s ease;
   }
 
+  /* The tag sits on its own line, right-aligned, rather than floating over the corner.
+     Absolute positioning took it out of the flow, so a long card name ran underneath it —
+     "Armory & Loaner Audit" and "War Participation History" were both unreadable. Keeping it
+     in the flow costs one line of height and cannot collide, whatever the tag text says. */
   .tag {
-    position: absolute;
-    top: 16px;
-    right: 16px;
+    align-self: flex-end;
     font-family: var(--mono);
     font-size: 10px;
     font-weight: 500;
