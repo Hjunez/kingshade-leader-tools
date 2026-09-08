@@ -217,7 +217,7 @@
         path: '/faction/members?striptags=true&limit=1', need: 'faction → members' },
       { id: 'rankedwars', label: 'Ranked war history',
         used: 'Payout Ledger — Find wars',
-        path: '/faction/rankedwars?limit=1', need: 'faction → rankedwars' },
+        path: '/faction/rankedwars?limit=20&sort=DESC', need: 'faction → rankedwars' },
       { id: 'rankedwarreport', label: 'Ranked war report',
         used: 'Payout Ledger — Load hits',
         path: null, need: 'faction → rankedwarreport' },
@@ -395,9 +395,12 @@
 
         var path = check.path;
         if (check.id === 'rankedwarreport') {
-          if (warId === null) {
+          // Not "=== null": an id that came back undefined would slip through a strict test and
+          // build /faction/undefined/rankedwarreport, which Torn answers with a misleading error 6.
+          if (!warId) {
             var skipped = row(check, 'skip', null,
-              'Needs a past war to test against, and the war history call above did not return one.');
+              'Needs a finished war to test against. The war history call above returned none that ' +
+              'had ended — an ongoing war has no report, so there is nothing to test here.');
             el.checks.replaceChild(skipped, placeholder);
             results.push({ id: check.id, state: 'skip', code: null });
             continue;
@@ -416,8 +419,20 @@
           } else {
             state = 'ok';
             if (check.id === 'rankedwars') {
+              // Only a war that has ended has a report. Testing the newest war outright picks up an
+              // ongoing or scheduled one, and Torn then answers error 6 — which reads as a broken
+              // endpoint when nothing is broken. Take the newest war that actually has a winner.
               var wars = out.payload && out.payload.rankedwars;
-              if (Array.isArray(wars) && wars.length > 0) warId = wars[0].id;
+              if (Array.isArray(wars)) {
+                for (var w = 0; w < wars.length; w += 1) {
+                  var candidate = wars[w];
+                  if (!candidate) continue;
+                  if (candidate.id === null || candidate.id === undefined) continue;
+                  if (candidate.winner === null || candidate.winner === undefined) continue;
+                  warId = candidate.id;
+                  break;
+                }
+              }
             }
           }
         } catch (networkFailure) {
