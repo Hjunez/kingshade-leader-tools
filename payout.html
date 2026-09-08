@@ -598,10 +598,10 @@
         }
         el.warSelect.textContent = '';
         wars.forEach(function (war, index) {
-          var us = (war.factions || []).filter(function (f) { return f.id === FACTION_ID; })[0];
-          var them = (war.factions || []).filter(function (f) { return f.id !== FACTION_ID; })[0];
+          var us = (war.factions || []).filter(function (f) { return Number(f.id) === FACTION_ID; })[0];
+          var them = (war.factions || []).filter(function (f) { return Number(f.id) !== FACTION_ID; })[0];
           var outcome = war.winner === null || war.winner === undefined ? 'ongoing'
-            : war.winner === FACTION_ID ? 'won' : 'lost';
+            : Number(war.winner) === FACTION_ID ? 'won' : 'lost';
           var option = document.createElement('option');
           option.value = String(index);
           option.textContent = dateText(war.start) + ' — vs ' + ((them && them.name) || 'unknown') +
@@ -628,8 +628,15 @@
         var payload = await tornGet('/faction/' + war.id + '/rankedwarreport');
         var report = payload.rankedwarreport;
         var sides = (report && report.factions) || [];
-        var ours = sides.filter(function (f) { return f.id === FACTION_ID; })[0] || sides[0];
-        if (!ours || !Array.isArray(ours.members)) {
+        // Our own side only. Never fall back to the other side: that would pay our members
+        // the opponent's hit counts without saying so.
+        var ours = sides.filter(function (f) { return Number(f.id) === FACTION_ID; })[0];
+        if (!ours) {
+          show(el.errorBox, 'This war report does not contain faction ' + FACTION_ID +
+            '. Nothing was loaded — pick another war.');
+          return;
+        }
+        if (!Array.isArray(ours.members)) {
           show(el.errorBox, 'The report came back without a member list.');
           return;
         }

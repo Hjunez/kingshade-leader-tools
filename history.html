@@ -465,18 +465,18 @@
 
         for (var i = 0; i < list.length; i += 1) {
           var war = list[i];
-          var them = (war.factions || []).filter(function (f) { return f.id !== FACTION_ID; })[0];
+          var them = (war.factions || []).filter(function (f) { return Number(f.id) !== FACTION_ID; })[0];
           var reportPayload = await tornGet('/faction/' + war.id + '/rankedwarreport');
           var report = reportPayload.rankedwarreport;
           var sides = (report && report.factions) || [];
-          var ours = sides.filter(function (f) { return f.id === FACTION_ID; })[0];
+          var ours = sides.filter(function (f) { return Number(f.id) === FACTION_ID; })[0];
           if (!ours || !Array.isArray(ours.members)) continue;
 
           wars.push({
             id: war.id,
             opponent: (them && them.name) || 'unknown',
             start: war.start,
-            won: report.winner === FACTION_ID
+            won: Number(report.winner) === FACTION_ID
           });
 
           ours.members.forEach(function (m) {
