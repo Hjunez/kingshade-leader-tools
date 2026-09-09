@@ -233,9 +233,9 @@
           <dd>faction → <strong>crimes</strong> and faction → <strong>members</strong>, plus faction
             API access on your position.</dd>
           <dt>CPR</dt>
-          <dd>The pass rate Torn reports for that seat. On a filled seat it is the member's rate. On
-            an <strong>empty</strong> seat it is <em>your own</em> rate for that role — so an empty
-            seat tells you whether you should take it.</dd>
+          <dd>The pass rate Torn reports for the member sitting in the seat. An <strong>empty</strong>
+            seat shows no CPR at all: Torn's faction API carries no figure for a seat nobody holds,
+            and your own chance for that role is only visible on Torn's own crimes page.</dd>
           <dt>The minimum CPR line</dt>
           <dd>Your faction's own admission rule: <strong>level 1 needs 50%</strong>,
             <strong>level 2 needs 60%</strong>, <strong>levels 3 and 4 need 65%</strong>. Anything
@@ -424,19 +424,20 @@
           box.className += ' open';
           gaps.push({
             crime: crime.name, difficulty: crime.difficulty,
-            position: role.textContent, cpr: cpr
+            position: role.textContent, cpr: null
           });
         }
         box.appendChild(who);
 
         var meta = document.createElement('div');
         meta.className = 'meta';
-        if (cpr !== null) {
-          // On an empty seat Torn returns the requesting player's own rate, not a
-          // candidate's. Label it so nobody reads it as the seat's number.
-          var seated = !!(slot.user && slot.user.id);
-          meta.appendChild(pill(seated ? cpr + '% CPR' : 'your CPR ' + cpr + '%',
-            below ? 'warn' : 'good'));
+        // checkpoint_pass_rate belongs to the member sitting in the seat. On an empty
+        // seat Torn sends 0, which says nothing about anyone — measured 2026-09-09
+        // against Torn's own OC page, which showed 32-38 for the same roles. Show
+        // nothing rather than a number that reads like an answer.
+        var seated = !!(slot.user && slot.user.id);
+        if (seated && cpr !== null) {
+          meta.appendChild(pill(cpr + '% CPR', below ? 'warn' : 'good'));
         }
         var item = slot.item_requirement;
         if (item) {
@@ -562,9 +563,7 @@
       var lines = ['OC SEATS OPEN — PoIitically Incorrect', ''];
       gaps.forEach(function (g) {
         lines.push(g.crime + ' (level ' + g.difficulty + ', needs ' + floorFor(g.difficulty) +
-          '%) — ' + g.position +
-          (g.cpr === null ? '' : ' — your CPR ' + g.cpr + '%' +
-            (g.cpr < floorFor(g.difficulty) ? ' — under the line' : '')));
+          '%) — ' + g.position);
       });
       lines.push('');
       lines.push(gaps.length + ' seats waiting.');
