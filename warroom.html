@@ -180,6 +180,28 @@
 
   .empty { padding: 30px 18px; text-align: center; color: var(--faint); }
 
+  /* Simulation. The page's own warning colour, not the error colour - a test
+     run is not a fault. It cannot be dismissed: the one thing that must never
+     happen is someone forgetting which war they are writing to. */
+  .simbanner {
+    background: var(--warn-soft); color: var(--warn);
+    border: 1px solid var(--warn); border-radius: 4px;
+    padding: 13px 16px; display: flex; flex-direction: column; gap: 6px;
+  }
+  .simbanner .title {
+    font-family: var(--display); font-weight: 700; font-size: 15px;
+    letter-spacing: .1em; text-transform: uppercase;
+  }
+  .simbanner p { margin: 0; font-size: 14px; max-width: 78ch; }
+  .simbanner code { font-family: var(--mono); font-size: 13px; }
+
+  .simreset {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    padding: 11px 18px; border-bottom: 1px solid var(--line);
+    background: var(--warn-soft); color: var(--warn); font-size: 13px;
+  }
+  .simreset .tid { color: var(--warn); }
+
   .stale {
     display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
     padding: 11px 18px; border-bottom: 1px solid var(--line);
@@ -215,6 +237,17 @@
 <body>
 
 <div class="wrap">
+  <div class="simbanner" id="simBanner" hidden>
+    <span class="title">Simulation</span>
+    <p>Claims go to a test war, not the real one. Nothing here affects war
+      <span id="simRealWar">&mdash;</span> or anything the faction sees. Every call goes to
+      <code id="simWireWar">&mdash;</code>, a board of its own.</p>
+    <p><strong>Take as other</strong> claims a target as Torn <code id="simOtherId">&mdash;</code>,
+      a made-up test member that cannot be anybody real. That is how the refusal is tried out:
+      take a target as the other, then take it yourself.</p>
+    <p>Leave the address without <code>?sim=1</code> to be back on the real board.</p>
+  </div>
+
   <nav class="backbar"><a href="./">&larr; All tools</a></nav>
 
   <header class="masthead">
@@ -320,6 +353,11 @@
       <h2>Targets</h2>
       <p class="hint" id="targetHint"></p>
     </div>
+    <div class="simreset" id="simResetBar" hidden>
+      <button type="button" class="btn danger small" id="simResetBtn">Reset test war</button>
+      <span class="tid" id="simResetNote">Empties the test war's board so the whole run can be
+        started over. The real war is not touched.</span>
+    </div>
     <div class="stale" id="staleBar" hidden></div>
     <div id="targetHost"></div>
   </section>
@@ -366,6 +404,27 @@
   var KEY_STORE = 'ks-leader-board-key';
   var PASS_STORE = 'ks-war-room-pass';
 
+  // ------------------------------------------------------------- simulation
+  //
+  // Turned on by ?sim=1 in the address and by nothing else. It is deliberately
+  // not remembered anywhere: no storage key, no cookie, no toggle. A reload
+  // without the parameter is the ordinary page again, and a member handed the
+  // plain link can never land in here by accident.
+  //
+  // What it changes is one thing only - which war ID leaves the page. Every
+  // call goes to sim-<the real war's ID>, a Durable Object of its own that the
+  // faction never reads. The real ID is replaced at the wire, not merely
+  // avoided somewhere higher up; see wireWarId below.
+  var SIM = (function () {
+    try { return new URLSearchParams(location.search).get('sim') === '1'; }
+    catch (e) { return false; }
+  })();
+  var SIM_PREFIX = 'sim-';
+  // Twelve digits. The server takes Torn IDs of up to twelve, and no real Torn
+  // account is anywhere near this number, so this can never collide with a
+  // member. It is written in the banner so it is not a riddle.
+  var SIM_OTHER_ID = '999000111222';
+
   var CLAIM_POLL_MS = 5000;    // the claim board changes every few seconds during a war
   var ROSTER_POLL_MS = 30000;  // hospital and jail timers do not need more than this
   var WAR_POLL_MS = 120000;    // which war is running changes twice a week, not twice a minute
@@ -376,6 +435,7 @@
    'passAsk','passSaid','warPass','passSave','passHave','passChange','passForget',
    'warPanel','warWho','warMeta','warScore',
    'targetPanel','targetHint','staleBar','targetHost',
+   'simBanner','simRealWar','simWireWar','simOtherId','simResetBar','simResetBtn','simResetNote',
    'advServer','advWar','advMe','advClaims','advRoster','advError','advRaw','wipeBtn','wipeNote']
     .forEach(function (id) { el[id] = document.getElementById(id); });
 
@@ -595,7 +655,31 @@
 
     function password() { return read(PASS_STORE); }
 
+    // ---------------------------------------------------------------- the wall
+    //
+    // Every request this page makes goes out through call(), and call() gets
+    // its war ID from here. Callers hand in the real war's ID and never a
+    // finished one, so there is no flag further up that a later change can
+    // forget to read: to write to the real war in simulation, this function
+    // would have to be edited.
+    //
+    // Two refusals, both checked on the value that is about to go into the
+    // address, and both throwing rather than sending anything:
+    //   - in simulation the ID must have been replaced, and must carry sim-
+    //   - a wipe in simulation may only ever go to a sim- ID
+    function wireWarId(realWarId, op) {
+      var wire = (SIM && typeof realWarId === 'string') ? SIM_PREFIX + realWarId : realWarId;
+      if (SIM && (wire === realWarId || String(wire).lastIndexOf(SIM_PREFIX, 0) !== 0)) {
+        throw new Error('Refused: simulation would have written to the real war. Nothing was sent.');
+      }
+      if (SIM && op === 'wipe' && String(wire).lastIndexOf(SIM_PREFIX, 0) !== 0) {
+        throw new Error('Refused: a wipe may only ever reach a test war. Nothing was sent.');
+      }
+      return wire;
+    }
+
     async function call(method, warId, op, body) {
+      var wire = wireWarId(warId, op);
       var pass = password();
       if (!pass) {
         board = null; status = 'idle';
@@ -608,7 +692,7 @@
       }
       var response;
       try {
-        response = await fetch(CLAIM_SERVER + '/war/' + encodeURIComponent(warId) + '/' + op, init);
+        response = await fetch(CLAIM_SERVER + '/war/' + encodeURIComponent(wire) + '/' + op, init);
       } catch (networkFailure) {
         board = null; status = 'offline';
         lastError = 'The claim server could not be reached.';
@@ -676,6 +760,7 @@
     return {
       board: function () { return board; },
       status: function () { return status; },
+      wireWarId: wireWarId,
       lastError: function () { return lastError; },
       lastRaw: function () { return lastRaw; },
       hasPassword: function () { return password() !== ''; },
@@ -752,11 +837,17 @@
     if (!targets) return;
 
     var boardUsable = claimStatus === 'ok' && !!board;
-    var canClaim = !!(war && war.state === 'live' && me && boardUsable);
+    // In simulation the war's own state is not a gate: the whole point is to
+    // work the buttons before a war has started. Nothing else is relaxed - a
+    // board the server has not just confirmed still closes them.
+    var canClaim = !!(war && me && boardUsable && (SIM || war.state === 'live'));
+
+    el.simResetBar.hidden = !(SIM && war && me);
 
     var hint = [targets.length + ' on their roster'];
+    if (SIM) hint.push('simulation · claims go to ' + Claims.wireWarId(war ? war.warId : '', 'claims'));
     if (!me) hint.push('your own Torn ID could not be read, so DIBS is off');
-    else if (!war || war.state !== 'live') hint.push('no live war, so DIBS is off');
+    else if (!SIM && (!war || war.state !== 'live')) hint.push('no live war, so DIBS is off');
     else if (claimStatus === 'unauthorized') hint.push('the password was not accepted, so DIBS is off');
     else if (claimStatus === 'idle') hint.push('no War Room password yet, so DIBS is locked');
     else if (claimStatus !== 'ok') hint.push('the claim board is not answering');
@@ -857,7 +948,29 @@
       }
 
       if (pendingTarget === target.id) { button.disabled = true; button.textContent = '…'; }
-      tdAct.appendChild(button);
+
+      // Simulation only, and only on a target nobody holds: claiming one that
+      // is already held would be asking the server something it has answered.
+      // This is how the refusal is tried - take as the other, then take it
+      // yourself and watch your own button go dead.
+      if (SIM) {
+        var other = document.createElement('button');
+        other.type = 'button';
+        other.className = 'btn small';
+        other.textContent = 'Take as other';
+        var free = boardUsable && !board.unreadable[target.id] && !board.claims[target.id];
+        other.disabled = !(canClaim && free) || pendingTarget === target.id;
+        if (!other.disabled) {
+          other.onclick = function () { act('claim', target.id, SIM_OTHER_ID); };
+        }
+        var pair = document.createElement('div');
+        pair.className = 'toolbar';
+        pair.appendChild(button);
+        pair.appendChild(other);
+        tdAct.appendChild(pair);
+      } else {
+        tdAct.appendChild(button);
+      }
 
       tr.appendChild(tdName);
       tr.appendChild(tdLevel);
@@ -885,6 +998,12 @@
   function renderWar() {
     var identity = Roster.identity();
     var war = Roster.war();
+    if (SIM) {
+      // The banner names both boards by their real names as soon as the war is
+      // known, so nobody has to take on trust which one is being written to.
+      el.simRealWar.textContent = war ? war.warId : 'the running war';
+      el.simWireWar.textContent = war ? Claims.wireWarId(war.warId, 'claims') : 'sim-<war>';
+    }
     el.warPanel.hidden = !identity;
     if (!identity) return;
     if (!war) {
@@ -896,8 +1015,10 @@
     }
     el.warWho.textContent = 'vs ' + war.opponentName;
     el.warMeta.textContent = (war.state === 'live' ? 'War is live'
-      : war.state === 'prewar' ? 'War has not started yet — DIBS stays off until it does'
-      : 'War is over — DIBS stays off') + ' · war ' + war.warId;
+      : war.state === 'prewar' ? (SIM ? 'War has not started yet — this page is simulating instead'
+                                      : 'War has not started yet — DIBS stays off until it does')
+      : (SIM ? 'War is over — this page is simulating instead' : 'War is over — DIBS stays off'))
+      + ' · war ' + war.warId;
     el.warScore.textContent = war.ourScore + ' – ' + war.theirScore;
   }
 
@@ -906,7 +1027,11 @@
     var identity = Roster.identity();
     var board = Claims.board();
     el.advServer.textContent = CLAIM_SERVER;
-    el.advWar.textContent = war ? war.warId : 'none';
+    el.advWar.textContent = war
+      ? (SIM
+          ? Claims.wireWarId(war.warId, 'claims') + ' · simulating, real war ' + war.warId + ' untouched'
+          : war.warId)
+      : 'none';
     el.advMe.textContent = identity ? identity.playerId : 'not established';
     el.advClaims.textContent = Claims.status() + (board
       ? ' · ' + Object.keys(board.claims).length + ' held · degraded=' + board.degraded +
@@ -919,6 +1044,11 @@
     el.advError.textContent = Claims.lastError() || Roster.lastError() || 'none';
     el.advRaw.textContent = Claims.lastRaw() || '—';
     el.wipeBtn.disabled = !(war && identity && Claims.hasPassword());
+    // In simulation the reset above the list is the wipe that is used. Leaving
+    // a second wipe here would only invite a mistake about which board it hits.
+    el.wipeBtn.hidden = SIM;
+    if (SIM) el.wipeNote.textContent = 'Use Reset test war above the list. This one is off while ' +
+      'the page is simulating.';
   }
 
   function render() {
@@ -930,22 +1060,29 @@
 
   // ---------------------------------------------------------------- actions
 
-  async function act(op, targetId) {
+  // actorId is whose claim this is. It is the member's own Torn ID everywhere
+  // except the simulation's Take as other, which is the only caller that ever
+  // passes anything else - and only ever the made-up test ID.
+  async function act(op, targetId, actorId) {
     var war = Roster.war();
     var identity = Roster.identity();
     if (!war || !identity) return;
+    var actor = (SIM && actorId === SIM_OTHER_ID) ? SIM_OTHER_ID : identity.playerId;
+    var asOther = actor !== identity.playerId;
     hide(el.errorBox); hide(el.okBox);
     pendingTarget = targetId;
     render();
     try {
       var result = op === 'claim'
-        ? await Claims.claim(war.warId, targetId, identity.playerId)
-        : await Claims.unclaim(war.warId, targetId, identity.playerId);
+        ? await Claims.claim(war.warId, targetId, actor)
+        : await Claims.unclaim(war.warId, targetId, actor);
       var body = result.body;
 
       if (result.http === 200 && body.ok === true) {
         if (body.status === 'claimed' || body.status === 'renewed') {
-          show(el.okBox, 'You hold ' + targetId + '.');
+          show(el.okBox, asOther
+            ? 'Torn ' + actor + ' holds ' + targetId + '. Your own button on that row is now off.'
+            : 'You hold ' + targetId + '.');
         } else {
           show(el.okBox, targetId + ' is free again.');
         }
@@ -1003,6 +1140,51 @@
         show(el.okBox, 'Wiped. The server removed ' + result.body.removed + ' claims from war ' + war.warId + '.');
       } else {
         show(el.errorBox, 'The claim server refused the wipe: ' +
+          (result.body.error || result.body.status || ('HTTP ' + result.http)) + '.');
+      }
+    } catch (error) {
+      if (error.unauthorized) passRejected();
+      else show(el.errorBox, error.message);
+    }
+    await pollClaims();
+    render();
+  });
+
+  // The reset that belongs to the simulation. It sends a wipe like the one in
+  // Advanced, but only ever through the wall, which refuses a wipe that is not
+  // aimed at a sim- war. Two clicks, same as the other one.
+  var simResetArmed = false;
+  var SIM_RESET_IDLE = 'Reset test war';
+  var SIM_RESET_NOTE = 'Empties the test war’s board so the whole run can be started over. ' +
+    'The real war is not touched.';
+
+  el.simResetBtn.addEventListener('click', async function () {
+    var war = Roster.war();
+    var identity = Roster.identity();
+    if (!SIM || !war || !identity) return;
+    if (!simResetArmed) {
+      simResetArmed = true;
+      el.simResetBtn.textContent = 'Confirm: reset ' + Claims.wireWarId(war.warId, 'wipe');
+      el.simResetNote.textContent = 'This frees every target on the test board, including the ones ' +
+        'the test member holds. Click again within six seconds to do it.';
+      setTimeout(function () {
+        simResetArmed = false;
+        el.simResetBtn.textContent = SIM_RESET_IDLE;
+        el.simResetNote.textContent = SIM_RESET_NOTE;
+      }, 6000);
+      return;
+    }
+    simResetArmed = false;
+    el.simResetBtn.textContent = SIM_RESET_IDLE;
+    el.simResetNote.textContent = SIM_RESET_NOTE;
+    hide(el.errorBox); hide(el.okBox);
+    try {
+      var result = await Claims.wipe(war.warId, identity.playerId);
+      if (result.http === 200 && result.body.ok === true) {
+        show(el.okBox, 'Test war reset. The server removed ' + result.body.removed +
+          ' claims from ' + Claims.wireWarId(war.warId, 'wipe') + '. The real war was not touched.');
+      } else {
+        show(el.errorBox, 'The claim server refused the reset: ' +
           (result.body.error || result.body.status || ('HTTP ' + result.http)) + '.');
       }
     } catch (error) {
@@ -1129,6 +1311,12 @@
     show(el.okBox, 'War Room password removed from this browser.');
     render();
   });
+
+  if (SIM) {
+    el.simBanner.hidden = false;
+    el.simOtherId.textContent = SIM_OTHER_ID;
+    el.simResetNote.textContent = SIM_RESET_NOTE;
+  }
 
   var storedKey = read(KEY_STORE);
   if (storedKey) el.apiKey.value = storedKey;
