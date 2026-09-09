@@ -83,6 +83,10 @@
     letter-spacing: .04em; text-transform: uppercase; margin: 0;
   }
   .panel-head .hint { color: var(--faint); font-size: 13px; margin: 0; }
+  /* The same face under a field instead of beside a heading. The one under
+     the FFScouter key says what that key is not. */
+  .fieldhint { color: var(--faint); font-size: 13px; margin: 6px 0 0; max-width: 72ch; }
+  .fieldhint.said { color: var(--warn); }
   .panel-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
 
   label.lbl {
@@ -229,6 +233,18 @@
     background: var(--warn-soft); color: var(--warn); font-size: 13px;
   }
 
+  /* FF and EST. A figure is set in the mono face; a word - CHECKING, UNKNOWN -
+     in the face the DIBS column uses for its own words, so the two read alike.
+     A stale figure fades; a dropped one is gone and the cell says so. */
+  td.ffcell { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.ffcell.word { font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
+  td.ffcell.unknown { color: var(--warn); }
+  td.ffcell.checking, td.ffcell.none, td.ffcell.old { color: var(--faint); }
+
+  /* Six columns do not always fit a phone. The list scrolls sideways inside
+     its own box; the page never does. */
+  #targetHost { overflow-x: auto; }
+
   details { border-top: 1px solid var(--line); }
   summary {
     font-family: var(--display); font-weight: 600; font-size: 13px;
@@ -283,7 +299,7 @@
   <section class="panel">
     <div class="panel-head">
       <h2>Sign in</h2>
-      <p class="hint">Two separate things: your own Torn key, and the faction's War Room password.</p>
+      <p class="hint">Three separate things: your own Torn key, an FFScouter key if you have one, and the faction's War Room password.</p>
     </div>
     <div class="panel-body">
 
@@ -296,6 +312,19 @@
           <button type="button" class="btn primary" id="loadBtn">Load the war</button>
           <button type="button" class="btn quiet" id="forgetKey">Forget key</button>
         </div>
+      </div>
+
+      <div>
+        <label class="lbl" for="ffKey">Your FFScouter API key (optional)</label>
+        <div class="toolbar">
+          <input type="password" id="ffKey" class="grow" autocomplete="off" spellcheck="false"
+                 placeholder="Paste your FFScouter key">
+          <button type="button" class="btn" id="toggleFfKey" aria-pressed="false">Show</button>
+          <button type="button" class="btn quiet" id="forgetFfKey">Forget key</button>
+        </div>
+        <p class="fieldhint">Not your Torn key. Get this from ffscouter.com. Without it the
+          FF and EST columns stay empty; everything else works as usual.</p>
+        <p class="fieldhint said" id="ffSaid" hidden></p>
       </div>
 
       <div class="ask" id="passAsk">
@@ -345,17 +374,23 @@
             target's Torn ID, your Torn ID and the War Room password.</dd>
           <dt>Your API key</dt>
           <dd>Stays in this browser. It goes to <code>api.torn.com</code> only, in a request header,
-            never in a web address. It is <strong>never</strong> sent to the claim server.</dd>
+            never in a web address. It is <strong>never</strong> sent to the claim server, and never
+            to FFScouter.</dd>
           <dt>Stored in this browser</dt>
-          <dd>Your Torn key and the War Room password, in this device's local storage. Nothing else.
-            Each has its own Forget button above.</dd>
+          <dd>Your Torn key, your FFScouter key if you gave one, and the War Room password, in this
+            device's local storage. Nothing else. Each has its own Forget button above.</dd>
           <dt>Writes</dt>
           <dd>Nothing in Torn, ever. No attacks, no clicks, no navigation, no page scraping, no
             background watching, nothing to do with captcha. The only thing this page writes is a
             line on the faction's own claim board.</dd>
           <dt>FF and Est</dt>
-          <dd>Not here. Fair Fight and estimated stats keep coming from FFScouter in the Dibs
-            userscripts, which this page does not touch.</dd>
+          <dd>From FFScouter &mdash; not from Torn, and not from our claim server. With an FFScouter
+            key on this page, this browser asks <code>ffscouter.com</code> for Fair Fight and
+            estimated battle stats for the targets on the list: one request for the whole list, at
+            most every five minutes, only while the page is on screen. It sends that key and the
+            targets' Torn IDs, nothing else. Without a key the two columns show a dash and nothing
+            is sent. Figures older than fifteen minutes are marked stale; older than thirty they
+            are dropped and the cells say UNKNOWN.</dd>
         </dl>
       </div>
     </details>
@@ -380,6 +415,7 @@
         started over. The real war is not touched.</span>
     </div>
     <div class="stale" id="staleBar" hidden></div>
+    <div class="stale" id="ffBar" hidden></div>
     <div id="targetHost"></div>
   </section>
 
@@ -394,6 +430,7 @@
         <dt>Your Torn ID</dt><dd id="advMe" class="tid"></dd>
         <dt>Claim board</dt><dd id="advClaims" class="tid"></dd>
         <dt>Roster</dt><dd id="advRoster" class="tid"></dd>
+        <dt>FF and EST</dt><dd id="advFf" class="tid"></dd>
         <dt>Last refusal</dt><dd id="advError" class="tid"></dd>
       </dl>
       <div>
@@ -413,7 +450,8 @@
       request reached it first. This page therefore says who holds a target, never who was quicker.</p>
     <p>The countdown beside a claim is this browser's estimate of the server's own clock. The server
       sets the time and the server decides when a claim is over.</p>
-    <p>Reads through Torn's official API only. It never acts on your behalf.</p>
+    <p>Reads through Torn's official API, and through FFScouter's when you have given it a key of
+      your own. It never acts on your behalf.</p>
   </footer>
 </div>
 
@@ -425,6 +463,10 @@
   var KEY_STORE = 'ks-leader-board-key';
   var PASS_STORE = 'ks-war-room-pass';
   var SORT_STORE = 'ks-war-room-sort';
+  // The FFScouter key, under a name of its own. It is not the Torn key and
+  // does not share the Torn key's storage: the two are different strings, and
+  // the Torn key must never leave for a third party that could not use it.
+  var FF_STORE = 'ks-war-room-ff-key';
 
   // ------------------------------------------------------------- simulation
   //
@@ -451,14 +493,19 @@
   var ROSTER_POLL_MS = 30000;  // hospital and jail timers do not need more than this
   var WAR_POLL_MS = 120000;    // which war is running changes twice a week, not twice a minute
   var OWN_MEMBERS_MS = 300000; // our own names, used only to label a claim holder
+  var FF_POLL_MS = 300000;     // FFScouter caches for 5 minutes; asking sooner only spends calls
+  var FF_CHECK_MS = 30000;     // how often the page asks itself whether FF_POLL_MS has passed
+  var FF_STALE_MS = 900000;    // FF and EST older than 15 minutes are marked stale
+  var FF_DROP_MS = 1800000;    // older than 30 minutes they are dropped and the cells say UNKNOWN
 
   var el = {};
   ['apiKey','toggleKey','loadBtn','forgetKey','errorBox','okBox',
+   'ffKey','toggleFfKey','forgetFfKey','ffSaid','ffBar',
    'passAsk','passSaid','warPass','passSave','passHave','passChange','passForget',
    'warPanel','warWho','warMeta','warScore',
    'targetPanel','targetHint','staleBar','targetHost',
    'simBanner','simRealWar','simWireWar','simOtherId','simResetBar','simResetBtn','simResetNote',
-   'advServer','advWar','advMe','advClaims','advRoster','advError','advRaw','wipeBtn','wipeNote']
+   'advServer','advWar','advMe','advClaims','advRoster','advFf','advError','advRaw','wipeBtn','wipeNote']
     .forEach(function (id) { el[id] = document.getElementById(id); });
 
   function read(store) { try { return localStorage.getItem(store) || ''; } catch (e) { return ''; } }
@@ -477,7 +524,8 @@
   // through the narrow interface at the bottom. When the claim server later
   // fetches Torn once for the whole faction, this block is the only thing that
   // is replaced - the claim layer and the rendering never learn where the
-  // roster came from. Same boundary already agreed for FF and Est.
+  // roster came from. FF and Est sit behind the same kind of wall: ffSource,
+  // just below.
   // =========================================================================
 
   var Roster = (function () {
@@ -664,6 +712,172 @@
 
   // ============================================== ROSTER SOURCE ends here ===
 
+  // =========================================================================
+  // FF SOURCE - the only place that talks to FFScouter.
+  //
+  // The same wall as the roster source above. Nothing outside this block
+  // knows the address, the key or the shape of the answer: it is asked a few
+  // plain questions and hands back plain values. To take FF and EST from
+  // somewhere else - the claim server, another service - this block is
+  // replaced and nothing in the claim layer or the rendering changes.
+  //
+  //   hasKey()       a usable FFScouter key is on the page
+  //   refresh(ids)   read these targets and refill the cache; returns nothing
+  //   get(id)        { ff, est, estText, fetchedAt, state }   state: ok | unknown
+  //   state()        nokey | checking | ok | stale | error
+  //   lastError()    one line for the bar when state() is error - never the key
+  //
+  // The cache lives in memory and nowhere else. Figures from before a reload
+  // would look current and be old, and the page reads again within seconds.
+  // =========================================================================
+
+  var ffSource = (function () {
+    var cache = {};        // tornId -> { value: { ff, est, estText, updated }, fetchedAt, source, schemaVersion }
+    var fetchedAt = 0;     // when the last successful read arrived; 0 until one has
+    var lastError = '';
+    var generation = 0;    // every refresh takes a number; an answer to an older one is dropped
+    var controller = null; // aborts the read that is out when a newer one starts
+    var CHUNK = 200;       // the endpoint takes 205 at most; chunks go one after another
+    var SHAPE = /^[A-Za-z0-9]{16}$/;
+
+    // The key is read from the field and checked every time. Anything that is
+    // not exactly sixteen letters and digits is no key: nothing is sent.
+    function key() {
+      var k = el.ffKey.value.trim();
+      return SHAPE.test(k) ? k : '';
+    }
+
+    function hasKey() { return key() !== ''; }
+
+    function num(value) { return (typeof value === 'number' && isFinite(value)) ? value : null; }
+
+    function id12(value) {
+      if (typeof value !== 'number' && typeof value !== 'string') return '';
+      var s = String(value).trim();
+      return (/^[0-9]{1,12}$/.test(s) && Number(s) > 0) ? String(Number(s)) : '';
+    }
+
+    // Whatever the service says, the key is not repeated back.
+    function scrub(text, k) {
+      return String(text).split(k).join('[key]').slice(0, 160).replace(/[.\s]+$/, '');
+    }
+
+    function forgetAll() { cache = {}; fetchedAt = 0; }
+
+    // Older than FF_DROP_MS: the figures go. The time of the read stays, so
+    // the bar can still say when it was.
+    function prune() {
+      if (fetchedAt && Date.now() - fetchedAt > FF_DROP_MS) cache = {};
+    }
+
+    async function readChunk(k, ids, signal) {
+      var url = 'https://ffscouter.com/api/v1/get-stats?key=' + encodeURIComponent(k) +
+        '&targets=' + ids.join(',');
+      var response;
+      try {
+        response = await fetch(url, signal ? { signal: signal } : undefined);
+      } catch (failure) {
+        if (failure && failure.name === 'AbortError') throw failure;
+        throw new Error('FFScouter could not be reached.');
+      }
+      var payload = null;
+      try { payload = await response.json(); } catch (e) { payload = null; }
+      if (payload && !Array.isArray(payload) && typeof payload === 'object' &&
+          (payload.error !== undefined || payload.code !== undefined)) {
+        throw new Error('FFScouter refused the request' +
+          (typeof payload.error === 'string'
+            ? ': ' + scrub(payload.error, k)
+            : (payload.code !== undefined ? ' (code ' + String(payload.code).slice(0, 8) + ')' : '')) + '.');
+      }
+      if (!response.ok) throw new Error('FFScouter answered HTTP ' + response.status + '.');
+      if (!Array.isArray(payload)) throw new Error('FFScouter answered something this page cannot read.');
+      return payload;
+    }
+
+    // Five fields are read from a row. Everything else in it is left alone.
+    function pick(row) {
+      var ff = num(row.fair_fight);
+      var est = num(row.bs_estimate);
+      var estText = (typeof row.bs_estimate_human === 'string' && row.bs_estimate_human.trim() !== '')
+        ? row.bs_estimate_human.trim().slice(0, 24) : null;
+      // The figure and its text go together. One without the other would sort
+      // as a value and show as none, or the other way round.
+      if (est === null || estText === null) { est = null; estText = null; }
+      return { ff: ff, est: est, estText: estText, updated: num(row.last_updated) };
+    }
+
+    async function refresh(ids) {
+      generation += 1;
+      var mine = generation;
+      if (controller) { controller.abort(); controller = null; }
+      var k = key();
+      if (!k) { forgetAll(); lastError = ''; return; }
+      var list = [];
+      (Array.isArray(ids) ? ids : []).forEach(function (id) {
+        var clean = id12(id);
+        if (clean) list.push(clean);
+      });
+      var own = (typeof AbortController === 'function') ? new AbortController() : null;
+      controller = own;
+      var fresh = {};
+      try {
+        for (var at = 0; at < list.length; at += CHUNK) {
+          var rows = await readChunk(k, list.slice(at, at + CHUNK), own ? own.signal : null);
+          if (mine !== generation) return;   // a newer read owns the cache now
+          rows.forEach(function (row) {
+            if (!row || typeof row !== 'object') return;
+            var id = id12(row.player_id);
+            if (id) fresh[id] = pick(row);
+          });
+        }
+      } catch (failure) {
+        if (mine !== generation || (failure && failure.name === 'AbortError')) return;
+        // Fail closed: nothing old stays up beside a source that just failed.
+        forgetAll();
+        lastError = (failure && failure.message) || 'FFScouter could not be read.';
+        return;
+      } finally {
+        if (controller === own) controller = null;
+      }
+      var now = Date.now();
+      var next = {};
+      Object.keys(fresh).forEach(function (id) {
+        next[id] = { value: fresh[id], fetchedAt: now, source: 'ffscouter', schemaVersion: 1 };
+      });
+      cache = next;
+      fetchedAt = now;
+      lastError = '';
+    }
+
+    var NONE = { ff: null, est: null, estText: null, fetchedAt: 0, state: 'unknown' };
+
+    function get(id) {
+      if (!hasKey() || !fetchedAt) return NONE;
+      prune();
+      var entry = cache[id];
+      if (!entry) return { ff: null, est: null, estText: null, fetchedAt: fetchedAt, state: 'unknown' };
+      return { ff: entry.value.ff, est: entry.value.est, estText: entry.value.estText,
+               fetchedAt: entry.fetchedAt, state: 'ok' };
+    }
+
+    function state() {
+      if (!hasKey()) return 'nokey';
+      if (lastError) return 'error';
+      if (!fetchedAt) return 'checking';
+      return (Date.now() - fetchedAt > FF_STALE_MS) ? 'stale' : 'ok';
+    }
+
+    return {
+      hasKey: hasKey,
+      refresh: refresh,
+      get: get,
+      state: state,
+      lastError: function () { return lastError; }
+    };
+  })();
+
+  // ================================================== FF SOURCE ends here ===
+
   // ------------------------------------------------------------ claim layer
 
   var Claims = (function () {
@@ -846,6 +1060,85 @@
     return span;
   }
 
+  // One cell of FF or EST. The column's state is decided first - no key, first
+  // read under way, source failed - and only then the row's own value. What is
+  // not known is a word, never a zero and never a dash that could pass for one.
+  function ffCell(target, kind, columnState) {
+    var td = document.createElement('td');
+    if (columnState === 'nokey') {
+      td.className = 'ffcell none';
+      td.textContent = '—';
+      return td;
+    }
+    if (columnState === 'checking') {
+      td.className = 'ffcell word checking';
+      td.textContent = 'CHECKING';
+      return td;
+    }
+    var row = columnState === 'error' ? null : ffSource.get(target.id);
+    var value = (row && row.state === 'ok') ? (kind === 'ff' ? row.ff : row.estText) : null;
+    if (value === null) {
+      td.className = 'ffcell word unknown';
+      td.textContent = 'UNKNOWN';
+      return td;
+    }
+    td.className = 'ffcell' + (columnState === 'stale' ? ' old' : '');
+    // estText is a string from an outside service: textContent, never markup.
+    td.textContent = kind === 'ff' ? value.toFixed(2) : value;
+    return td;
+  }
+
+  // The line above the list that says why FF and EST are not simply there.
+  // Silent when they are, and silent when there is no key: neither is a fault.
+  function renderFfBar(rows, columnState) {
+    var text = '';
+    if (columnState === 'error') {
+      text = 'FF and EST are off. ' + (ffSource.lastError() || 'The source did not answer.') +
+        ' Both columns show UNKNOWN until the next read succeeds.';
+    } else if (columnState === 'stale' && rows.length) {
+      var readAt = ffSource.get(rows[0].id).fetchedAt;
+      var when = readAt ? new Date(readAt).toLocaleTimeString() : 'an unknown time';
+      text = (readAt && Date.now() - readAt > FF_DROP_MS)
+        ? 'FF and EST were last read from FFScouter at ' + when + ', more than thirty minutes ' +
+          'ago, and have been dropped. Both columns show UNKNOWN until a fresh read arrives.'
+        : 'FF and EST are stale. Last read from FFScouter at ' + when + ' — the figures may be ' +
+          'out of date.';
+    }
+    el.ffBar.textContent = text;
+    el.ffBar.hidden = !text;
+  }
+
+  // Under the key field. A key of the wrong shape is treated as no key at all -
+  // nothing is sent - but the member is told, or a pasted key that silently
+  // does nothing would look like a broken page.
+  function ffKeyRender() {
+    var typed = el.ffKey.value.trim();
+    var wrong = typed !== '' && !ffSource.hasKey();
+    el.ffSaid.textContent = wrong
+      ? 'That does not look like an FFScouter key (16 letters and digits), so FF and EST stay ' +
+        'empty. Nothing was sent.'
+      : '';
+    el.ffSaid.hidden = !wrong;
+  }
+
+  // For the Advanced panel: the column's state and how many rows have a
+  // figure. The key is not part of this and never will be.
+  function ffAdvancedLine() {
+    var columnState = ffSource.state();
+    var targets = Roster.targets() || [];
+    if (columnState === 'nokey') return 'no FFScouter key on this page';
+    if (columnState === 'error') return 'error · ' + (ffSource.lastError() || 'no detail');
+    var readAt = 0, withFf = 0, withEst = 0;
+    targets.forEach(function (target) {
+      var row = ffSource.get(target.id);
+      if (row.fetchedAt) readAt = row.fetchedAt;
+      if (row.ff !== null) withFf += 1;
+      if (row.est !== null) withEst += 1;
+    });
+    return columnState + ' · ' + withFf + ' of ' + targets.length + ' rows with FF, ' + withEst +
+      ' with EST' + (readAt ? ' · read ' + new Date(readAt).toLocaleTimeString() : '');
+  }
+
   // ---------------------------------------------------------------- sorting
   //
   // A pure view. It reorders rows that are already on the page and touches
@@ -853,7 +1146,9 @@
   // claim layer is asked for nothing it has not already answered, and the
   // roster array is never sorted in place.
   //
-  // Two more columns later - FF and Est - are one entry each in COLUMNS.
+  // FF and EST are one entry each in COLUMNS, like the rest. Their values come
+  // through ffSource, and a row that has none sits last whichever way the list
+  // is turned; numberCompare below is what keeps it there.
 
   var STATE_RANK = { Okay: 1, Hospital: 2, Traveling: 3, Abroad: 4, Federal: 5 };
 
@@ -881,11 +1176,26 @@
     return claim.memberId === ctx.me ? 2 : 3;
   }
 
+  // Two figures, either of which may be missing. A missing one sorts last in
+  // both directions: sortRows flips the sign of every comparison for a
+  // descending sort, so the missing side is flipped back here, and the engine
+  // itself is not touched.
+  function numberCompare(x, y, ctx) {
+    var xm = x === null, ym = y === null;
+    if (xm && ym) return 0;
+    if (!xm && !ym) return x - y;
+    return (xm ? 1 : -1) * (ctx && ctx.dir === 'desc' ? -1 : 1);
+  }
+
   var COLUMNS = [
     { id: 'target', label: 'Target',
       compare: function (a, b) { return nameCompare(a.name, b.name); } },
     { id: 'level', label: 'Level',
       compare: function (a, b) { return (a.level || 0) - (b.level || 0); } },
+    { id: 'ff', label: 'FF',
+      compare: function (a, b, ctx) { return numberCompare(ffSource.get(a.id).ff, ffSource.get(b.id).ff, ctx); } },
+    { id: 'est', label: 'EST',
+      compare: function (a, b, ctx) { return numberCompare(ffSource.get(a.id).est, ffSource.get(b.id).est, ctx); } },
     { id: 'status', label: 'Status',
       compare: function (a, b) {
         var byState = stateRank(a) - stateRank(b);
@@ -973,7 +1283,10 @@
     // Sorting is a view over the rows Torn already gave us. It never changes
     // which targets exist and never reorders Roster's own array, so losing the
     // sort falls straight back to the order the roster arrived in.
-    var rows = sortRows(targets, { boardUsable: boardUsable, board: board, me: me });
+    var rows = sortRows(targets, { boardUsable: boardUsable, board: board, me: me,
+      dir: sortState ? sortState.dir : 'asc' });
+    // Decided once for the whole column; each cell then reads its own row.
+    var ffState = ffSource.state();
     var table = document.createElement('table');
     var thead = document.createElement('thead');
     var headRow = document.createElement('tr');
@@ -1031,6 +1344,9 @@
       var tdLevel = document.createElement('td');
       tdLevel.className = 'tid';
       tdLevel.textContent = target.level ? String(target.level) : '';
+
+      var tdFf = ffCell(target, 'ff', ffState);
+      var tdEst = ffCell(target, 'est', ffState);
 
       var tdStatus = document.createElement('td');
       tdStatus.appendChild(statusPill(target));
@@ -1121,6 +1437,8 @@
 
       tr.appendChild(tdName);
       tr.appendChild(tdLevel);
+      tr.appendChild(tdFf);
+      tr.appendChild(tdEst);
       tr.appendChild(tdStatus);
       tr.appendChild(tdDibs);
       tbody.appendChild(tr);
@@ -1139,6 +1457,7 @@
     } else {
       el.staleBar.hidden = true;
     }
+    renderFfBar(rows, ffState);
   }
 
   function renderWar() {
@@ -1187,6 +1506,7 @@
       ? (Roster.targets() || []).length + ' rows · read ' +
         new Date(Roster.stamps().targets).toLocaleTimeString()
       : 'not loaded';
+    el.advFf.textContent = ffAdvancedLine();
     el.advError.textContent = Claims.lastError() || Roster.lastError() || 'none';
     el.advRaw.textContent = Claims.lastRaw() || '—';
     el.wipeBtn.disabled = !(war && identity && Claims.hasPassword());
@@ -1199,6 +1519,7 @@
 
   function render() {
     passRender();
+    ffKeyRender();
     renderWar();
     renderTargets();
     renderAdvanced();
@@ -1376,6 +1697,8 @@
     } finally {
       el.loadBtn.disabled = false;
       el.loadBtn.textContent = 'Load the war';
+      // Not awaited: FF and EST never hold up the roster or the board.
+      ffTick();
       render();
     }
   }
@@ -1400,6 +1723,49 @@
     render();
   }
 
+  // FF and EST run on a clock of their own, apart from the claim board's five
+  // seconds. The source caches for five minutes, so asking sooner only spends
+  // calls; the list of IDs is watched as well, so a changed roster is asked
+  // about at the next check and the same roster is not asked about again
+  // before FF_POLL_MS has passed.
+  var ffLastAttempt = 0;
+  var ffLastIds = '';
+  var ffTimer = null;
+
+  async function ffTick() {
+    var targets = Roster.targets();
+    if (!targets || !targets.length) return;
+    var ids = targets.map(function (target) { return target.id; });
+    var signature = ids.join(',');
+    var now = Date.now();
+    if (signature === ffLastIds && now - ffLastAttempt < FF_POLL_MS) return;
+    ffLastAttempt = now;
+    ffLastIds = signature;
+    await ffSource.refresh(ids);
+    renderTargets();
+    renderAdvanced();
+  }
+
+  // The timer runs only while the page is on screen. Hidden or left, it stops;
+  // shown again, it starts and asks at once whether a read is due.
+  function ffStart() {
+    if (ffTimer !== null) return;
+    ffTimer = setInterval(ffTick, FF_CHECK_MS);
+    ffTick();
+  }
+
+  function ffStop() {
+    if (ffTimer === null) return;
+    clearInterval(ffTimer);
+    ffTimer = null;
+  }
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) ffStop(); else ffStart();
+  });
+  window.addEventListener('pagehide', ffStop);
+  window.addEventListener('pageshow', function () { if (!document.hidden) ffStart(); });
+
   // ----------------------------------------------------------------- wiring
 
   el.toggleKey.addEventListener('click', function () {
@@ -1420,6 +1786,41 @@
     el.targetPanel.hidden = true;
     el.warPanel.hidden = true;
     show(el.okBox, 'Torn key removed from this browser.');
+    render();
+  });
+
+  el.toggleFfKey.addEventListener('click', function () {
+    var showing = el.ffKey.type === 'text';
+    el.ffKey.type = showing ? 'password' : 'text';
+    el.toggleFfKey.textContent = showing ? 'Show' : 'Hide';
+    el.toggleFfKey.setAttribute('aria-pressed', showing ? 'false' : 'true');
+  });
+
+  // Saved when the field is left or Enter is pressed. The same value twice is
+  // not a change, so Enter followed by leaving the field is one read, not two.
+  var ffKeyWritten = read(FF_STORE);
+  function ffKeyChanged() {
+    var value = el.ffKey.value.trim();
+    if (value === ffKeyWritten) return;
+    ffKeyWritten = value;
+    write(FF_STORE, value);
+    ffLastAttempt = 0;
+    ffLastIds = '';
+    ffTick();
+    render();
+  }
+  el.ffKey.addEventListener('change', ffKeyChanged);
+  el.ffKey.addEventListener('keydown', function (e) { if (e.key === 'Enter') ffKeyChanged(); });
+
+  el.forgetFfKey.addEventListener('click', function () {
+    write(FF_STORE, '');
+    el.ffKey.value = '';
+    ffKeyWritten = '';
+    ffLastAttempt = 0;
+    ffLastIds = '';
+    // No key on the page now, so this empties the cache and sends nothing.
+    ffSource.refresh([]);
+    show(el.okBox, 'FFScouter key removed from this browser.');
     render();
   });
 
@@ -1466,10 +1867,13 @@
 
   var storedKey = read(KEY_STORE);
   if (storedKey) el.apiKey.value = storedKey;
+  var storedFfKey = read(FF_STORE);
+  if (storedFfKey) el.ffKey.value = storedFfKey;
   render();
   if (storedKey) loadAll();
 
   setInterval(tick, CLAIM_POLL_MS);
+  if (!document.hidden) ffStart();
   // Only redraws the estimate beside a claim the server has already confirmed.
   setInterval(function () { if (Claims.board()) renderTargets(); }, 1000);
 })();
