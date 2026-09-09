@@ -178,6 +178,27 @@
   .dibs.unknown { font-family: var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--warn); font-weight: 600; }
   .dibs.free { color: var(--faint); }
 
+  /* One cell now holds the DIBS state and the button that acts on it. The
+     existing .toolbar does the wrapping: side by side when there is room,
+     the button under the state when there is not. */
+  td .toolbar { gap: 8px 10px; }
+
+  /* Sortable headers. Same face and colour as before; a real button, so the
+     list can be ordered from the keyboard, and the whole header cell is the
+     hit area. */
+  thead th.sort { padding: 0; }
+  thead th.sort button {
+    font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit;
+    background: none; border: 0; width: 100%; text-align: left;
+    padding: 10px 14px; cursor: pointer; white-space: nowrap;
+    display: flex; align-items: center; gap: 6px;
+  }
+  thead th.sort button:hover { color: var(--accent); }
+  thead th.sort button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .sortmark { font-size: 10px; color: var(--faint); min-width: .8em; }
+  thead th[aria-sort] button { color: var(--ink); }
+  thead th[aria-sort] .sortmark { color: var(--accent); }
+
   .empty { padding: 30px 18px; text-align: center; color: var(--faint); }
 
   /* Simulation. The page's own warning colour, not the error colour - a test
@@ -403,6 +424,7 @@
   var CLAIM_SERVER = 'https://ks-war-room-claims.hans-viklund.workers.dev';
   var KEY_STORE = 'ks-leader-board-key';
   var PASS_STORE = 'ks-war-room-pass';
+  var SORT_STORE = 'ks-war-room-sort';
 
   // ------------------------------------------------------------- simulation
   //
@@ -824,6 +846,100 @@
     return span;
   }
 
+  // ---------------------------------------------------------------- sorting
+  //
+  // A pure view. It reorders rows that are already on the page and touches
+  // nothing else: no request leaves the page when a header is clicked, the
+  // claim layer is asked for nothing it has not already answered, and the
+  // roster array is never sorted in place.
+  //
+  // Two more columns later - FF and Est - are one entry each in COLUMNS.
+
+  var STATE_RANK = { Okay: 1, Hospital: 2, Traveling: 3, Abroad: 4, Federal: 5 };
+
+  function stateRank(target) { return STATE_RANK[target.state] || 6; }
+
+  // Case-blind, and digits read as numbers, so a name that starts with a figure
+  // or an underscore lands somewhere predictable instead of wherever the code
+  // points happen to fall.
+  function nameCompare(a, b) {
+    try {
+      return String(a).localeCompare(String(b), undefined, { sensitivity: 'base', numeric: true });
+    } catch (e) {
+      var x = String(a).toLowerCase(), y = String(b).toLowerCase();
+      return x < y ? -1 : (x > y ? 1 : 0);
+    }
+  }
+
+  // Usefulness, not the alphabet: free first, then the ones you hold, then
+  // someone else's, then everything that cannot be taken at all.
+  function dibsRank(target, ctx) {
+    if (!ctx.boardUsable || !ctx.board) return 4;   // Locked or Offline
+    if (ctx.board.unreadable[target.id]) return 4;  // Unknown
+    var claim = ctx.board.claims[target.id];
+    if (!claim) return 1;                           // Free
+    return claim.memberId === ctx.me ? 2 : 3;
+  }
+
+  var COLUMNS = [
+    { id: 'target', label: 'Target',
+      compare: function (a, b) { return nameCompare(a.name, b.name); } },
+    { id: 'level', label: 'Level',
+      compare: function (a, b) { return (a.level || 0) - (b.level || 0); } },
+    { id: 'status', label: 'Status',
+      compare: function (a, b) {
+        var byState = stateRank(a) - stateRank(b);
+        if (byState) return byState;
+        // Same state: inside Hospital and Federal, out soonest first. until is
+        // an absolute timestamp, so this order does not churn as it counts down.
+        if (a.state === 'Hospital' || a.state === 'Federal') return (a.until || 0) - (b.until || 0);
+        return 0;
+      } },
+    { id: 'dibs', label: 'DIBS',
+      compare: function (a, b, ctx) { return dibsRank(a, ctx) - dibsRank(b, ctx); } }
+  ];
+
+  function columnById(id) {
+    var found = null;
+    COLUMNS.forEach(function (column) { if (column.id === id) found = column; });
+    return found;
+  }
+
+  // This browser, this device, nothing sent anywhere. It is a convenience:
+  // anything that cannot be read back is simply no sort at all, and the list
+  // shows in the order Torn gave it.
+  function readSort() {
+    var parts = read(SORT_STORE).split(':');
+    if (parts.length !== 2 || !columnById(parts[0])) return null;
+    if (parts[1] !== 'asc' && parts[1] !== 'desc') return null;
+    return { id: parts[0], dir: parts[1] };
+  }
+
+  var sortState = readSort();
+
+  function setSort(id) {
+    if (!columnById(id)) return;
+    sortState = (sortState && sortState.id === id)
+      ? { id: id, dir: sortState.dir === 'asc' ? 'desc' : 'asc' }
+      : { id: id, dir: 'asc' };
+    write(SORT_STORE, sortState.id + ':' + sortState.dir);
+    renderTargets();
+  }
+
+  function sortRows(targets, ctx) {
+    var column = sortState ? columnById(sortState.id) : null;
+    if (!column) return targets;
+    var sign = sortState.dir === 'desc' ? -1 : 1;
+    // A copy. The roster keeps the order Torn sent it in.
+    return targets.slice().sort(function (a, b) {
+      var d = column.compare(a, b, ctx);
+      // Ties fall back on the Torn ID so equal rows keep one fixed order
+      // instead of shuffling on every redraw.
+      if (!d) d = Number(a.id) - Number(b.id);
+      return sign * d;
+    });
+  }
+
   var pendingTarget = '';
 
   function renderTargets() {
@@ -854,12 +970,35 @@
     else if (board && board.degraded) hint.push('the server could not read every claim');
     el.targetHint.textContent = hint.join(' · ');
 
+    // Sorting is a view over the rows Torn already gave us. It never changes
+    // which targets exist and never reorders Roster's own array, so losing the
+    // sort falls straight back to the order the roster arrived in.
+    var rows = sortRows(targets, { boardUsable: boardUsable, board: board, me: me });
     var table = document.createElement('table');
     var thead = document.createElement('thead');
     var headRow = document.createElement('tr');
-    ['Target', 'Level', 'Status', 'DIBS', ''].forEach(function (label) {
+    // Every column sorts, and each header is a real button so the list can be
+    // ordered from the keyboard as well as the mouse. A click here never asks
+    // the server anything: it reorders what is already on the page.
+    COLUMNS.forEach(function (column) {
       var th = document.createElement('th');
-      th.textContent = label;
+      th.className = 'sort';
+      th.scope = 'col';
+      var trigger = document.createElement('button');
+      trigger.type = 'button';
+      var label = document.createElement('span');
+      label.textContent = column.label;
+      var mark = document.createElement('span');
+      mark.className = 'sortmark';
+      mark.setAttribute('aria-hidden', 'true');
+      if (sortState && sortState.id === column.id) {
+        th.setAttribute('aria-sort', sortState.dir === 'asc' ? 'ascending' : 'descending');
+        mark.textContent = sortState.dir === 'asc' ? '▲' : '▼';
+      }
+      trigger.appendChild(label);
+      trigger.appendChild(mark);
+      trigger.onclick = function () { setSort(column.id); };
+      th.appendChild(trigger);
       headRow.appendChild(th);
     });
     thead.appendChild(headRow);
@@ -867,8 +1006,12 @@
 
     var tbody = document.createElement('tbody');
 
-    targets.forEach(function (target) {
+    rows.forEach(function (target) {
       var tr = document.createElement('tr');
+      // The row carries its Torn ID, and every button built below is closed
+      // over this same target object. Sorting reorders the objects, never the
+      // bindings, so a re-sorted row still acts on the player it names.
+      tr.setAttribute('data-target-id', target.id);
 
       var tdName = document.createElement('td');
       var name = document.createElement('div');
@@ -893,7 +1036,14 @@
       tdStatus.appendChild(statusPill(target));
 
       var tdDibs = document.createElement('td');
-      var tdAct = document.createElement('td');
+      // One column, not two. The state comes first and the button that acts on
+      // it comes straight after: a row is read once during a war and decided on
+      // there and then, so the two must not sit half a screen apart. Nothing is
+      // added here and nothing is dropped - only the placing changed.
+      var dibsCell = document.createElement('div');
+      dibsCell.className = 'toolbar';
+      var dibsState = document.createElement('div');
+      dibsCell.appendChild(dibsState);
 
       var button = document.createElement('button');
       button.type = 'button';
@@ -905,31 +1055,31 @@
         // Never the last known list. Either the server just said it, or the
         // column says it does not know.
         if (claimStatus === 'offline') {
-          tdDibs.className = 'dibs offline';
-          tdDibs.textContent = 'Offline';
+          dibsState.className = 'dibs offline';
+          dibsState.textContent = 'Offline';
         } else {
-          tdDibs.className = 'dibs locked';
-          tdDibs.textContent = 'Locked';
+          dibsState.className = 'dibs locked';
+          dibsState.textContent = 'Locked';
         }
         tr.className = 'blocked';
       } else if (board.unreadable[target.id]) {
-        tdDibs.className = 'dibs unknown';
-        tdDibs.textContent = 'Unknown';
+        dibsState.className = 'dibs unknown';
+        dibsState.textContent = 'Unknown';
         tr.className = 'blocked';
       } else {
         var claim = board.claims[target.id];
         if (claim) {
           var mine = claim.memberId === me;
           var holder = mine ? 'you' : (Roster.nameOf(claim.memberId) || ('Torn ' + claim.memberId));
-          tdDibs.className = 'dibs';
+          dibsState.className = 'dibs';
           var who = document.createElement('div');
           who.className = 'holder';
           who.textContent = 'Taken by ' + holder;
           var left = document.createElement('div');
           left.className = 'left';
           left.textContent = leftText(estimateLeft(claim, board));
-          tdDibs.appendChild(who);
-          tdDibs.appendChild(left);
+          dibsState.appendChild(who);
+          dibsState.appendChild(left);
           if (mine) {
             tr.className = 'mine';
             button.textContent = 'Release';
@@ -939,8 +1089,8 @@
             button.textContent = 'Taken';
           }
         } else {
-          tdDibs.className = 'dibs free';
-          tdDibs.textContent = 'Free';
+          dibsState.className = 'dibs free';
+          dibsState.textContent = 'Free';
           button.className = 'btn small primary';
           button.disabled = !canClaim;
           button.onclick = function () { act('claim', target.id); };
@@ -948,6 +1098,7 @@
       }
 
       if (pendingTarget === target.id) { button.disabled = true; button.textContent = '…'; }
+      dibsCell.appendChild(button);
 
       // Simulation only, and only on a target nobody holds: claiming one that
       // is already held would be asking the server something it has answered.
@@ -963,20 +1114,15 @@
         if (!other.disabled) {
           other.onclick = function () { act('claim', target.id, SIM_OTHER_ID); };
         }
-        var pair = document.createElement('div');
-        pair.className = 'toolbar';
-        pair.appendChild(button);
-        pair.appendChild(other);
-        tdAct.appendChild(pair);
-      } else {
-        tdAct.appendChild(button);
+        dibsCell.appendChild(other);
       }
+
+      tdDibs.appendChild(dibsCell);
 
       tr.appendChild(tdName);
       tr.appendChild(tdLevel);
       tr.appendChild(tdStatus);
       tr.appendChild(tdDibs);
-      tr.appendChild(tdAct);
       tbody.appendChild(tr);
     });
 
