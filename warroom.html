@@ -1,0 +1,1144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>War Room</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground: #eaedf1; --surface: #ffffff; --surface-2: #f4f6f9;
+    --ink: #14202b; --muted: #5c6d7e; --faint: #8b9aa8;
+    --line: #d3dae1; --line-strong: #b8c3cd;
+    --accent: #a3512a; --accent-ink: #ffffff; --accent-soft: #f2ded4;
+    --good: #1c7355; --good-soft: #dfeee8;
+    --warn: #8c6210; --warn-soft: #f6ecd6;
+    --bad: #a12f2a; --bad-soft: #f6dedc;
+    --shadow: 0 1px 2px rgba(20,32,43,.06), 0 8px 24px rgba(20,32,43,.06);
+    --display: 'Saira Condensed','Arial Narrow',Helvetica,sans-serif;
+    --body: 'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
+    --mono: 'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+      --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+      --line: #26313b; --line-strong: #35434f;
+      --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+      --good: #46a583; --good-soft: #172a24;
+      --warn: #cc9f3f; --warn-soft: #2a2417;
+      --bad: #dd6a61; --bad-soft: #2c1b1a;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+    --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+    --line: #26313b; --line-strong: #35434f;
+    --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+    --good: #46a583; --good-soft: #172a24;
+    --warn: #cc9f3f; --warn-soft: #2a2417;
+    --bad: #dd6a61; --bad-soft: #2c1b1a;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--body); font-size: 15px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 20px 72px; display: flex; flex-direction: column; gap: 22px; }
+
+  .backbar a {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+    text-decoration: none; border: 1px solid var(--line-strong);
+    border-radius: 3px; padding: 7px 12px; display: inline-block;
+  }
+  .backbar a:hover { color: var(--accent); border-color: var(--accent); }
+  .backbar a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .masthead {
+    display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between;
+    gap: 12px 24px; padding-bottom: 18px; border-bottom: 2px solid var(--line-strong);
+  }
+  h1 { font-family: var(--display); font-weight: 700; font-size: clamp(30px,5vw,42px); line-height: 1.02; margin: 0; }
+  .masthead p { margin: 6px 0 0; color: var(--muted); max-width: 58ch; }
+  .stamp {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .13em; text-transform: uppercase; color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 2px; padding: 5px 10px; white-space: nowrap;
+  }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; box-shadow: var(--shadow); }
+  .panel-head {
+    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+    gap: 8px 16px; padding: 14px 18px; border-bottom: 1px solid var(--line);
+  }
+  .panel-head h2 {
+    font-family: var(--display); font-weight: 600; font-size: 19px;
+    letter-spacing: .04em; text-transform: uppercase; margin: 0;
+  }
+  .panel-head .hint { color: var(--faint); font-size: 13px; margin: 0; }
+  .panel-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+
+  label.lbl {
+    font-family: var(--display); font-weight: 600; font-size: 12px;
+    letter-spacing: .11em; text-transform: uppercase; color: var(--muted);
+    display: block; margin-bottom: 6px;
+  }
+
+  input[type="password"], input[type="text"] {
+    font-family: var(--mono); font-size: 15px; color: var(--ink);
+    background: var(--surface-2); border: 1px solid var(--line-strong);
+    border-radius: 3px; padding: 9px 11px; width: 100%; min-width: 0;
+  }
+  input:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .btn {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .08em; text-transform: uppercase;
+    background: var(--surface-2); color: var(--ink);
+    border: 1px solid var(--line-strong); border-radius: 3px;
+    padding: 9px 15px; cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn.primary:hover { color: var(--accent-ink); filter: brightness(1.06); }
+  .btn[disabled] { opacity: .55; cursor: default; filter: none; }
+  .btn[disabled]:hover { border-color: var(--line-strong); color: var(--ink); }
+  .btn.quiet { background: transparent; border-color: transparent; color: var(--faint); }
+  .btn.quiet:hover { color: var(--bad); border-color: var(--line); }
+  .btn.small { font-size: 12px; padding: 6px 10px; }
+  .btn.danger { border-color: var(--bad); color: var(--bad); }
+
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .grow { flex: 1 1 200px; min-width: 0; }
+
+  .msg { font-size: 14px; border-radius: 3px; padding: 11px 13px; margin: 0; }
+  .msg.err { background: var(--bad-soft); color: var(--bad); }
+  .msg.ok { background: var(--good-soft); color: var(--good); }
+  .msg.note { background: var(--surface-2); color: var(--muted); }
+  .msg[hidden] { display: none; }
+
+  /* The password panel is a normal state of this page, not a fault. A member who has
+     not been given the word yet must meet a calm request, never a red error. */
+  .ask {
+    background: var(--surface-2); border: 1px solid var(--line-strong);
+    border-radius: 3px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .ask .title {
+    font-family: var(--display); font-weight: 600; font-size: 15px;
+    letter-spacing: .06em; text-transform: uppercase;
+  }
+  .ask p { margin: 0; font-size: 14px; color: var(--muted); max-width: 72ch; }
+  .ask p.said { color: var(--warn); }
+
+  .warbar {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px;
+    padding: 14px 18px;
+  }
+  .warbar .who { font-family: var(--display); font-weight: 700; font-size: 24px; letter-spacing: .01em; }
+  .warbar .meta { color: var(--muted); font-size: 14px; }
+  .warbar .score { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    font-family: var(--display); font-weight: 600; font-size: 12px;
+    letter-spacing: .11em; text-transform: uppercase; color: var(--muted);
+    text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); white-space: nowrap;
+  }
+  tbody td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr.mine { background: var(--accent-soft); }
+  tbody tr.blocked td { color: var(--faint); }
+
+  .tname { font-weight: 600; }
+  .tname a { color: inherit; text-decoration: none; border-bottom: 1px solid var(--line-strong); }
+  .tname a:hover { color: var(--accent); border-color: var(--accent); }
+  .tid { font-family: var(--mono); font-size: 12px; color: var(--faint); }
+
+  .pill {
+    font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: .04em;
+    padding: 3px 8px; border-radius: 2px; white-space: nowrap;
+    background: var(--surface-2); color: var(--muted); display: inline-block;
+  }
+  .pill.good { background: var(--good-soft); color: var(--good); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.bad { background: var(--bad-soft); color: var(--bad); }
+
+  .dibs { font-size: 13px; }
+  .dibs .holder { font-weight: 600; }
+  .dibs .left { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+  .dibs.offline { font-family: var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--bad); font-weight: 600; }
+  .dibs.locked { font-family: var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
+  .dibs.unknown { font-family: var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--warn); font-weight: 600; }
+  .dibs.free { color: var(--faint); }
+
+  .empty { padding: 30px 18px; text-align: center; color: var(--faint); }
+
+  .stale {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    padding: 11px 18px; border-bottom: 1px solid var(--line);
+    background: var(--warn-soft); color: var(--warn); font-size: 13px;
+  }
+
+  details { border-top: 1px solid var(--line); }
+  summary {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+    padding: 13px 18px; cursor: pointer;
+  }
+  summary:hover { color: var(--accent); }
+  details dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 14px; }
+  details dt { font-weight: 600; color: var(--muted); }
+  details dd { margin: 0; }
+  details.panel { border-top: 0; }
+
+  pre.raw {
+    font-family: var(--mono); font-size: 12px; background: var(--surface-2);
+    border: 1px solid var(--line); border-radius: 3px; padding: 11px 13px;
+    margin: 0; overflow-x: auto; white-space: pre-wrap; word-break: break-word; max-height: 260px;
+  }
+
+  footer { border-top: 1px solid var(--line); padding-top: 16px; color: var(--faint); font-size: 13px; }
+  footer p { margin: 0 0 6px; max-width: 72ch; }
+
+  [hidden] { display: none !important; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav class="backbar"><a href="./">&larr; All tools</a></nav>
+
+  <header class="masthead">
+    <div>
+      <h1>War Room</h1>
+      <p>The other faction's roster during a Ranked War, and one shared board for who has called
+        which target. It reads; it never attacks, opens or sends anything for you.</p>
+    </div>
+    <span class="stamp">Beta &middot; not live yet</span>
+  </header>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Sign in</h2>
+      <p class="hint">Two separate things: your own Torn key, and the faction's War Room password.</p>
+    </div>
+    <div class="panel-body">
+
+      <div>
+        <label class="lbl" for="apiKey">Your Torn Custom API Key</label>
+        <div class="toolbar">
+          <input type="password" id="apiKey" class="grow" autocomplete="off" spellcheck="false"
+                 placeholder="Paste your key">
+          <button type="button" class="btn" id="toggleKey" aria-pressed="false">Show</button>
+          <button type="button" class="btn primary" id="loadBtn">Load the war</button>
+          <button type="button" class="btn quiet" id="forgetKey">Forget key</button>
+        </div>
+      </div>
+
+      <div class="ask" id="passAsk">
+        <span class="title">Faction War Room password</span>
+        <p>This board needs the faction's War Room password. Kingshade hands it out &mdash; ask in
+          faction chat if you have not been given it. Nothing else here depends on it: the roster
+          below still loads without it, only the DIBS column stays locked.</p>
+        <p class="said" id="passSaid" hidden></p>
+        <div class="toolbar">
+          <label class="lbl" for="warPass" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">War Room password</label>
+          <input type="password" id="warPass" class="grow" autocomplete="off" spellcheck="false"
+                 placeholder="Type the War Room password">
+          <button type="button" class="btn primary" id="passSave">Save on this device</button>
+        </div>
+      </div>
+
+      <div class="ask" id="passHave" hidden>
+        <span class="title">Faction War Room password</span>
+        <p>Stored in this browser, on this device only. It is sent to the claim server and nowhere
+          else, and it is never shown back to you.</p>
+        <div class="toolbar">
+          <button type="button" class="btn" id="passChange">Type a different one</button>
+          <button type="button" class="btn quiet" id="passForget">Forget password</button>
+        </div>
+      </div>
+
+      <p class="msg err" id="errorBox" role="alert" hidden></p>
+      <p class="msg ok" id="okBox" role="status" hidden></p>
+    </div>
+
+    <details>
+      <summary>What this page does, calls and stores</summary>
+      <div class="panel-body">
+        <dl>
+          <dt>Key level</dt>
+          <dd>A Custom Key with faction &rarr; <strong>members</strong> and faction &rarr;
+            <strong>wars</strong>. Torn error 16 means one of those two boxes is not ticked.</dd>
+          <dt>Torn calls</dt>
+          <dd><code>/v2/key/info</code> once, for your own Torn ID and faction.
+            <code>/v2/faction/wars</code> for the war that is running right now.
+            <code>/v2/faction/{opponent}/members</code> for the other side's roster and their
+            hospital, jail and travel state. <code>/v2/faction/members</code> for our own names, so
+            a claim can say who holds it. Every request is tagged <code>KSWarRoom</code>.</dd>
+          <dt>Claim server</dt>
+          <dd>Reads and writes the shared DIBS board at
+            <code>ks-war-room-claims.hans-viklund.workers.dev</code>. It is sent only the war ID, a
+            target's Torn ID, your Torn ID and the War Room password.</dd>
+          <dt>Your API key</dt>
+          <dd>Stays in this browser. It goes to <code>api.torn.com</code> only, in a request header,
+            never in a web address. It is <strong>never</strong> sent to the claim server.</dd>
+          <dt>Stored in this browser</dt>
+          <dd>Your Torn key and the War Room password, in this device's local storage. Nothing else.
+            Each has its own Forget button above.</dd>
+          <dt>Writes</dt>
+          <dd>Nothing in Torn, ever. No attacks, no clicks, no navigation, no page scraping, no
+            background watching, nothing to do with captcha. The only thing this page writes is a
+            line on the faction's own claim board.</dd>
+          <dt>FF and Est</dt>
+          <dd>Not here. Fair Fight and estimated stats keep coming from FFScouter in the Dibs
+            userscripts, which this page does not touch.</dd>
+        </dl>
+      </div>
+    </details>
+  </section>
+
+  <section class="panel" id="warPanel" hidden>
+    <div class="warbar">
+      <span class="who" id="warWho">&mdash;</span>
+      <span class="meta" id="warMeta"></span>
+      <span class="meta score" id="warScore"></span>
+    </div>
+  </section>
+
+  <section class="panel" id="targetPanel" hidden>
+    <div class="panel-head">
+      <h2>Targets</h2>
+      <p class="hint" id="targetHint"></p>
+    </div>
+    <div class="stale" id="staleBar" hidden></div>
+    <div id="targetHost"></div>
+  </section>
+
+  <details class="panel" id="advanced">
+    <summary>Advanced</summary>
+    <div class="panel-body">
+      <p class="msg note">Technical state, raw answers and the wipe control. Nothing here is needed
+        to take a target.</p>
+      <dl>
+        <dt>Claim server</dt><dd id="advServer" class="tid"></dd>
+        <dt>War ID</dt><dd id="advWar" class="tid"></dd>
+        <dt>Your Torn ID</dt><dd id="advMe" class="tid"></dd>
+        <dt>Claim board</dt><dd id="advClaims" class="tid"></dd>
+        <dt>Roster</dt><dd id="advRoster" class="tid"></dd>
+        <dt>Last refusal</dt><dd id="advError" class="tid"></dd>
+      </dl>
+      <div>
+        <label class="lbl">Last claim-board answer</label>
+        <pre class="raw" id="advRaw">&mdash;</pre>
+      </div>
+      <div class="toolbar">
+        <button type="button" class="btn danger small" id="wipeBtn" disabled>Wipe every claim in this war</button>
+        <span class="tid" id="wipeNote">Empties the whole war's claim board, for everyone in the faction.</span>
+      </div>
+    </div>
+  </details>
+
+  <footer>
+    <p>The claim server promises one thing: of two people calling the same target at the same
+      moment, exactly one is granted. It cannot know whose finger moved first &mdash; only which
+      request reached it first. This page therefore says who holds a target, never who was quicker.</p>
+    <p>The countdown beside a claim is this browser's estimate of the server's own clock. The server
+      sets the time and the server decides when a claim is over.</p>
+    <p>Reads through Torn's official API only. It never acts on your behalf.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var CLAIM_SERVER = 'https://ks-war-room-claims.hans-viklund.workers.dev';
+  var KEY_STORE = 'ks-leader-board-key';
+  var PASS_STORE = 'ks-war-room-pass';
+
+  var CLAIM_POLL_MS = 5000;    // the claim board changes every few seconds during a war
+  var ROSTER_POLL_MS = 30000;  // hospital and jail timers do not need more than this
+  var WAR_POLL_MS = 120000;    // which war is running changes twice a week, not twice a minute
+  var OWN_MEMBERS_MS = 300000; // our own names, used only to label a claim holder
+
+  var el = {};
+  ['apiKey','toggleKey','loadBtn','forgetKey','errorBox','okBox',
+   'passAsk','passSaid','warPass','passSave','passHave','passChange','passForget',
+   'warPanel','warWho','warMeta','warScore',
+   'targetPanel','targetHint','staleBar','targetHost',
+   'advServer','advWar','advMe','advClaims','advRoster','advError','advRaw','wipeBtn','wipeNote']
+    .forEach(function (id) { el[id] = document.getElementById(id); });
+
+  function read(store) { try { return localStorage.getItem(store) || ''; } catch (e) { return ''; } }
+  function write(store, value) {
+    try { if (value) localStorage.setItem(store, value); else localStorage.removeItem(store); }
+    catch (e) { /* storage blocked - the page still works, just not across reloads */ }
+  }
+
+  function show(box, message) { box.textContent = message; box.hidden = false; }
+  function hide(box) { box.textContent = ''; box.hidden = true; }
+
+  // =========================================================================
+  // ROSTER SOURCE - the only place that talks to Torn.
+  //
+  // Nothing outside this block reaches into it; it hands back plain objects
+  // through the narrow interface at the bottom. When the claim server later
+  // fetches Torn once for the whole faction, this block is the only thing that
+  // is replaced - the claim layer and the rendering never learn where the
+  // roster came from. Same boundary already agreed for FF and Est.
+  // =========================================================================
+
+  var Roster = (function () {
+    var identity = null;   // { playerId, factionId, name }
+    var war = null;        // { warId, opponentId, opponentName, ourScore, theirScore, state }
+    var targets = null;    // [ { id, name, level, state, until } ]
+    var ownNames = null;   // tornId -> name, our own faction, for labelling claim holders
+    var stamps = { identity: 0, war: 0, targets: 0, ownNames: 0 };
+    var lastError = '';
+
+    function key() { return el.apiKey.value.trim(); }
+
+    function describeError(code) {
+      if (code === 2) return 'Torn rejected the key. Check it was copied whole.';
+      if (code === 7) return 'Your faction position is not allowed to see this. That is a faction permission, not a key setting.';
+      if (code === 16) return 'The key is missing a selection this call needs (faction members, or faction wars).';
+      if (code === 13) return 'This key is disabled after seven days of account inactivity.';
+      if (code === 10) return 'The key owner is in federal jail, so the key cannot be used.';
+      if (code === 18) return 'This key has been paused by its owner.';
+      if (code === 5) return 'Too many calls in the last minute. Wait a moment and try again.';
+      if (code === 9) return 'Torn’s API is temporarily unavailable. Try again shortly.';
+      if (code === 17) return 'Torn is in a backend update. Try again in a minute.';
+      return 'Torn returned error ' + code + '.';
+    }
+
+    async function get(path) {
+      var k = key();
+      if (!k) throw new Error('No Torn key on this page yet.');
+      var joiner = path.indexOf('?') === -1 ? '?' : '&';
+      var response;
+      try {
+        response = await fetch('https://api.torn.com/v2' + path + joiner + 'comment=KSWarRoom',
+          { headers: { Authorization: 'ApiKey ' + k } });
+      } catch (networkFailure) {
+        throw new Error('Could not reach Torn.  [GET /v2' + path + ' — network or CORS failure]');
+      }
+      var payload = await response.json();
+      if (payload && payload.error) {
+        var error = new Error(describeError(payload.error.code) + '  [GET /v2' + path +
+          ' → Torn error ' + payload.error.code + ']');
+        error.tornCode = payload.error.code;
+        throw error;
+      }
+      return payload;
+    }
+
+    // A Torn ID is identity. A display name is presentation and is never turned
+    // into one - a row without a readable ID is dropped, never guessed at.
+    function tornId(value) {
+      if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) return String(value);
+      if (typeof value === 'string' && /^[0-9]{1,12}$/.test(value.trim()) && Number(value.trim()) > 0) {
+        return String(Number(value.trim()));
+      }
+      return '';
+    }
+
+    function text(value) { return typeof value === 'string' ? value : ''; }
+
+    function rowsOf(source) {
+      if (Array.isArray(source)) return source;
+      if (source && typeof source === 'object') {
+        return Object.keys(source).map(function (k) { return source[k]; });
+      }
+      return null;
+    }
+
+    async function loadIdentity() {
+      var payload = await get('/key/info');
+      var user = payload && payload.info && payload.info.user;
+      var playerId = user ? tornId(user.id) : '';
+      var factionId = user ? tornId(user.faction_id) : '';
+      if (!playerId) throw new Error('Torn did not return your own player ID, so DIBS stays off.');
+      identity = { playerId: playerId, factionId: factionId, name: user ? text(user.name) : '' };
+      stamps.identity = Date.now();
+      return identity;
+    }
+
+    async function loadWar() {
+      if (!identity) await loadIdentity();
+      var payload = await get('/faction/wars');
+      var wars = payload && payload.wars;
+      if (!wars || typeof wars !== 'object') {
+        throw new Error('The wars answer did not have the shape this page expects.');
+      }
+      stamps.war = Date.now();
+      var ranked = wars.ranked;
+      if (!ranked || typeof ranked !== 'object') { war = null; targets = null; return null; }
+
+      var now = Number(payload.timestamp) || Math.floor(Date.now() / 1000);
+      var warId = tornId(ranked.war_id);
+      var sides = Array.isArray(ranked.factions) ? ranked.factions : [];
+      var ours = null, theirs = null;
+      sides.forEach(function (side) {
+        var sideId = tornId(side && side.id);
+        if (!sideId) return;
+        if (sideId === identity.factionId) ours = side; else theirs = side;
+      });
+      var opponentId = theirs ? tornId(theirs.id) : '';
+      // No war ID or no opponent means no war this page will act on. It never
+      // falls back on an older war's ID.
+      if (!warId || !opponentId) { war = null; targets = null; return null; }
+
+      var start = Number(ranked.start) || 0;
+      var end = (ranked.end === null || ranked.end === undefined) ? null : Number(ranked.end);
+      var winner = (ranked.winner === undefined) ? null : ranked.winner;
+      var state = 'live';
+      if (winner !== null || (end !== null && end > 0 && now >= end)) state = 'over';
+      else if (start && now < start) state = 'prewar';
+
+      var changedWar = !war || war.warId !== warId;
+      war = {
+        warId: warId,
+        opponentId: opponentId,
+        opponentName: text(theirs && theirs.name) || ('Faction ' + opponentId),
+        ourName: text(ours && ours.name) || 'us',
+        ourScore: Number(ours && ours.score) || 0,
+        theirScore: Number(theirs && theirs.score) || 0,
+        start: start,
+        end: end,
+        state: state
+      };
+      if (changedWar) { targets = null; stamps.targets = 0; }
+      return war;
+    }
+
+    async function loadTargets() {
+      if (!war) return null;
+      var payload = await get('/faction/' + war.opponentId + '/members?striptags=true');
+      var rows = rowsOf(payload && payload.members);
+      if (!rows) throw new Error('The opponent member list did not have the shape this page expects.');
+      var out = [];
+      rows.forEach(function (row) {
+        if (!row || typeof row !== 'object') return;
+        var id = tornId(row.id !== undefined ? row.id : row.player_id);
+        if (!id) return; // no readable Torn ID: never shown as something to click
+        var status = (row.status && typeof row.status === 'object') ? row.status : {};
+        out.push({
+          id: id,
+          name: text(row.name) || ('#' + id),
+          level: Number(row.level) || 0,
+          state: text(status.state),
+          until: Number(status.until) || 0
+        });
+      });
+      targets = out;
+      stamps.targets = Date.now();
+      return targets;
+    }
+
+    async function loadOwnNames() {
+      var payload = await get('/faction/members?striptags=true');
+      var rows = rowsOf(payload && payload.members);
+      if (!rows) return null;
+      var map = {};
+      rows.forEach(function (row) {
+        if (!row || typeof row !== 'object') return;
+        var id = tornId(row.id !== undefined ? row.id : row.player_id);
+        if (id) map[id] = text(row.name) || ('#' + id);
+      });
+      ownNames = map;
+      stamps.ownNames = Date.now();
+      return map;
+    }
+
+    return {
+      identity: function () { return identity; },
+      war: function () { return war; },
+      targets: function () { return targets; },
+      nameOf: function (id) { return (ownNames && ownNames[id]) || ''; },
+      stamps: function () { return stamps; },
+      lastError: function () { return lastError; },
+      setError: function (message) { lastError = message || ''; },
+      loadIdentity: loadIdentity,
+      loadWar: loadWar,
+      loadTargets: loadTargets,
+      loadOwnNames: loadOwnNames,
+      forget: function () {
+        identity = null; war = null; targets = null; ownNames = null;
+        stamps = { identity: 0, war: 0, targets: 0, ownNames: 0 };
+        lastError = '';
+      }
+    };
+  })();
+
+  // ============================================== ROSTER SOURCE ends here ===
+
+  // ------------------------------------------------------------ claim layer
+
+  var Claims = (function () {
+    // board is null whenever the server has not just confirmed the picture.
+    // Nothing refills it from memory: a stale board that looks fresh is exactly
+    // how two members end up on one target.
+    var board = null;
+    var status = 'idle';   // idle | ok | offline | unauthorized
+    var lastError = '';
+    var lastRaw = '';
+
+    function password() { return read(PASS_STORE); }
+
+    async function call(method, warId, op, body) {
+      var pass = password();
+      if (!pass) {
+        board = null; status = 'idle';
+        throw new Error('No War Room password on this device yet.');
+      }
+      var init = { method: method, headers: { 'X-KS-Auth': pass } };
+      if (body) {
+        init.headers['Content-Type'] = 'application/json';
+        init.body = JSON.stringify(body);
+      }
+      var response;
+      try {
+        response = await fetch(CLAIM_SERVER + '/war/' + encodeURIComponent(warId) + '/' + op, init);
+      } catch (networkFailure) {
+        board = null; status = 'offline';
+        lastError = 'The claim server could not be reached.';
+        lastRaw = JSON.stringify({ op: op, result: 'no answer' }, null, 2);
+        throw new Error(lastError);
+      }
+      var payload = null;
+      try { payload = await response.json(); } catch (e) { payload = null; }
+      // The password is not part of this and never will be.
+      lastRaw = JSON.stringify({ op: op, http: response.status, body: payload }, null, 2);
+
+      if (response.status === 401) {
+        // 401 says exactly one thing: the word was not accepted. Nothing else
+        // is guessed from it.
+        board = null; status = 'unauthorized';
+        lastError = 'The claim server did not accept the War Room password.';
+        var refusal = new Error(lastError);
+        refusal.unauthorized = true;
+        throw refusal;
+      }
+      if (!payload || typeof payload !== 'object') {
+        board = null; status = 'offline';
+        lastError = 'The claim server answered something this page cannot read.';
+        throw new Error(lastError);
+      }
+      return { http: response.status, body: payload };
+    }
+
+    async function refresh(warId) {
+      var result = await call('GET', warId, 'claims', null);
+      var body = result.body;
+      if (result.http !== 200 || body.ok !== true || !Array.isArray(body.claims)) {
+        board = null; status = 'offline';
+        lastError = 'The claim server could not say who holds what' +
+          (typeof body.error === 'string' ? ' (' + body.error + ')' : '') + '.';
+        throw new Error(lastError);
+      }
+      var claims = {};
+      body.claims.forEach(function (claim) {
+        if (claim && typeof claim.targetId === 'string' && typeof claim.memberId === 'string') {
+          claims[claim.targetId] = claim;
+        }
+      });
+      // Targets the server said it cannot read. They are shown as UNKNOWN and
+      // are never takeable - never as free.
+      var unreadable = {};
+      if (Array.isArray(body.unreadable)) {
+        body.unreadable.forEach(function (entry) {
+          if (entry && typeof entry.targetId === 'string') unreadable[entry.targetId] = true;
+        });
+      }
+      board = {
+        claims: claims,
+        unreadable: unreadable,
+        degraded: body.degraded === true,
+        serverTime: Number(body.serverTime) || 0,
+        ttl: Number(body.claimTtlSeconds) || 0,
+        receivedAt: Date.now()
+      };
+      status = 'ok';
+      lastError = '';
+      return board;
+    }
+
+    return {
+      board: function () { return board; },
+      status: function () { return status; },
+      lastError: function () { return lastError; },
+      lastRaw: function () { return lastRaw; },
+      hasPassword: function () { return password() !== ''; },
+      drop: function () { board = null; status = 'idle'; },
+      refresh: refresh,
+      claim: function (warId, targetId, memberId) {
+        return call('POST', warId, 'claim', { targetId: targetId, memberId: memberId });
+      },
+      unclaim: function (warId, targetId, memberId) {
+        return call('POST', warId, 'unclaim', { targetId: targetId, memberId: memberId });
+      },
+      wipe: function (warId, memberId) {
+        return call('POST', warId, 'wipe', { memberId: memberId });
+      }
+    };
+  })();
+
+  // ------------------------------------------------------------------- view
+
+  function passRender() {
+    var have = Claims.hasPassword();
+    el.passHave.hidden = !have;
+    el.passAsk.hidden = have;
+  }
+
+  function passRejected() {
+    write(PASS_STORE, '');
+    Claims.drop();
+    el.warPass.value = '';
+    el.passSaid.textContent = 'That word was not accepted. Type it again, or ask Kingshade for the ' +
+      'one the faction is using now.';
+    el.passSaid.hidden = false;
+    passRender();
+  }
+
+  // The server owns the clock. This is the browser's guess at how much of the
+  // server's window is left. It is drawn as a guess and is never used to decide
+  // that a claim is over - only the server decides that.
+  function estimateLeft(claim, board) {
+    if (!claim || !board || !board.serverTime) return null;
+    var elapsed = Date.now() - board.receivedAt;
+    var left = claim.expiresAt - board.serverTime - elapsed;
+    return left > 0 ? left : 0;
+  }
+
+  function leftText(ms) {
+    if (ms === null) return '';
+    var seconds = Math.round(ms / 1000);
+    if (seconds <= 0) return 'about to lapse';
+    if (seconds < 60) return '~' + seconds + 's left';
+    return '~' + Math.floor(seconds / 60) + 'm ' + (seconds % 60) + 's left';
+  }
+
+  function statusPill(target) {
+    var span = document.createElement('span');
+    var state = target.state || 'Unknown';
+    var left = target.until ? target.until - Math.floor(Date.now() / 1000) : 0;
+    if (state === 'Okay') { span.className = 'pill good'; span.textContent = 'Okay'; return span; }
+    span.className = state === 'Hospital' ? 'pill bad' : (state === 'Jail' ? 'pill warn' : 'pill');
+    span.textContent = state + (left > 0 ? ' ' + (left < 60 ? left + 's' : Math.ceil(left / 60) + 'm') : '');
+    return span;
+  }
+
+  var pendingTarget = '';
+
+  function renderTargets() {
+    var war = Roster.war();
+    var targets = Roster.targets();
+    var board = Claims.board();
+    var claimStatus = Claims.status();
+    var me = Roster.identity() ? Roster.identity().playerId : '';
+
+    el.targetPanel.hidden = !targets;
+    if (!targets) return;
+
+    var boardUsable = claimStatus === 'ok' && !!board;
+    var canClaim = !!(war && war.state === 'live' && me && boardUsable);
+
+    var hint = [targets.length + ' on their roster'];
+    if (!me) hint.push('your own Torn ID could not be read, so DIBS is off');
+    else if (!war || war.state !== 'live') hint.push('no live war, so DIBS is off');
+    else if (claimStatus === 'unauthorized') hint.push('the password was not accepted, so DIBS is off');
+    else if (claimStatus === 'idle') hint.push('no War Room password yet, so DIBS is locked');
+    else if (claimStatus !== 'ok') hint.push('the claim board is not answering');
+    else if (board && board.degraded) hint.push('the server could not read every claim');
+    el.targetHint.textContent = hint.join(' · ');
+
+    var table = document.createElement('table');
+    var thead = document.createElement('thead');
+    var headRow = document.createElement('tr');
+    ['Target', 'Level', 'Status', 'DIBS', ''].forEach(function (label) {
+      var th = document.createElement('th');
+      th.textContent = label;
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    var tbody = document.createElement('tbody');
+
+    targets.forEach(function (target) {
+      var tr = document.createElement('tr');
+
+      var tdName = document.createElement('td');
+      var name = document.createElement('div');
+      name.className = 'tname';
+      var link = document.createElement('a');
+      link.href = 'https://www.torn.com/profiles.php?XID=' + target.id;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = target.name;
+      name.appendChild(link);
+      var idLine = document.createElement('div');
+      idLine.className = 'tid';
+      idLine.textContent = target.id;
+      tdName.appendChild(name);
+      tdName.appendChild(idLine);
+
+      var tdLevel = document.createElement('td');
+      tdLevel.className = 'tid';
+      tdLevel.textContent = target.level ? String(target.level) : '';
+
+      var tdStatus = document.createElement('td');
+      tdStatus.appendChild(statusPill(target));
+
+      var tdDibs = document.createElement('td');
+      var tdAct = document.createElement('td');
+
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn small';
+      button.textContent = 'Take DIBS';
+      button.disabled = true;
+
+      if (!boardUsable) {
+        // Never the last known list. Either the server just said it, or the
+        // column says it does not know.
+        if (claimStatus === 'offline') {
+          tdDibs.className = 'dibs offline';
+          tdDibs.textContent = 'Offline';
+        } else {
+          tdDibs.className = 'dibs locked';
+          tdDibs.textContent = 'Locked';
+        }
+        tr.className = 'blocked';
+      } else if (board.unreadable[target.id]) {
+        tdDibs.className = 'dibs unknown';
+        tdDibs.textContent = 'Unknown';
+        tr.className = 'blocked';
+      } else {
+        var claim = board.claims[target.id];
+        if (claim) {
+          var mine = claim.memberId === me;
+          var holder = mine ? 'you' : (Roster.nameOf(claim.memberId) || ('Torn ' + claim.memberId));
+          tdDibs.className = 'dibs';
+          var who = document.createElement('div');
+          who.className = 'holder';
+          who.textContent = 'Taken by ' + holder;
+          var left = document.createElement('div');
+          left.className = 'left';
+          left.textContent = leftText(estimateLeft(claim, board));
+          tdDibs.appendChild(who);
+          tdDibs.appendChild(left);
+          if (mine) {
+            tr.className = 'mine';
+            button.textContent = 'Release';
+            button.disabled = !canClaim;
+            button.onclick = function () { act('unclaim', target.id); };
+          } else {
+            button.textContent = 'Taken';
+          }
+        } else {
+          tdDibs.className = 'dibs free';
+          tdDibs.textContent = 'Free';
+          button.className = 'btn small primary';
+          button.disabled = !canClaim;
+          button.onclick = function () { act('claim', target.id); };
+        }
+      }
+
+      if (pendingTarget === target.id) { button.disabled = true; button.textContent = '…'; }
+      tdAct.appendChild(button);
+
+      tr.appendChild(tdName);
+      tr.appendChild(tdLevel);
+      tr.appendChild(tdStatus);
+      tr.appendChild(tdDibs);
+      tr.appendChild(tdAct);
+      tbody.appendChild(tr);
+    });
+
+    table.appendChild(tbody);
+    el.targetHost.textContent = '';
+    el.targetHost.appendChild(table);
+
+    var readAt = Roster.stamps().targets;
+    if (readAt && Date.now() - readAt > ROSTER_POLL_MS * 3) {
+      el.staleBar.hidden = false;
+      el.staleBar.textContent = 'Roster is stale. Last read from Torn at ' +
+        new Date(readAt).toLocaleTimeString() + ' — the levels and hospital times below are ' +
+        'from then, not from now.';
+    } else {
+      el.staleBar.hidden = true;
+    }
+  }
+
+  function renderWar() {
+    var identity = Roster.identity();
+    var war = Roster.war();
+    el.warPanel.hidden = !identity;
+    if (!identity) return;
+    if (!war) {
+      el.warWho.textContent = 'No Ranked War running';
+      el.warMeta.textContent = 'Torn reports no ranked war for this faction right now, so there is ' +
+        'nothing to call.';
+      el.warScore.textContent = '';
+      return;
+    }
+    el.warWho.textContent = 'vs ' + war.opponentName;
+    el.warMeta.textContent = (war.state === 'live' ? 'War is live'
+      : war.state === 'prewar' ? 'War has not started yet — DIBS stays off until it does'
+      : 'War is over — DIBS stays off') + ' · war ' + war.warId;
+    el.warScore.textContent = war.ourScore + ' – ' + war.theirScore;
+  }
+
+  function renderAdvanced() {
+    var war = Roster.war();
+    var identity = Roster.identity();
+    var board = Claims.board();
+    el.advServer.textContent = CLAIM_SERVER;
+    el.advWar.textContent = war ? war.warId : 'none';
+    el.advMe.textContent = identity ? identity.playerId : 'not established';
+    el.advClaims.textContent = Claims.status() + (board
+      ? ' · ' + Object.keys(board.claims).length + ' held · degraded=' + board.degraded +
+        ' · ttl=' + board.ttl + 's · read ' + new Date(board.receivedAt).toLocaleTimeString()
+      : ' · no board held');
+    el.advRoster.textContent = Roster.stamps().targets
+      ? (Roster.targets() || []).length + ' rows · read ' +
+        new Date(Roster.stamps().targets).toLocaleTimeString()
+      : 'not loaded';
+    el.advError.textContent = Claims.lastError() || Roster.lastError() || 'none';
+    el.advRaw.textContent = Claims.lastRaw() || '—';
+    el.wipeBtn.disabled = !(war && identity && Claims.hasPassword());
+  }
+
+  function render() {
+    passRender();
+    renderWar();
+    renderTargets();
+    renderAdvanced();
+  }
+
+  // ---------------------------------------------------------------- actions
+
+  async function act(op, targetId) {
+    var war = Roster.war();
+    var identity = Roster.identity();
+    if (!war || !identity) return;
+    hide(el.errorBox); hide(el.okBox);
+    pendingTarget = targetId;
+    render();
+    try {
+      var result = op === 'claim'
+        ? await Claims.claim(war.warId, targetId, identity.playerId)
+        : await Claims.unclaim(war.warId, targetId, identity.playerId);
+      var body = result.body;
+
+      if (result.http === 200 && body.ok === true) {
+        if (body.status === 'claimed' || body.status === 'renewed') {
+          show(el.okBox, 'You hold ' + targetId + '.');
+        } else {
+          show(el.okBox, targetId + ' is free again.');
+        }
+      } else if (result.http === 409 && body.status === 'taken') {
+        // Who holds it. Not who was quicker - the server cannot know that.
+        var holder = body.claim && body.claim.memberId;
+        show(el.errorBox, targetId + ' is held by ' +
+          (holder === identity.playerId ? 'you' : (Roster.nameOf(holder) || ('Torn ' + holder))) + '.');
+      } else if (result.http === 409 && body.status === 'not_owner') {
+        var other = body.claim && body.claim.memberId;
+        show(el.errorBox, targetId + ' is held by ' +
+          (Roster.nameOf(other) || ('Torn ' + other)) + ' and was not released.');
+      } else if (result.http === 409 && body.status === 'unreadable') {
+        show(el.errorBox, 'The server cannot read who holds ' + targetId +
+          ', so it will not hand it out. Leave that one alone.');
+      } else {
+        show(el.errorBox, 'The claim server refused this: ' +
+          (body.error || body.status || ('HTTP ' + result.http)) + '.');
+      }
+    } catch (error) {
+      if (error.unauthorized) passRejected();
+      else show(el.errorBox, error.message);
+    } finally {
+      pendingTarget = '';
+      await pollClaims();
+      render();
+    }
+  }
+
+  var wipeArmed = false;
+  var wipeIdle = 'Wipe every claim in this war';
+
+  el.wipeBtn.addEventListener('click', async function () {
+    var war = Roster.war();
+    var identity = Roster.identity();
+    if (!war || !identity) return;
+    if (!wipeArmed) {
+      wipeArmed = true;
+      el.wipeBtn.textContent = 'Confirm: wipe war ' + war.warId;
+      el.wipeNote.textContent = 'This empties the whole war board for the entire faction, not just ' +
+        'your own claims. Click again within six seconds to do it.';
+      setTimeout(function () {
+        wipeArmed = false;
+        el.wipeBtn.textContent = wipeIdle;
+        el.wipeNote.textContent = 'Empties the whole war’s claim board, for everyone in the faction.';
+      }, 6000);
+      return;
+    }
+    wipeArmed = false;
+    el.wipeBtn.textContent = wipeIdle;
+    hide(el.errorBox); hide(el.okBox);
+    try {
+      var result = await Claims.wipe(war.warId, identity.playerId);
+      if (result.http === 200 && result.body.ok === true) {
+        show(el.okBox, 'Wiped. The server removed ' + result.body.removed + ' claims from war ' + war.warId + '.');
+      } else {
+        show(el.errorBox, 'The claim server refused the wipe: ' +
+          (result.body.error || result.body.status || ('HTTP ' + result.http)) + '.');
+      }
+    } catch (error) {
+      if (error.unauthorized) passRejected();
+      else show(el.errorBox, error.message);
+    }
+    await pollClaims();
+    render();
+  });
+
+  // ---------------------------------------------------------------- polling
+
+  async function pollClaims() {
+    var war = Roster.war();
+    if (!war || !Claims.hasPassword()) { Claims.drop(); return; }
+    try {
+      await Claims.refresh(war.warId);
+    } catch (error) {
+      if (error.unauthorized) passRejected();
+      // Any other failure has already dropped the board. The column says so.
+    }
+  }
+
+  async function loadAll() {
+    hide(el.errorBox); hide(el.okBox);
+    var key = el.apiKey.value.trim();
+    if (!key) { show(el.errorBox, 'Paste your Torn key first.'); return; }
+    write(KEY_STORE, key);
+    el.loadBtn.disabled = true;
+    el.loadBtn.textContent = 'Loading';
+    try {
+      await Roster.loadIdentity();
+      await Roster.loadWar();
+      if (Roster.war()) {
+        await Roster.loadTargets();
+        try { await Roster.loadOwnNames(); } catch (e) { /* names are decoration, not identity */ }
+        await pollClaims();
+      }
+      Roster.setError('');
+    } catch (error) {
+      Roster.setError(error.message);
+      show(el.errorBox, error.message);
+    } finally {
+      el.loadBtn.disabled = false;
+      el.loadBtn.textContent = 'Load the war';
+      render();
+    }
+  }
+
+  async function tick() {
+    if (!Roster.identity()) return;
+    var now = Date.now();
+    var stamps = Roster.stamps();
+    try {
+      if (now - stamps.war > WAR_POLL_MS) await Roster.loadWar();
+      if (Roster.war() && now - Roster.stamps().targets > ROSTER_POLL_MS) await Roster.loadTargets();
+      if (Roster.war() && now - Roster.stamps().ownNames > OWN_MEMBERS_MS) {
+        try { await Roster.loadOwnNames(); } catch (e) { /* decoration only */ }
+      }
+      Roster.setError('');
+    } catch (error) {
+      // The rows already on screen stay, and the stale bar says how old they
+      // are. Nothing old is ever redrawn as if it were current.
+      Roster.setError(error.message);
+    }
+    await pollClaims();
+    render();
+  }
+
+  // ----------------------------------------------------------------- wiring
+
+  el.toggleKey.addEventListener('click', function () {
+    var showing = el.apiKey.type === 'text';
+    el.apiKey.type = showing ? 'password' : 'text';
+    el.toggleKey.textContent = showing ? 'Show' : 'Hide';
+    el.toggleKey.setAttribute('aria-pressed', showing ? 'false' : 'true');
+  });
+
+  el.loadBtn.addEventListener('click', loadAll);
+  el.apiKey.addEventListener('keydown', function (e) { if (e.key === 'Enter') loadAll(); });
+
+  el.forgetKey.addEventListener('click', function () {
+    write(KEY_STORE, '');
+    el.apiKey.value = '';
+    Roster.forget();
+    Claims.drop();
+    el.targetPanel.hidden = true;
+    el.warPanel.hidden = true;
+    show(el.okBox, 'Torn key removed from this browser.');
+    render();
+  });
+
+  el.passSave.addEventListener('click', function () {
+    var value = el.warPass.value;
+    if (!value) {
+      el.passSaid.textContent = 'Nothing typed yet.';
+      el.passSaid.hidden = false;
+      return;
+    }
+    write(PASS_STORE, value);
+    // Emptied at once. The word is never put back into the box, never written
+    // into the page and never logged.
+    el.warPass.value = '';
+    el.passSaid.hidden = true;
+    passRender();
+    pollClaims().then(render);
+  });
+  el.warPass.addEventListener('keydown', function (e) { if (e.key === 'Enter') el.passSave.click(); });
+
+  el.passChange.addEventListener('click', function () {
+    write(PASS_STORE, '');
+    Claims.drop();
+    el.passSaid.hidden = true;
+    passRender();
+    el.warPass.focus();
+    render();
+  });
+
+  el.passForget.addEventListener('click', function () {
+    write(PASS_STORE, '');
+    Claims.drop();
+    el.passSaid.hidden = true;
+    passRender();
+    show(el.okBox, 'War Room password removed from this browser.');
+    render();
+  });
+
+  var storedKey = read(KEY_STORE);
+  if (storedKey) el.apiKey.value = storedKey;
+  render();
+  if (storedKey) loadAll();
+
+  setInterval(tick, CLAIM_POLL_MS);
+  // Only redraws the estimate beside a claim the server has already confirmed.
+  setInterval(function () { if (Claims.board()) renderTargets(); }, 1000);
+})();
+</script>
+</body>
+</html>
