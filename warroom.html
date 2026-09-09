@@ -524,7 +524,7 @@
   // through the narrow interface at the bottom. When the claim server later
   // fetches Torn once for the whole faction, this block is the only thing that
   // is replaced - the claim layer and the rendering never learn where the
-  // roster came from. FF and Est sit behind the same kind of wall: ffSource,
+  // roster came from. FF and Est sit behind the same kind of wall: statSource,
   // just below.
   // =========================================================================
 
@@ -731,7 +731,7 @@
   // would look current and be old, and the page reads again within seconds.
   // =========================================================================
 
-  var ffSource = (function () {
+  var statSource = (function () {
     var cache = {};        // tornId -> { value: { ff, est, estText, updated }, fetchedAt, source, schemaVersion }
     var fetchedAt = 0;     // when the last successful read arrived; 0 until one has
     var lastError = '';
@@ -1075,7 +1075,7 @@
       td.textContent = 'CHECKING';
       return td;
     }
-    var row = columnState === 'error' ? null : ffSource.get(target.id);
+    var row = columnState === 'error' ? null : statSource.get(target.id);
     var value = (row && row.state === 'ok') ? (kind === 'ff' ? row.ff : row.estText) : null;
     if (value === null) {
       td.className = 'ffcell word unknown';
@@ -1093,10 +1093,10 @@
   function renderFfBar(rows, columnState) {
     var text = '';
     if (columnState === 'error') {
-      text = 'FF and EST are off. ' + (ffSource.lastError() || 'The source did not answer.') +
+      text = 'FF and EST are off. ' + (statSource.lastError() || 'The source did not answer.') +
         ' Both columns show UNKNOWN until the next read succeeds.';
     } else if (columnState === 'stale' && rows.length) {
-      var readAt = ffSource.get(rows[0].id).fetchedAt;
+      var readAt = statSource.get(rows[0].id).fetchedAt;
       var when = readAt ? new Date(readAt).toLocaleTimeString() : 'an unknown time';
       text = (readAt && Date.now() - readAt > FF_DROP_MS)
         ? 'FF and EST were last read from FFScouter at ' + when + ', more than thirty minutes ' +
@@ -1113,7 +1113,7 @@
   // does nothing would look like a broken page.
   function ffKeyRender() {
     var typed = el.ffKey.value.trim();
-    var wrong = typed !== '' && !ffSource.hasKey();
+    var wrong = typed !== '' && !statSource.hasKey();
     el.ffSaid.textContent = wrong
       ? 'That does not look like an FFScouter key (16 letters and digits), so FF and EST stay ' +
         'empty. Nothing was sent.'
@@ -1124,13 +1124,13 @@
   // For the Advanced panel: the column's state and how many rows have a
   // figure. The key is not part of this and never will be.
   function ffAdvancedLine() {
-    var columnState = ffSource.state();
+    var columnState = statSource.state();
     var targets = Roster.targets() || [];
     if (columnState === 'nokey') return 'no FFScouter key on this page';
-    if (columnState === 'error') return 'error · ' + (ffSource.lastError() || 'no detail');
+    if (columnState === 'error') return 'error · ' + (statSource.lastError() || 'no detail');
     var readAt = 0, withFf = 0, withEst = 0;
     targets.forEach(function (target) {
-      var row = ffSource.get(target.id);
+      var row = statSource.get(target.id);
       if (row.fetchedAt) readAt = row.fetchedAt;
       if (row.ff !== null) withFf += 1;
       if (row.est !== null) withEst += 1;
@@ -1147,7 +1147,7 @@
   // roster array is never sorted in place.
   //
   // FF and EST are one entry each in COLUMNS, like the rest. Their values come
-  // through ffSource, and a row that has none sits last whichever way the list
+  // through statSource, and a row that has none sits last whichever way the list
   // is turned; numberCompare below is what keeps it there.
 
   var STATE_RANK = { Okay: 1, Hospital: 2, Traveling: 3, Abroad: 4, Federal: 5 };
@@ -1193,9 +1193,9 @@
     { id: 'level', label: 'Level',
       compare: function (a, b) { return (a.level || 0) - (b.level || 0); } },
     { id: 'ff', label: 'FF',
-      compare: function (a, b, ctx) { return numberCompare(ffSource.get(a.id).ff, ffSource.get(b.id).ff, ctx); } },
+      compare: function (a, b, ctx) { return numberCompare(statSource.get(a.id).ff, statSource.get(b.id).ff, ctx); } },
     { id: 'est', label: 'EST',
-      compare: function (a, b, ctx) { return numberCompare(ffSource.get(a.id).est, ffSource.get(b.id).est, ctx); } },
+      compare: function (a, b, ctx) { return numberCompare(statSource.get(a.id).est, statSource.get(b.id).est, ctx); } },
     { id: 'status', label: 'Status',
       compare: function (a, b) {
         var byState = stateRank(a) - stateRank(b);
@@ -1286,7 +1286,7 @@
     var rows = sortRows(targets, { boardUsable: boardUsable, board: board, me: me,
       dir: sortState ? sortState.dir : 'asc' });
     // Decided once for the whole column; each cell then reads its own row.
-    var ffState = ffSource.state();
+    var ffState = statSource.state();
     var table = document.createElement('table');
     var thead = document.createElement('thead');
     var headRow = document.createElement('tr');
@@ -1741,7 +1741,7 @@
     if (signature === ffLastIds && now - ffLastAttempt < FF_POLL_MS) return;
     ffLastAttempt = now;
     ffLastIds = signature;
-    await ffSource.refresh(ids);
+    await statSource.refresh(ids);
     renderTargets();
     renderAdvanced();
   }
@@ -1819,7 +1819,7 @@
     ffLastAttempt = 0;
     ffLastIds = '';
     // No key on the page now, so this empties the cache and sends nothing.
-    ffSource.refresh([]);
+    statSource.refresh([]);
     show(el.okBox, 'FFScouter key removed from this browser.');
     render();
   });
