@@ -498,6 +498,14 @@
   var FF_STALE_MS = 900000;    // FF and EST older than 15 minutes are marked stale
   var FF_DROP_MS = 1800000;    // older than 30 minutes they are dropped and the cells say UNKNOWN
 
+  // The span of Fair Fight a member may call a target inside. Both ends count:
+  // a target sitting exactly on either end is allowed. These two lines are the
+  // only place the figures are written - the wording on the page reads them
+  // from here rather than repeating them, so moving the span moves every text
+  // with it, and searching the file for either figure finds one line.
+  var FF_CLAIM_MIN = 2.00;
+  var FF_CLAIM_MAX = 5.00;
+
   var el = {};
   ['apiKey','toggleKey','loadBtn','forgetKey','errorBox','okBox',
    'ffKey','toggleFfKey','forgetFfKey','ffSaid','ffBar',
@@ -1088,13 +1096,61 @@
     return td;
   }
 
+  // The span, written out from the constants. The figures are never typed into
+  // a string anywhere on this page.
+  function ffRangeText() {
+    return FF_CLAIM_MIN.toFixed(2) + '-' + FF_CLAIM_MAX.toFixed(2);
+  }
+
+  // May this member call this target, as far as his own Fair Fight goes?
+  // Three answers - 'ok', 'out_of_range', 'unknown' - and the row asks once.
+  //
+  // The limit sits in the page and not in the server, and that is a decision,
+  // not an oversight. The server holds no FF and has no way to get one without
+  // fetching FFScouter itself, which would tear down the line statSource is
+  // drawn along: one place reads FF, everything else asks it a question. The
+  // owner took the call on 2026-09-10 on the ground that there is no sabotage
+  // risk inside the faction. Do not "correct" this into the server.
+  //
+  // Fail closed. Anything that is not a figure this page has actually read -
+  // no key, first read still out, the source failed, or a value already dropped
+  // for being older than FF_DROP_MS - is 'unknown', and 'unknown' does not
+  // claim. Stale but under FF_DROP_MS does claim: battle stats move slowly and
+  // the page already drops the figure at thirty minutes, so the limit follows
+  // that lifetime instead of inventing a second one. Owner's decision,
+  // 2026-09-10.
+  //
+  // No request goes out from here. It reads the same cache the FF cell on this
+  // very row has just read.
+  function ffAllowsClaim(targetId) {
+    var columnState = statSource.state();
+    if (columnState === 'nokey' || columnState === 'checking' || columnState === 'error') {
+      return 'unknown';
+    }
+    var row = statSource.get(targetId);
+    if (!row || row.state !== 'ok' || row.ff === null) return 'unknown';
+    // Compared on the same two decimals the FF cell prints. A row showing the
+    // lower end in one column and refusing in the next, because the figure
+    // behind it is a shade under, would be the page contradicting itself on
+    // one line.
+    var shown = Number(row.ff.toFixed(2));
+    return (shown >= FF_CLAIM_MIN && shown <= FF_CLAIM_MAX) ? 'ok' : 'out_of_range';
+  }
+
   // The line above the list that says why FF and EST are not simply there.
-  // Silent when they are, and silent when there is no key: neither is a fault.
+  // Silent when they are. No longer silent when there is no key: the FF range
+  // now decides what may be called, so a missing key is a blockage and not
+  // merely two empty columns.
   function renderFfBar(rows, columnState) {
     var text = '';
-    if (columnState === 'error') {
+    if (columnState === 'nokey') {
+      text = 'DIBS needs your FF. Paste your FFScouter key above - without it the page cannot ' +
+        'check that a target is inside your FF range (' + ffRangeText() + '), so no target can ' +
+        'be called. Everything else on this page works as usual.';
+    } else if (columnState === 'error') {
       text = 'FF and EST are off. ' + (statSource.lastError() || 'The source did not answer.') +
-        ' Both columns show UNKNOWN until the next read succeeds.';
+        ' Both columns show UNKNOWN until the next read succeeds.' +
+        ' No target can be called until FF can be read again.';
     } else if (columnState === 'stale' && rows.length) {
       var readAt = statSource.get(rows[0].id).fetchedAt;
       var when = readAt ? new Date(readAt).toLocaleTimeString() : 'an unknown time';
@@ -1347,6 +1403,9 @@
 
       var tdFf = ffCell(target, 'ff', ffState);
       var tdEst = ffCell(target, 'est', ffState);
+      // Asked once for the row and read twice below: by the free branch and by
+      // the simulation button at the end of the row.
+      var ffSays = ffAllowsClaim(target.id);
 
       var tdStatus = document.createElement('td');
       tdStatus.appendChild(statusPill(target));
@@ -1408,8 +1467,24 @@
           dibsState.className = 'dibs free';
           dibsState.textContent = 'Free';
           button.className = 'btn small primary';
-          button.disabled = !canClaim;
-          button.onclick = function () { act('claim', target.id); };
+          if (ffSays === 'ok') {
+            button.disabled = !canClaim;
+            button.onclick = function () { act('claim', target.id); };
+          } else {
+            // The word stays Free, because the target is free: another member
+            // with another FF may take it. FF is personal - two members see
+            // different figures on the same row, and that is right. Saying
+            // Taken here would be the page telling a lie about the board.
+            var ffWhy = document.createElement('div');
+            ffWhy.className = 'left';
+            ffWhy.textContent = ffSays === 'out_of_range'
+              ? 'Outside your FF range (' + ffRangeText() + ')'
+              : 'FF unknown - cannot check';
+            dibsState.appendChild(ffWhy);
+            // No handler is attached at all, rather than a live one behind a
+            // disabled button.
+            button.disabled = true;
+          }
         }
       }
 
@@ -1426,7 +1501,10 @@
         other.className = 'btn small';
         other.textContent = 'Take as other';
         var free = boardUsable && !board.unreadable[target.id] && !board.claims[target.id];
-        other.disabled = !(canClaim && free) || pendingTarget === target.id;
+        // The FF range holds here too. Taking a target in somebody else's name
+        // must not be the way around the check, or the check is a door with a
+        // window beside it.
+        other.disabled = !(canClaim && free && ffSays === 'ok') || pendingTarget === target.id;
         if (!other.disabled) {
           other.onclick = function () { act('claim', target.id, SIM_OTHER_ID); };
         }
