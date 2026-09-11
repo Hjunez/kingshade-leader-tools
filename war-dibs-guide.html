@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ranked War DIBS guide</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground: #eaedf1; --surface: #ffffff; --surface-2: #f4f6f9;
+    --ink: #14202b; --muted: #5c6d7e; --faint: #8b9aa8;
+    --line: #d3dae1; --line-strong: #b8c3cd;
+    --accent: #a3512a; --accent-ink: #ffffff; --accent-soft: #f2ded4;
+    --good: #1c7355; --good-soft: #dfeee8;
+    --stop: #b3453e; --warn: #8a6410;
+    --shadow: 0 1px 2px rgba(20,32,43,.06), 0 8px 24px rgba(20,32,43,.06);
+    --shadow-lift: 0 2px 4px rgba(20,32,43,.08), 0 14px 34px rgba(20,32,43,.12);
+    --display: 'Saira Condensed','Arial Narrow',Helvetica,sans-serif;
+    --body: 'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
+    --mono: 'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+      --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+      --line: #26313b; --line-strong: #35434f;
+      --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+      --good: #46a583; --good-soft: #172a24;
+      --stop: #e0796f; --warn: #d0a545;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+      --shadow-lift: 0 2px 4px rgba(0,0,0,.5), 0 14px 34px rgba(0,0,0,.45);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+    --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+    --line: #26313b; --line-strong: #35434f;
+    --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+    --good: #46a583; --good-soft: #172a24;
+    --stop: #e0796f; --warn: #d0a545;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+    --shadow-lift: 0 2px 4px rgba(0,0,0,.5), 0 14px 34px rgba(0,0,0,.45);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 44px 20px 72px;
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+  }
+
+  .masthead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px 24px;
+    padding-bottom: 20px;
+    border-bottom: 2px solid var(--line-strong);
+  }
+
+  .eyebrow {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 4px;
+  }
+
+  h1 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(34px, 6vw, 52px);
+    line-height: 1;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .masthead p.sub { margin: 10px 0 0; color: var(--muted); max-width: 54ch; }
+
+  .stamp {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: .04em;
+    color: var(--faint);
+    border: 1px solid var(--line-strong);
+    border-radius: 2px;
+    padding: 5px 9px;
+    white-space: nowrap;
+  }
+
+  h2 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 14px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 14px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 16px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    box-shadow: var(--shadow);
+    padding: 22px 22px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    color: inherit;
+    position: relative;
+  }
+
+  .card .name {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 25px;
+    line-height: 1.08;
+    letter-spacing: .01em;
+  }
+
+  .card .what { color: var(--muted); font-size: 14px; }
+
+  .tag {
+    align-self: flex-end;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    padding: 3px 7px;
+    border-radius: 2px;
+    background: var(--good-soft);
+    color: var(--good);
+  }
+
+  .ver {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: .04em;
+    color: var(--faint);
+    margin-top: -4px;
+  }
+
+  /* Torn's API terms require every released script to say what it does, what network
+     calls it makes, what it stores and what key level it needs. These four rows are
+     that disclosure — they are not decoration and must not be dropped from a card. */
+  .facts {
+    border-top: 1px solid var(--line);
+    padding-top: 11px;
+    margin-top: 4px;
+    display: grid;
+    gap: 6px;
+    font-size: 13px;
+    flex: 1;
+  }
+
+  .facts .row { display: grid; grid-template-columns: 92px 1fr; gap: 10px; align-items: baseline; }
+
+  .facts .k {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+
+  .facts .v { color: var(--muted); }
+  .facts .v code {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink);
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    padding: 0 4px;
+  }
+
+  .get { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
+
+  .btn {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    background: var(--accent);
+    border: 1px solid var(--accent);
+    color: var(--accent-ink);
+    border-radius: 3px;
+    padding: 9px 16px;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .btn:hover, .btn:focus-visible { filter: brightness(1.08); }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  .file { font-family: var(--mono); font-size: 12px; color: var(--faint); word-break: break-all; }
+
+  .card.planned { background: var(--surface-2); box-shadow: none; border-style: dashed; }
+  .card.planned .name { color: var(--muted); font-size: 21px; }
+  .card.planned .what { color: var(--faint); }
+  .card.planned .tag { background: transparent; color: var(--faint); border: 1px solid var(--line-strong); }
+
+  .keynote {
+    background: var(--accent-soft);
+    border: 1px solid var(--accent);
+    border-radius: 5px;
+    padding: 18px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .keynote .title {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 17px;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+  }
+
+  .keynote p { margin: 0; font-size: 14px; max-width: 70ch; }
+  .keynote ol { margin: 4px 0 0; padding-left: 20px; font-size: 14px; max-width: 70ch; }
+  .keynote li { margin: 3px 0; }
+
+  .back {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  .back:hover { text-decoration: underline; }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding-top: 18px;
+    color: var(--faint);
+    font-size: 13px;
+  }
+
+  footer p { margin: 0 0 8px; max-width: 70ch; }
+  footer p:last-child { margin-bottom: 0; }
+  /* Guide-only additions */
+  .steps { margin: 0; padding-left: 22px; }
+  .steps li { margin: 6px 0; }
+  .steps strong { color: var(--ink); }
+  .note {
+    border-left: 3px solid var(--accent);
+    background: var(--surface-2);
+    padding: 10px 14px;
+    margin: 12px 0 0;
+    font-size: 14px;
+    color: var(--muted);
+  }
+  .note.stop { border-left-color: var(--stop); }
+  .note.good { border-left-color: var(--good); }
+  .card p { margin: 0; }
+  .card h3 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 14px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 14px 0 4px;
+  }
+  .card h3:first-of-type { margin-top: 0; }
+  .figs { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 14px; }
+  figure { margin: 0; flex: 1 1 220px; max-width: 100%; }
+  figure img {
+    display: block;
+    width: 100%;
+    max-height: 560px;
+    object-fit: contain;
+    object-position: top;
+    border: 1px solid var(--line-strong);
+    border-radius: 4px;
+    background: #0e141a;
+  }
+  figure.wide { flex-basis: 100%; }
+  figcaption { font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .versions { display: grid; gap: 8px; }
+  .versions .row { display: grid; grid-template-columns: 150px 1fr; gap: 10px; align-items: baseline; }
+  .versions .row .k { font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: .09em; text-transform: uppercase; color: var(--faint); }
+  .versions .row .v strong { font-family: var(--mono); font-size: 13px; color: var(--ink); }
+  @media (max-width: 560px) { .versions .row { grid-template-columns: 1fr; gap: 2px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="masthead">
+    <div>
+      <p class="eyebrow">Kingshade Development</p>
+      <h1>Ranked War DIBS guide</h1>
+      <p class="sub">How to update the KS scripts before the war, how to check you are on the right
+        version, and how DIBS works once the war is live.</p>
+    </div>
+    <span class="stamp">Updated 11 Sep 2026</span>
+  </header>
+
+  <div class="keynote">
+    <span class="title">Before you start</span>
+    <div class="versions">
+      <div class="row"><span class="k">Torn PDA</span><span class="v">KS Torn War Dibs PDA <strong>v1.5.167</strong> + KS FFScouter Call Guard <strong>v1.1.4</strong></span></div>
+      <div class="row"><span class="k">Computer</span><span class="v">KS Torn War Dibs PC <strong>v1.0.40</strong> + KS FFScouter Call Guard <strong>v1.1.4</strong> (both in Tampermonkey)</span></div>
+    </div>
+    <p>You need <strong>two</strong> scripts on every device you play on. War Dibs puts the DIBS buttons
+      straight into Torn's own war page. Call Guard puts the same DIBS into FFScouter's War Room and is your
+      backup if the Torn-side script ever acts up. You can run on Call Guard alone if you prefer, but it is a
+      thin layer on top of FFScouter's own page, so not everything the War Dibs panel does is available there.</p>
+    <p>They all install from <a href="scripts.html">Kingshade Scripts</a>. Do it today, not when the war
+      starts. Never post or share your API keys anywhere &mdash; not in screenshots, not in chat, not in bug
+      reports.</p>
+  </div>
+
+  <section>
+    <h2>Torn PDA</h2>
+    <div class="card">
+      <h3>If you already have KS Torn War Dibs installed</h3>
+      <ol class="steps">
+        <li>Open Torn PDA. Open <strong>Settings</strong>, then <strong>User Scripts</strong>.</li>
+        <li>Tap the <strong>pencil</strong> next to <strong>KS Torn War Dibs</strong>.</li>
+        <li>Tap <strong>Configure</strong>, the button next to <em>Remote load/update</em>.</li>
+        <li>Tap <strong>Check for Update</strong>. When it offers 1.5.167, tap <strong>Update</strong>.</li>
+        <li>Do the same for <strong>KS FFScouter Call Guard</strong>: pencil &rarr; Configure &rarr; Check for Update &rarr; Update. It must say <strong>1.1.4</strong>.</li>
+        <li>Close Torn PDA completely and open it again.</li>
+        <li>Open your faction's Ranked War page. The KS panel must show <strong>v1.5.167</strong> in the top right corner.</li>
+      </ol>
+      <p class="note">After the update the script is listed as <strong>KS Torn War Dibs PDA</strong> instead of
+        KS Torn War Dibs. That is the new name &mdash; nothing went wrong.</p>
+      <div class="figs">
+        <figure><img src="img/pda-edit-script.jpg" alt="Torn PDA edit script dialog with the Configure button next to Remote load/update"><figcaption>Step 3: the <strong>Configure</strong> button sits next to <em>Remote load/update</em>.</figcaption></figure>
+        <figure><img src="img/pda-remote-update.jpg" alt="Torn PDA remote script update dialog with Check for Update and Update buttons"><figcaption>Step 4: <strong>Check for Update</strong>, then <strong>Update</strong>. This phone was already on 1.5.167, so it says no newer version &mdash; yours will offer 1.5.167.</figcaption></figure>
+        <figure><img src="img/pda-panel-1.5.167.jpg" alt="KS Torn War Dibs panel on the Ranked War page showing v1.5.167"><figcaption>Step 6: the panel on the Ranked War page with <strong>v1.5.167</strong> top right and the three status rows.</figcaption></figure>
+      </div>
+
+      <h3>If Check for Update finds nothing, or you never installed it</h3>
+      <ol class="steps">
+        <li>In Torn PDA &rarr; Settings &rarr; User Scripts, switch any older KS Torn War Dibs <strong>off</strong>.</li>
+        <li>Open <a href="scripts.html">Kingshade Scripts</a> and press <strong>Install</strong> on the Torn PDA card for KS Torn War Dibs.</li>
+        <li>If a page of text opens instead: select all, copy, then in Torn PDA press <strong>+</strong> under User Scripts and paste it in. Save.</li>
+        <li>Close Torn PDA completely and open it again. Check the panel says <strong>v1.5.167</strong>.</li>
+      </ol>
+    </div>
+  </section>
+
+  <section>
+    <h2>Computer (Tampermonkey)</h2>
+    <div class="card">
+      <h3>KS Torn War Dibs PC</h3>
+      <ol class="steps">
+        <li>Click the Tampermonkey icon in your browser toolbar &rarr; <strong>Utilities</strong> &rarr; <strong>Check for userscript updates</strong>. That updates every installed script at once.</li>
+        <li>Open the Tampermonkey dashboard and look at the <strong>Version</strong> column: <strong>KS Torn War Dibs PC</strong> must say <strong>1.0.40</strong>. Only one version may be enabled.</li>
+        <li>If it still shows an older number: open <a href="scripts.html">Kingshade Scripts</a>, press <strong>Install</strong> on the PC card, and confirm the update in the Tampermonkey window that opens.</li>
+        <li>Open Torn's Ranked War page. The KS panel must say <strong>v1.0.40 TEST</strong>. The word TEST is part of this version's label and is expected.</li>
+      </ol>
+      <p class="note">Keep your Torn key and FFScouter key handy in case the panel asks for them again after the
+        update. Do not change anything in FFScouter's <em>Filter &amp; Sort Controls</em> on the war page. Leave
+        <strong>Sort: Default</strong> and all filters as they are. The only thing you may change is the
+        <strong>Show</strong> dropdown &mdash; FF Score or BS Estimate, nothing else.</p>
+      <div class="figs">
+        <figure class="wide"><img src="img/pc-panel-1.0.40.png" alt="Torn Ranked War page on a computer with the KS Torn War Dibs PC panel showing v1.0.40 TEST above the war roster"><figcaption>The PC panel sits between FFScouter's controls and the war roster. Version top right, DIBS column inside Torn's own table.</figcaption></figure>
+      </div>
+
+      <h3>KS FFScouter Call Guard</h3>
+      <ol class="steps">
+        <li>After <strong>Check for userscript updates</strong> above, <strong>KS FFScouter Call Guard</strong> in the Tampermonkey dashboard must say <strong>1.1.4</strong>. If it still shows an older number, press <strong>Install</strong> on the Call Guard card on <a href="scripts.html">Kingshade Scripts</a>.</li>
+        <li>Open <a href="https://ffscouter.com/war-room">ffscouter.com/war-room</a>. The <strong>KS CALL GUARD</strong> panel must show under FFScouter's API key box.</li>
+        <li>If the panel asks for a key, press <strong>Set key</strong> and paste your FFScouter key.</li>
+      </ol>
+    </div>
+  </section>
+
+  <section>
+    <h2>FFScouter War Room &mdash; the backup for everyone</h2>
+    <div class="card">
+      <p>War Room is FFScouter's own page. Call Guard adds the shared DIBS buttons to it, and it talks to the
+        same server as the Torn-side scripts, so a target claimed on the PDA shows as TAKEN in War Room and the
+        other way round. If the Torn-side script ever acts up during the war, switch to War Room and keep calling
+        from there instead of clicking around.</p>
+      <p class="note good">PDA users: the <strong>War Room</strong> link inside the KS panel opens it directly.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>API keys</h2>
+    <div class="card">
+      <h3>Torn key</h3>
+      <p>The Torn-side scripts need a custom Torn key with faction <code>members</code> and <code>wars</code> and user
+        <code>basic</code>. If you created it from the KS panel in August it still works &mdash; nothing to redo.</p>
+      <ol class="steps">
+        <li>In the KS panel press <strong>Create custom API key</strong>. Torn opens its key page with the right access pre-filled.</li>
+        <li>Create the key there and copy it.</li>
+        <li>Back in the KS panel press <strong>Set Torn key</strong> and paste it.</li>
+      </ol>
+      <h3>FFScouter key</h3>
+      <p>Needed for FF numbers and for the shared DIBS. Press <strong>Set FFScouter key</strong> in the Torn-side panel, or
+        <strong>Set key</strong> in Call Guard, and paste the key from your FFScouter account.</p>
+      <p class="note">Both keys are stored encrypted in your own browser or app and are only ever sent to
+        api.torn.com and ffscouter.com respectively. Nothing is sent to Kingshade. The exact wording is printed
+        inside every panel.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Other scripts</h2>
+    <div class="card">
+      <p>On the computer you also need the <strong>FF Scouter V2</strong> userscript from ffscouter.com running on
+        the war page. War Dibs PC reads Fair Fight from FFScouter's own rows and cannot unlock DIBS without it.
+        Torn PDA does not need it &mdash; the PDA script fetches Fair Fight itself.</p>
+      <p class="note stop"><strong>War Stuff Enhanced is not supported.</strong> With it installed, War Dibs blocks
+        itself and shows a warning on the war page. Disable War Stuff Enhanced and reload Torn.</p>
+      <p class="note">TornTools and other war scripts are untested. If the KS panel does not show or looks wrong,
+        turn other war-page scripts off first and reload.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>How DIBS works</h2>
+    <div class="card">
+      <ul class="steps">
+        <li>DIBS stays locked until the war is actually <strong>LIVE</strong>. Before that every button says PREWAR.</li>
+        <li>A target opens for DIBS when it is in Hospital with <strong>2:00 or less</strong> left and its FF is between <strong>2.00 and 5.00</strong>.</li>
+        <li>First claim wins. You see <strong>DIBBED / RELEASE</strong>; everyone else sees <strong>TAKEN</strong> and your name.</li>
+        <li>Click DIBS <strong>once</strong>. Do not spam it. If several people click at the same moment the server decides the order.</li>
+        <li>Press <strong>RELEASE</strong> if you no longer want the target. It becomes available again for the others.</li>
+        <li><strong>One active DIBS per player.</strong> When your target is down, press <strong>RELEASE</strong> if the claim is still showing, so you can claim the next one and you are not blocking anyone else.</li>
+        <li>Attacks are still 100% manual. No KS script ever attacks, clicks or navigates for you.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>If something looks wrong</h2>
+    <div class="card">
+      <p class="note stop">Do not keep clicking and do not try to fix it mid-war. Switch to FFScouter War Room and
+        keep calling from there.</p>
+    </div>
+  </section>
+
+  <footer>
+    <p>These scripts read Torn's official API and the page you have open yourself. None of them click, attack,
+      travel or act for you &mdash; every move in Torn stays yours.</p>
+    <p><a class="back" href="scripts.html">Back to Kingshade Scripts</a> &nbsp;&middot;&nbsp; <a class="back" href="index.html">Leader Tools</a></p>
+  </footer>
+</div>
+</body>
+</html>
