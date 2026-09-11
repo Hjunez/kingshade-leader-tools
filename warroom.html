@@ -15,6 +15,15 @@
     --warn: #8c6210; --warn-soft: #f6ecd6;
     --bad: #a12f2a; --bad-soft: #f6dedc;
     --shadow: 0 1px 2px rgba(20,32,43,.06), 0 8px 24px rgba(20,32,43,.06);
+    /* The FF tint. Only the hue moves across the scale - see ffHue() - while
+       saturation and lightness are fixed here, per theme. The page's own --ink
+       then stays readable on every step of the ramp, which is a deliberate
+       departure from FFScouter's own column: that one uses dark text on
+       saturated colour, and a table whose text colour changes row by row is
+       hard to read. The -old pair is the damped tint for a stale figure, so
+       the existing stale mark stays visible instead of being painted over. */
+    --ff-sat: 85%; --ff-light: 72%;
+    --ff-sat-old: 38%; --ff-light-old: 88%;
     --display: 'Saira Condensed','Arial Narrow',Helvetica,sans-serif;
     --body: 'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
     --mono: 'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
@@ -29,6 +38,10 @@
       --warn: #cc9f3f; --warn-soft: #2a2417;
       --bad: #dd6a61; --bad-soft: #2c1b1a;
       --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+      /* Dark theme carries light --ink, so the same ramp has to sit dark
+         instead of pale. Same hues, same order, readable text. */
+      --ff-sat: 55%; --ff-light: 26%;
+      --ff-sat-old: 26%; --ff-light-old: 19%;
     }
   }
   :root[data-theme="dark"] {
@@ -40,6 +53,8 @@
     --warn: #cc9f3f; --warn-soft: #2a2417;
     --bad: #dd6a61; --bad-soft: #2c1b1a;
     --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+    --ff-sat: 55%; --ff-light: 26%;
+    --ff-sat-old: 26%; --ff-light-old: 19%;
   }
 
   * { box-sizing: border-box; }
@@ -240,6 +255,11 @@
   td.ffcell.word { font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
   td.ffcell.unknown { color: var(--warn); }
   td.ffcell.checking, td.ffcell.none, td.ffcell.old { color: var(--faint); }
+  /* Painted from a single custom property set on the cell, so a redraw writes
+     one number per cell and no style string. A cell is only ever given the
+     class when it is showing a figure - never on UNKNOWN, CHECKING or a dash. */
+  td.ffcell.tinted { background: hsl(var(--ff-hue), var(--ff-sat), var(--ff-light)); }
+  td.ffcell.tinted.old { background: hsl(var(--ff-hue), var(--ff-sat-old), var(--ff-light-old)); }
 
   /* Six columns do not always fit a phone. The list scrolls sideways inside
      its own box; the page never does. */
@@ -1073,6 +1093,26 @@
     return span;
   }
 
+  // The hue for a Fair Fight figure, on the same scale FFScouter uses in its
+  // own column on Torn's faction page: sixty degrees per FF step, blue at
+  // FF 1 falling through cyan, green, yellow and orange to red at FF 5.
+  // Clipped at both ends, so FF 153 is simply red and never wraps back round
+  // the wheel into a colour that would read as safe.
+  //
+  // STATUS: ANTAGANDE. The formula was derived from two screenshots of that
+  // column, not from FFScouter's code or any published spec. It reproduces the
+  // colour on all nine values read off those pictures, which makes it visually
+  // equivalent - but their real formula may differ in detail. It is one line
+  // to change if it ever needs adjusting; there are deliberately no hard-coded
+  // thresholds, because steps would show as banding across the table.
+  function ffHue(ff) {
+    if (typeof ff !== 'number' || !isFinite(ff)) return null;
+    var hue = 240 - (ff - 1) * 60;
+    if (hue > 240) hue = 240;
+    if (hue < 0) hue = 0;
+    return Math.round(hue);
+  }
+
   // One cell of FF or EST. The column's state is decided first - no key, first
   // read under way, source failed - and only then the row's own value. What is
   // not known is a word, never a zero and never a dash that could pass for one.
@@ -1098,6 +1138,20 @@
     td.className = 'ffcell' + (columnState === 'stale' ? ' old' : '');
     // estText is a string from an outside service: textContent, never markup.
     td.textContent = kind === 'ff' ? value.toFixed(2) : value;
+    // Both columns take their colour from the row's FF: EST has no scale of
+    // its own and no original to copy. Only a cell that is showing a figure is
+    // ever tinted - a coloured UNKNOWN would look like something the page
+    // knows. A row carrying EST but no FF has nothing to derive a colour from
+    // and stays plain.
+    //
+    // The colour says how hard the target is. It says nothing about whether it
+    // may be called: that is the FF range in ffAllowsClaim(), a separate rule
+    // deliberately kept in a separate place.
+    var hue = ffHue(row.ff);
+    if (hue !== null) {
+      td.classList.add('tinted');
+      td.style.setProperty('--ff-hue', String(hue));
+    }
     return td;
   }
 
