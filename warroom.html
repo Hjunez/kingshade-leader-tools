@@ -506,6 +506,11 @@
   var FF_CLAIM_MIN = 2.00;
   var FF_CLAIM_MAX = 5.00;
 
+  // How long a refusal stays on the row that was clicked. Long enough to be
+  // read: the page polls the claim board and redraws several times a minute,
+  // so a message that died at the next poll would never be seen at all.
+  var REFUSAL_SHOW_MS = 30000;
+
   var el = {};
   ['apiKey','toggleKey','loadBtn','forgetKey','errorBox','okBox',
    'ffKey','toggleFfKey','forgetFfKey','ffSaid','ffBar',
@@ -1308,6 +1313,32 @@
 
   var pendingTarget = '';
 
+  // The last refusal the server gave, and which row it belongs to.
+  // { targetId, text, at }. One at a time on purpose: two messages on screen
+  // at once is worse than none. It lives in memory and nowhere else - an old
+  // refusal turning up after a reload would be telling the member about a war
+  // moment that has long passed.
+  var lastRefusal = null;
+
+  // The refusal still worth showing, or null. Its age is checked here, at
+  // render, because the page already redraws itself regularly. A timer would
+  // be a second lifecycle to start, clear and get wrong on navigation.
+  function currentRefusal() {
+    if (lastRefusal && Date.now() - lastRefusal.at > REFUSAL_SHOW_MS) lastRefusal = null;
+    return lastRefusal;
+  }
+
+  // The server's status word in words a member can read. An unknown word is
+  // never guessed at: the row points at the box up top, which already prints
+  // the word itself and is the one place that should carry a surprise.
+  function refusalLine(status) {
+    if (status === 'already_holding') return 'You already hold another target';
+    if (status === 'taken') return 'Someone else got there first';
+    if (status === 'not_owner') return 'That claim is not yours';
+    if (status === 'unreadable') return 'The server cannot read this row';
+    return 'Refused - see the message at the top';
+  }
+
   function renderTargets() {
     var war = Roster.war();
     var targets = Roster.targets();
@@ -1343,6 +1374,9 @@
       dir: sortState ? sortState.dir : 'asc' });
     // Decided once for the whole column; each cell then reads its own row.
     var ffState = statSource.state();
+    // Read once for the whole table, and matched to a row by Torn ID below -
+    // never by position, so re-sorting cannot move it onto another player.
+    var refusal = currentRefusal();
     var table = document.createElement('table');
     var thead = document.createElement('thead');
     var headRow = document.createElement('tr');
@@ -1488,6 +1522,19 @@
         }
       }
 
+      // A refusal is shown on the row that was clicked, because that is where
+      // the member is looking. The box at the top of the page still says the
+      // same thing and is untouched - but during a war the table sits several
+      // screen heights below it, and nobody scrolls up mid-war. This is added
+      // to whatever the cell already says; no existing line is changed, moved
+      // or removed, and no row is scrolled to.
+      if (refusal && refusal.targetId === target.id) {
+        var refused = document.createElement('div');
+        refused.className = 'left';
+        refused.textContent = refusal.text;
+        dibsState.appendChild(refused);
+      }
+
       if (pendingTarget === target.id) { button.disabled = true; button.textContent = '…'; }
       dibsCell.appendChild(button);
 
@@ -1615,6 +1662,10 @@
     var actor = (SIM && actorId === SIM_OTHER_ID) ? SIM_OTHER_ID : identity.playerId;
     var asOther = actor !== identity.playerId;
     hide(el.errorBox); hide(el.okBox);
+    // A new click clears the old refusal before anything is sent. Two messages
+    // on screen at once is worse than none, and the member is asking about
+    // this row now, not the one before it.
+    lastRefusal = null;
     pendingTarget = targetId;
     render();
     try {
@@ -1622,6 +1673,12 @@
         ? await Claims.claim(war.warId, targetId, actor)
         : await Claims.unclaim(war.warId, targetId, actor);
       var body = result.body;
+
+      // Refused or not is decided once, here, so the branches below stay what
+      // they were: the wording for the box at the top of the page.
+      lastRefusal = (result.http === 200 && body.ok === true)
+        ? null
+        : { targetId: targetId, text: refusalLine(body.status), at: Date.now() };
 
       if (result.http === 200 && body.ok === true) {
         if (body.status === 'claimed' || body.status === 'renewed') {
@@ -1631,6 +1688,13 @@
         } else {
           show(el.okBox, targetId + ' is free again.');
         }
+      } else if (result.http === 409 && body.status === 'already_holding') {
+        // The target the member is already on comes back in the answer, so the
+        // box can name it instead of repeating the server's word at him.
+        var held = (body.claim && body.claim.targetId) || 'another target';
+        show(el.errorBox, asOther
+          ? 'Torn ' + actor + ' already holds ' + held + '.'
+          : 'You already hold ' + held + '. Release it before calling another target.');
       } else if (result.http === 409 && body.status === 'taken') {
         // Who holds it. Not who was quicker - the server cannot know that.
         var holder = body.claim && body.claim.memberId;
