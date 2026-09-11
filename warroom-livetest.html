@@ -1,0 +1,2141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>War Room</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground: #eaedf1; --surface: #ffffff; --surface-2: #f4f6f9;
+    --ink: #14202b; --muted: #5c6d7e; --faint: #8b9aa8;
+    --line: #d3dae1; --line-strong: #b8c3cd;
+    --accent: #a3512a; --accent-ink: #ffffff; --accent-soft: #f2ded4;
+    --good: #1c7355; --good-soft: #dfeee8;
+    --warn: #8c6210; --warn-soft: #f6ecd6;
+    --bad: #a12f2a; --bad-soft: #f6dedc;
+    --shadow: 0 1px 2px rgba(20,32,43,.06), 0 8px 24px rgba(20,32,43,.06);
+    /* The FF tint. Only the hue moves across the scale - see ffHue() - while
+       saturation and lightness are fixed here, per theme. The page's own --ink
+       then stays readable on every step of the ramp, which is a deliberate
+       departure from FFScouter's own column: that one uses dark text on
+       saturated colour, and a table whose text colour changes row by row is
+       hard to read. The -old pair is the damped tint for a stale figure, so
+       the existing stale mark stays visible instead of being painted over. */
+    --ff-sat: 85%; --ff-light: 72%;
+    --ff-sat-old: 38%; --ff-light-old: 88%;
+    --display: 'Saira Condensed','Arial Narrow',Helvetica,sans-serif;
+    --body: 'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
+    --mono: 'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+      --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+      --line: #26313b; --line-strong: #35434f;
+      --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+      --good: #46a583; --good-soft: #172a24;
+      --warn: #cc9f3f; --warn-soft: #2a2417;
+      --bad: #dd6a61; --bad-soft: #2c1b1a;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+      /* Dark theme carries light --ink, so the same ramp has to sit dark
+         instead of pale. Same hues, same order, readable text. */
+      --ff-sat: 55%; --ff-light: 26%;
+      --ff-sat-old: 26%; --ff-light-old: 19%;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+    --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+    --line: #26313b; --line-strong: #35434f;
+    --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+    --good: #46a583; --good-soft: #172a24;
+    --warn: #cc9f3f; --warn-soft: #2a2417;
+    --bad: #dd6a61; --bad-soft: #2c1b1a;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+    --ff-sat: 55%; --ff-light: 26%;
+    --ff-sat-old: 26%; --ff-light-old: 19%;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--body); font-size: 15px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 20px 72px; display: flex; flex-direction: column; gap: 22px; }
+
+  .backbar a {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+    text-decoration: none; border: 1px solid var(--line-strong);
+    border-radius: 3px; padding: 7px 12px; display: inline-block;
+  }
+  .backbar a:hover { color: var(--accent); border-color: var(--accent); }
+  .backbar a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .masthead {
+    display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between;
+    gap: 12px 24px; padding-bottom: 18px; border-bottom: 2px solid var(--line-strong);
+  }
+  h1 { font-family: var(--display); font-weight: 700; font-size: clamp(30px,5vw,42px); line-height: 1.02; margin: 0; }
+  .masthead p { margin: 6px 0 0; color: var(--muted); max-width: 58ch; }
+  .stamp {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .13em; text-transform: uppercase; color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 2px; padding: 5px 10px; white-space: nowrap;
+  }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; box-shadow: var(--shadow); }
+  .panel-head {
+    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+    gap: 8px 16px; padding: 14px 18px; border-bottom: 1px solid var(--line);
+  }
+  .panel-head h2 {
+    font-family: var(--display); font-weight: 600; font-size: 19px;
+    letter-spacing: .04em; text-transform: uppercase; margin: 0;
+  }
+  .panel-head .hint { color: var(--faint); font-size: 13px; margin: 0; }
+  /* The same face under a field instead of beside a heading. The one under
+     the FFScouter key says what that key is not. */
+  .fieldhint { color: var(--faint); font-size: 13px; margin: 6px 0 0; max-width: 72ch; }
+  .fieldhint.said { color: var(--warn); }
+  .panel-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+
+  label.lbl {
+    font-family: var(--display); font-weight: 600; font-size: 12px;
+    letter-spacing: .11em; text-transform: uppercase; color: var(--muted);
+    display: block; margin-bottom: 6px;
+  }
+
+  input[type="password"], input[type="text"] {
+    font-family: var(--mono); font-size: 15px; color: var(--ink);
+    background: var(--surface-2); border: 1px solid var(--line-strong);
+    border-radius: 3px; padding: 9px 11px; width: 100%; min-width: 0;
+  }
+  input:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .btn {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .08em; text-transform: uppercase;
+    background: var(--surface-2); color: var(--ink);
+    border: 1px solid var(--line-strong); border-radius: 3px;
+    padding: 9px 15px; cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn.primary:hover { color: var(--accent-ink); filter: brightness(1.06); }
+  .btn[disabled] { opacity: .55; cursor: default; filter: none; }
+  .btn[disabled]:hover { border-color: var(--line-strong); color: var(--ink); }
+  .btn.quiet { background: transparent; border-color: transparent; color: var(--faint); }
+  .btn.quiet:hover { color: var(--bad); border-color: var(--line); }
+  .btn.small { font-size: 12px; padding: 6px 10px; }
+  .btn.danger { border-color: var(--bad); color: var(--bad); }
+
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .grow { flex: 1 1 200px; min-width: 0; }
+
+  .msg { font-size: 14px; border-radius: 3px; padding: 11px 13px; margin: 0; }
+  .msg.err { background: var(--bad-soft); color: var(--bad); }
+  .msg.ok { background: var(--good-soft); color: var(--good); }
+  .msg.note { background: var(--surface-2); color: var(--muted); }
+  .msg[hidden] { display: none; }
+
+  /* The password panel is a normal state of this page, not a fault. A member who has
+     not been given the word yet must meet a calm request, never a red error. */
+  .ask {
+    background: var(--surface-2); border: 1px solid var(--line-strong);
+    border-radius: 3px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .ask .title {
+    font-family: var(--display); font-weight: 600; font-size: 15px;
+    letter-spacing: .06em; text-transform: uppercase;
+  }
+  .ask p { margin: 0; font-size: 14px; color: var(--muted); max-width: 72ch; }
+  .ask p.said { color: var(--warn); }
+
+  .warbar {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px;
+    padding: 14px 18px;
+  }
+  .warbar .who { font-family: var(--display); font-weight: 700; font-size: 24px; letter-spacing: .01em; }
+  .warbar .meta { color: var(--muted); font-size: 14px; }
+  .warbar .score { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    font-family: var(--display); font-weight: 600; font-size: 12px;
+    letter-spacing: .11em; text-transform: uppercase; color: var(--muted);
+    text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); white-space: nowrap;
+  }
+  tbody td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr.mine { background: var(--accent-soft); }
+  tbody tr.blocked td { color: var(--faint); }
+
+  .tname { font-weight: 600; }
+  .tname a { color: inherit; text-decoration: none; border-bottom: 1px solid var(--line-strong); }
+  .tname a:hover { color: var(--accent); border-color: var(--accent); }
+  .tid { font-family: var(--mono); font-size: 12px; color: var(--faint); }
+
+  .pill {
+    font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: .04em;
+    padding: 3px 8px; border-radius: 2px; white-space: nowrap;
+    background: var(--surface-2); color: var(--muted); display: inline-block;
+  }
+  .pill.good { background: var(--good-soft); color: var(--good); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.bad { background: var(--bad-soft); color: var(--bad); }
+
+  .dibs { font-size: 13px; }
+  .dibs .holder { font-weight: 600; }
+  .dibs .left { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+  .dibs.offline { font-family: var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--bad); font-weight: 600; }
+  .dibs.locked { font-family: var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
+  .dibs.unknown { font-family: var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--warn); font-weight: 600; }
+  .dibs.free { color: var(--faint); }
+
+  /* One cell now holds the DIBS state and the button that acts on it. The
+     existing .toolbar does the wrapping: side by side when there is room,
+     the button under the state when there is not. */
+  td .toolbar { gap: 8px 10px; }
+
+  /* Sortable headers. Same face and colour as before; a real button, so the
+     list can be ordered from the keyboard, and the whole header cell is the
+     hit area. */
+  thead th.sort { padding: 0; }
+  thead th.sort button {
+    font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit;
+    background: none; border: 0; width: 100%; text-align: left;
+    padding: 10px 14px; cursor: pointer; white-space: nowrap;
+    display: flex; align-items: center; gap: 6px;
+  }
+  thead th.sort button:hover { color: var(--accent); }
+  thead th.sort button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .sortmark { font-size: 10px; color: var(--faint); min-width: .8em; }
+  thead th[aria-sort] button { color: var(--ink); }
+  thead th[aria-sort] .sortmark { color: var(--accent); }
+
+  .empty { padding: 30px 18px; text-align: center; color: var(--faint); }
+
+  /* Simulation. The page's own warning colour, not the error colour - a test
+     run is not a fault. It cannot be dismissed: the one thing that must never
+     happen is someone forgetting which war they are writing to. */
+  .simbanner {
+    background: var(--warn-soft); color: var(--warn);
+    border: 1px solid var(--warn); border-radius: 4px;
+    padding: 13px 16px; display: flex; flex-direction: column; gap: 6px;
+  }
+  .simbanner .title {
+    font-family: var(--display); font-weight: 700; font-size: 15px;
+    letter-spacing: .1em; text-transform: uppercase;
+  }
+  .simbanner p { margin: 0; font-size: 14px; max-width: 78ch; }
+  .simbanner code { font-family: var(--mono); font-size: 13px; }
+
+  .simreset {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    padding: 11px 18px; border-bottom: 1px solid var(--line);
+    background: var(--warn-soft); color: var(--warn); font-size: 13px;
+  }
+  .simreset .tid { color: var(--warn); }
+
+  .stale {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    padding: 11px 18px; border-bottom: 1px solid var(--line);
+    background: var(--warn-soft); color: var(--warn); font-size: 13px;
+  }
+
+  /* FF and EST. A figure is set in the mono face; a word - CHECKING, UNKNOWN -
+     in the face the DIBS column uses for its own words, so the two read alike.
+     A stale figure fades; a dropped one is gone and the cell says so. */
+  td.ffcell { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.ffcell.word { font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
+  td.ffcell.unknown { color: var(--warn); }
+  td.ffcell.checking, td.ffcell.none, td.ffcell.old { color: var(--faint); }
+  /* Painted from a single custom property set on the cell, so a redraw writes
+     one number per cell and no style string. A cell is only ever given the
+     class when it is showing a figure - never on UNKNOWN, CHECKING or a dash. */
+  td.ffcell.tinted { background: hsl(var(--ff-hue), var(--ff-sat), var(--ff-light)); }
+  td.ffcell.tinted.old { background: hsl(var(--ff-hue), var(--ff-sat-old), var(--ff-light-old)); }
+
+  /* Six columns do not always fit a phone. The list scrolls sideways inside
+     its own box; the page never does. */
+  #targetHost { overflow-x: auto; }
+
+  details { border-top: 1px solid var(--line); }
+  summary {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+    padding: 13px 18px; cursor: pointer;
+  }
+  summary:hover { color: var(--accent); }
+  details dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 14px; }
+  details dt { font-weight: 600; color: var(--muted); }
+  details dd { margin: 0; }
+  details.panel { border-top: 0; }
+
+  pre.raw {
+    font-family: var(--mono); font-size: 12px; background: var(--surface-2);
+    border: 1px solid var(--line); border-radius: 3px; padding: 11px 13px;
+    margin: 0; overflow-x: auto; white-space: pre-wrap; word-break: break-word; max-height: 260px;
+  }
+
+  footer { border-top: 1px solid var(--line); padding-top: 16px; color: var(--faint); font-size: 13px; }
+  footer p { margin: 0 0 6px; max-width: 72ch; }
+
+  [hidden] { display: none !important; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="simbanner" id="simBanner" hidden>
+    <span class="title">Simulation</span>
+    <p>Claims go to a test war, not the real one. Nothing here affects war
+      <span id="simRealWar">&mdash;</span> or anything the faction sees. Every call goes to
+      <code id="simWireWar">&mdash;</code>, a board of its own.</p>
+    <p><strong>Take as other</strong> claims a target as Torn <code id="simOtherId">&mdash;</code>,
+      a made-up test member that cannot be anybody real. That is how the refusal is tried out:
+      take a target as the other, then take it yourself.</p>
+    <p>Leave the address without <code>?sim=1</code> to be back on the real board.</p>
+  </div>
+
+  <nav class="backbar"><a href="./">&larr; All tools</a></nav>
+
+  <section class="panel" id="mirrorPanel">
+    <div class="panel-head">
+      <h2>Live test rig</h2>
+      <p class="hint">This is not the War Room. It is a copy that points the war call at
+        somebody else's faction, so the page can be watched drawing a war that is running right
+        now. Two lines differ from the real page; everything else is the same file.</p>
+    </div>
+    <div class="panel-body">
+      <div>
+        <label class="lbl" for="mirrorId">Faction ID to mirror</label>
+        <div class="toolbar">
+          <input type="text" id="mirrorId" class="grow" autocomplete="off" spellcheck="false"
+                 inputmode="numeric" placeholder="A faction ID that is in a war right now">
+          <button type="button" class="btn quiet" id="forgetMirror">Forget ID</button>
+        </div>
+        <p class="fieldhint">Your own Torn key and your own player ID are still yours &mdash; only
+          which faction's war is read changes. Load the war again after changing this.</p>
+        <p class="fieldhint said" id="mirrorSaid" hidden></p>
+      </div>
+    </div>
+  </section>
+
+  <header class="masthead">
+    <div>
+      <h1>War Room</h1>
+      <p>The other faction's roster during a Ranked War, and one shared board for who has called
+        which target. It reads; it never attacks, opens or sends anything for you.</p>
+    </div>
+    <span class="stamp">Beta &middot; not live yet</span>
+  </header>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Sign in</h2>
+      <p class="hint">Three separate things: your own Torn key, an FFScouter key if you have one, and the faction's War Room password.</p>
+    </div>
+    <div class="panel-body">
+
+      <div>
+        <label class="lbl" for="apiKey">Your Torn Custom API Key</label>
+        <div class="toolbar">
+          <input type="password" id="apiKey" class="grow" autocomplete="off" spellcheck="false"
+                 placeholder="Paste your key">
+          <button type="button" class="btn" id="toggleKey" aria-pressed="false">Show</button>
+          <button type="button" class="btn primary" id="loadBtn">Load the war</button>
+          <button type="button" class="btn quiet" id="forgetKey">Forget key</button>
+        </div>
+      </div>
+
+      <div>
+        <label class="lbl" for="ffKey">Your FFScouter API key (optional)</label>
+        <div class="toolbar">
+          <input type="password" id="ffKey" class="grow" autocomplete="off" spellcheck="false"
+                 placeholder="Paste your FFScouter key">
+          <button type="button" class="btn" id="toggleFfKey" aria-pressed="false">Show</button>
+          <button type="button" class="btn quiet" id="forgetFfKey">Forget key</button>
+        </div>
+        <p class="fieldhint">Not your Torn key. Get this from ffscouter.com. Without it the
+          FF and EST columns stay empty; everything else works as usual.</p>
+        <p class="fieldhint said" id="ffSaid" hidden></p>
+      </div>
+
+      <div class="ask" id="passAsk">
+        <span class="title">Faction War Room password</span>
+        <p>This board needs the faction's War Room password. Kingshade hands it out &mdash; ask in
+          faction chat if you have not been given it. Nothing else here depends on it: the roster
+          below still loads without it, only the DIBS column stays locked.</p>
+        <p class="said" id="passSaid" hidden></p>
+        <div class="toolbar">
+          <label class="lbl" for="warPass" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">War Room password</label>
+          <input type="password" id="warPass" class="grow" autocomplete="off" spellcheck="false"
+                 placeholder="Type the War Room password">
+          <button type="button" class="btn primary" id="passSave">Save on this device</button>
+        </div>
+      </div>
+
+      <div class="ask" id="passHave" hidden>
+        <span class="title">Faction War Room password</span>
+        <p>Stored in this browser, on this device only. It is sent to the claim server and nowhere
+          else, and it is never shown back to you.</p>
+        <div class="toolbar">
+          <button type="button" class="btn" id="passChange">Type a different one</button>
+          <button type="button" class="btn quiet" id="passForget">Forget password</button>
+        </div>
+      </div>
+
+      <p class="msg err" id="errorBox" role="alert" hidden></p>
+      <p class="msg ok" id="okBox" role="status" hidden></p>
+    </div>
+
+    <details>
+      <summary>What this page does, calls and stores</summary>
+      <div class="panel-body">
+        <dl>
+          <dt>Key level</dt>
+          <dd>A Custom Key with faction &rarr; <strong>members</strong> and faction &rarr;
+            <strong>wars</strong>. Torn error 16 means one of those two boxes is not ticked.</dd>
+          <dt>Torn calls</dt>
+          <dd><code>/v2/key/info</code> once, for your own Torn ID and faction.
+            <code>/v2/faction/wars</code> for the war that is running right now.
+            <code>/v2/faction/{opponent}/members</code> for the other side's roster and their
+            hospital, jail and travel state. <code>/v2/faction/members</code> for our own names, so
+            a claim can say who holds it. Every request is tagged <code>KSWarRoom</code>.</dd>
+          <dt>Claim server</dt>
+          <dd>Reads and writes the shared DIBS board at
+            <code>ks-war-room-claims.hans-viklund.workers.dev</code>. It is sent only the war ID, a
+            target's Torn ID, your Torn ID and the War Room password.</dd>
+          <dt>Your API key</dt>
+          <dd>Stays in this browser. It goes to <code>api.torn.com</code> only, in a request header,
+            never in a web address. It is <strong>never</strong> sent to the claim server, and never
+            to FFScouter.</dd>
+          <dt>Stored in this browser</dt>
+          <dd>Your Torn key, your FFScouter key if you gave one, and the War Room password, in this
+            device's local storage. Nothing else. Each has its own Forget button above.</dd>
+          <dt>Writes</dt>
+          <dd>Nothing in Torn, ever. No attacks, no clicks, no navigation, no page scraping, no
+            background watching, nothing to do with captcha. The only thing this page writes is a
+            line on the faction's own claim board.</dd>
+          <dt>FF and Est</dt>
+          <dd>From FFScouter &mdash; not from Torn, and not from our claim server. With an FFScouter
+            key on this page, this browser asks <code>ffscouter.com</code> for Fair Fight and
+            estimated battle stats for the targets on the list: one request for the whole list, at
+            most every five minutes, only while the page is on screen. It sends that key and the
+            targets' Torn IDs, nothing else. Without a key the two columns show a dash and nothing
+            is sent. Figures older than fifteen minutes are marked stale; older than thirty they
+            are dropped and the cells say UNKNOWN.</dd>
+        </dl>
+      </div>
+    </details>
+  </section>
+
+  <section class="panel" id="warPanel" hidden>
+    <div class="warbar">
+      <span class="who" id="warWho">&mdash;</span>
+      <span class="meta" id="warMeta"></span>
+      <span class="meta score" id="warScore"></span>
+    </div>
+  </section>
+
+  <section class="panel" id="targetPanel" hidden>
+    <div class="panel-head">
+      <h2>Targets</h2>
+      <p class="hint" id="targetHint"></p>
+    </div>
+    <div class="simreset" id="simResetBar" hidden>
+      <button type="button" class="btn danger small" id="simResetBtn">Reset test war</button>
+      <span class="tid" id="simResetNote">Empties the test war's board so the whole run can be
+        started over. The real war is not touched.</span>
+    </div>
+    <div class="stale" id="staleBar" hidden></div>
+    <div class="stale" id="ffBar" hidden></div>
+    <div id="targetHost"></div>
+  </section>
+
+  <details class="panel" id="advanced">
+    <summary>Advanced</summary>
+    <div class="panel-body">
+      <p class="msg note">Technical state, raw answers and the wipe control. Nothing here is needed
+        to take a target.</p>
+      <dl>
+        <dt>Claim server</dt><dd id="advServer" class="tid"></dd>
+        <dt>War ID</dt><dd id="advWar" class="tid"></dd>
+        <dt>Your Torn ID</dt><dd id="advMe" class="tid"></dd>
+        <dt>Claim board</dt><dd id="advClaims" class="tid"></dd>
+        <dt>Roster</dt><dd id="advRoster" class="tid"></dd>
+        <dt>FF and EST</dt><dd id="advFf" class="tid"></dd>
+        <dt>Last refusal</dt><dd id="advError" class="tid"></dd>
+      </dl>
+      <div>
+        <label class="lbl">Last claim-board answer</label>
+        <pre class="raw" id="advRaw">&mdash;</pre>
+      </div>
+      <div class="toolbar">
+        <button type="button" class="btn danger small" id="wipeBtn" disabled>Wipe every claim in this war</button>
+        <span class="tid" id="wipeNote">Empties the whole war's claim board, for everyone in the faction.</span>
+      </div>
+    </div>
+  </details>
+
+  <footer>
+    <p>The claim server promises one thing: of two people calling the same target at the same
+      moment, exactly one is granted. It cannot know whose finger moved first &mdash; only which
+      request reached it first. This page therefore says who holds a target, never who was quicker.</p>
+    <p>The countdown beside a claim is this browser's estimate of the server's own clock. The server
+      sets the time and the server decides when a claim is over.</p>
+    <p>Reads through Torn's official API, and through FFScouter's when you have given it a key of
+      your own. It never acts on your behalf.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var CLAIM_SERVER = 'https://ks-war-room-claims.hans-viklund.workers.dev';
+  var KEY_STORE = 'ks-leader-board-key';
+  var PASS_STORE = 'ks-war-room-pass';
+  var SORT_STORE = 'ks-war-room-sort';
+  // The FFScouter key, under a name of its own. It is not the Torn key and
+  // does not share the Torn key's storage: the two are different strings, and
+  // the Torn key must never leave for a third party that could not use it.
+  var FF_STORE = 'ks-war-room-ff-key';
+  // Live-test rig only. A name of its own so it can never be confused with,
+  // or write over, the real page's keys.
+  var MIRROR_STORE = 'ks-war-room-livetest-faction';
+
+  // ------------------------------------------------------------- simulation
+  //
+  // Turned on by ?sim=1 in the address and by nothing else. It is deliberately
+  // not remembered anywhere: no storage key, no cookie, no toggle. A reload
+  // without the parameter is the ordinary page again, and a member handed the
+  // plain link can never land in here by accident.
+  //
+  // What it changes is one thing only - which war ID leaves the page. Every
+  // call goes to sim-<the real war's ID>, a Durable Object of its own that the
+  // faction never reads. The real ID is replaced at the wire, not merely
+  // avoided somewhere higher up; see wireWarId below.
+  var SIM = (function () {
+    try { return new URLSearchParams(location.search).get('sim') === '1'; }
+    catch (e) { return false; }
+  })();
+  var SIM_PREFIX = 'sim-';
+  // Twelve digits. The server takes Torn IDs of up to twelve, and no real Torn
+  // account is anywhere near this number, so this can never collide with a
+  // member. It is written in the banner so it is not a riddle.
+  var SIM_OTHER_ID = '999000111222';
+
+  var CLAIM_POLL_MS = 5000;    // the claim board changes every few seconds during a war
+  var ROSTER_POLL_MS = 30000;  // hospital and jail timers do not need more than this
+  var WAR_POLL_MS = 120000;    // which war is running changes twice a week, not twice a minute
+  var OWN_MEMBERS_MS = 300000; // our own names, used only to label a claim holder
+  var FF_POLL_MS = 300000;     // FFScouter caches for 5 minutes; asking sooner only spends calls
+  var FF_CHECK_MS = 30000;     // how often the page asks itself whether FF_POLL_MS has passed
+  var FF_STALE_MS = 900000;    // FF and EST older than 15 minutes are marked stale
+  var FF_DROP_MS = 1800000;    // older than 30 minutes they are dropped and the cells say UNKNOWN
+
+  // The span of Fair Fight a member may call a target inside. Both ends count:
+  // a target sitting exactly on either end is allowed. These two lines are the
+  // only place the figures are written - the wording on the page reads them
+  // from here rather than repeating them, so moving the span moves every text
+  // with it, and searching the file for either figure finds one line.
+  var FF_CLAIM_MIN = 2.00;
+  var FF_CLAIM_MAX = 5.00;
+
+  // How long a refusal stays on the row that was clicked. Long enough to be
+  // read: the page polls the claim board and redraws several times a minute,
+  // so a message that died at the next poll would never be seen at all.
+  var REFUSAL_SHOW_MS = 30000;
+
+  var el = {};
+  ['apiKey','toggleKey','loadBtn','forgetKey','errorBox','okBox',
+   'mirrorId','forgetMirror','mirrorSaid',
+   'ffKey','toggleFfKey','forgetFfKey','ffSaid','ffBar',
+   'passAsk','passSaid','warPass','passSave','passHave','passChange','passForget',
+   'warPanel','warWho','warMeta','warScore',
+   'targetPanel','targetHint','staleBar','targetHost',
+   'simBanner','simRealWar','simWireWar','simOtherId','simResetBar','simResetBtn','simResetNote',
+   'advServer','advWar','advMe','advClaims','advRoster','advFf','advError','advRaw','wipeBtn','wipeNote']
+    .forEach(function (id) { el[id] = document.getElementById(id); });
+
+  function read(store) { try { return localStorage.getItem(store) || ''; } catch (e) { return ''; } }
+  function write(store, value) {
+    try { if (value) localStorage.setItem(store, value); else localStorage.removeItem(store); }
+    catch (e) { /* storage blocked - the page still works, just not across reloads */ }
+  }
+
+  function show(box, message) { box.textContent = message; box.hidden = false; }
+  function hide(box) { box.textContent = ''; box.hidden = true; }
+
+  // =========================================================================
+  // ROSTER SOURCE - the only place that talks to Torn.
+  //
+  // Nothing outside this block reaches into it; it hands back plain objects
+  // through the narrow interface at the bottom. When the claim server later
+  // fetches Torn once for the whole faction, this block is the only thing that
+  // is replaced - the claim layer and the rendering never learn where the
+  // roster came from. FF and Est sit behind the same kind of wall: statSource,
+  // just below.
+  // =========================================================================
+
+  var Roster = (function () {
+    var identity = null;   // { playerId, factionId, name }
+    var war = null;        // { warId, opponentId, opponentName, ourScore, theirScore, state }
+    var targets = null;    // [ { id, name, level, state, until } ]
+    var ownNames = null;   // tornId -> name, our own faction, for labelling claim holders
+    var stamps = { identity: 0, war: 0, targets: 0, ownNames: 0 };
+    var lastError = '';
+
+    function key() { return el.apiKey.value.trim(); }
+
+    function describeError(code) {
+      if (code === 2) return 'Torn rejected the key. Check it was copied whole.';
+      if (code === 7) return 'Your faction position is not allowed to see this. That is a faction permission, not a key setting.';
+      if (code === 16) return 'The key is missing a selection this call needs (faction members, or faction wars).';
+      if (code === 13) return 'This key is disabled after seven days of account inactivity.';
+      if (code === 10) return 'The key owner is in federal jail, so the key cannot be used.';
+      if (code === 18) return 'This key has been paused by its owner.';
+      if (code === 5) return 'Too many calls in the last minute. Wait a moment and try again.';
+      if (code === 9) return 'Torn’s API is temporarily unavailable. Try again shortly.';
+      if (code === 17) return 'Torn is in a backend update. Try again in a minute.';
+      return 'Torn returned error ' + code + '.';
+    }
+
+    async function get(path) {
+      var k = key();
+      if (!k) throw new Error('No Torn key on this page yet.');
+      var joiner = path.indexOf('?') === -1 ? '?' : '&';
+      var response;
+      try {
+        response = await fetch('https://api.torn.com/v2' + path + joiner + 'comment=KSWarRoom',
+          { headers: { Authorization: 'ApiKey ' + k } });
+      } catch (networkFailure) {
+        throw new Error('Could not reach Torn.  [GET /v2' + path + ' — network or CORS failure]');
+      }
+      var payload = await response.json();
+      if (payload && payload.error) {
+        var error = new Error(describeError(payload.error.code) + '  [GET /v2' + path +
+          ' → Torn error ' + payload.error.code + ']');
+        error.tornCode = payload.error.code;
+        throw error;
+      }
+      return payload;
+    }
+
+    // A Torn ID is identity. A display name is presentation and is never turned
+    // into one - a row without a readable ID is dropped, never guessed at.
+    function tornId(value) {
+      if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) return String(value);
+      if (typeof value === 'string' && /^[0-9]{1,12}$/.test(value.trim()) && Number(value.trim()) > 0) {
+        return String(Number(value.trim()));
+      }
+      return '';
+    }
+
+    function text(value) { return typeof value === 'string' ? value : ''; }
+
+    function rowsOf(source) {
+      if (Array.isArray(source)) return source;
+      if (source && typeof source === 'object') {
+        return Object.keys(source).map(function (k) { return source[k]; });
+      }
+      return null;
+    }
+
+    async function loadIdentity() {
+      var payload = await get('/key/info');
+      var user = payload && payload.info && payload.info.user;
+      var playerId = user ? tornId(user.id) : '';
+      var factionId = user ? tornId(user.faction_id) : '';
+      if (!playerId) throw new Error('Torn did not return your own player ID, so DIBS stays off.');
+      identity = { playerId: playerId, factionId: factionId, name: user ? text(user.name) : '' };
+      // Live-test rig: playerId and name stay ours - we are the one claiming.
+      // Only which faction counts as "our side" of the war is redirected.
+      var mirror = mirrorFactionId();
+      if (mirror) identity.factionId = mirror;
+      stamps.identity = Date.now();
+      return identity;
+    }
+
+    // The faction whose war this rig mirrors. Read from the field each time,
+    // never cached, so there is nothing stale to act on.
+    function mirrorFactionId() {
+      var raw = el.mirrorId.value.trim();
+      return /^[0-9]{1,12}$/.test(raw) && Number(raw) > 0 ? String(Number(raw)) : '';
+    }
+
+    async function loadWar() {
+      if (!identity) await loadIdentity();
+      var mirror = mirrorFactionId();
+      // Fail closed: with no faction to mirror there is no war to read, and the
+      // page says so instead of falling back on our own.
+      if (!mirror) { war = null; targets = null; throw new Error('Type a faction ID to mirror first.'); }
+      if (identity) identity.factionId = mirror;
+      var payload = await get('/faction/' + mirror + '/wars');
+      var wars = payload && payload.wars;
+      if (!wars || typeof wars !== 'object') {
+        throw new Error('The wars answer did not have the shape this page expects.');
+      }
+      stamps.war = Date.now();
+      var ranked = wars.ranked;
+      if (!ranked || typeof ranked !== 'object') { war = null; targets = null; return null; }
+
+      var now = Number(payload.timestamp) || Math.floor(Date.now() / 1000);
+      var warId = tornId(ranked.war_id);
+      var sides = Array.isArray(ranked.factions) ? ranked.factions : [];
+      var ours = null, theirs = null;
+      sides.forEach(function (side) {
+        var sideId = tornId(side && side.id);
+        if (!sideId) return;
+        if (sideId === identity.factionId) ours = side; else theirs = side;
+      });
+      var opponentId = theirs ? tornId(theirs.id) : '';
+      // No war ID or no opponent means no war this page will act on. It never
+      // falls back on an older war's ID.
+      if (!warId || !opponentId) { war = null; targets = null; return null; }
+
+      var start = Number(ranked.start) || 0;
+      var end = (ranked.end === null || ranked.end === undefined) ? null : Number(ranked.end);
+      var winner = (ranked.winner === undefined) ? null : ranked.winner;
+      var state = 'live';
+      if (winner !== null || (end !== null && end > 0 && now >= end)) state = 'over';
+      else if (start && now < start) state = 'prewar';
+
+      var changedWar = !war || war.warId !== warId;
+      war = {
+        warId: warId,
+        opponentId: opponentId,
+        opponentName: text(theirs && theirs.name) || ('Faction ' + opponentId),
+        ourName: text(ours && ours.name) || 'us',
+        ourScore: Number(ours && ours.score) || 0,
+        theirScore: Number(theirs && theirs.score) || 0,
+        start: start,
+        end: end,
+        state: state
+      };
+      if (changedWar) { targets = null; stamps.targets = 0; }
+      return war;
+    }
+
+    async function loadTargets() {
+      if (!war) return null;
+      var payload = await get('/faction/' + war.opponentId + '/members?striptags=true');
+      var rows = rowsOf(payload && payload.members);
+      if (!rows) throw new Error('The opponent member list did not have the shape this page expects.');
+      var out = [];
+      rows.forEach(function (row) {
+        if (!row || typeof row !== 'object') return;
+        var id = tornId(row.id !== undefined ? row.id : row.player_id);
+        if (!id) return; // no readable Torn ID: never shown as something to click
+        var status = (row.status && typeof row.status === 'object') ? row.status : {};
+        out.push({
+          id: id,
+          name: text(row.name) || ('#' + id),
+          level: Number(row.level) || 0,
+          state: text(status.state),
+          until: Number(status.until) || 0
+        });
+      });
+      targets = out;
+      stamps.targets = Date.now();
+      return targets;
+    }
+
+    async function loadOwnNames() {
+      var payload = await get('/faction/members?striptags=true');
+      var rows = rowsOf(payload && payload.members);
+      if (!rows) return null;
+      var map = {};
+      rows.forEach(function (row) {
+        if (!row || typeof row !== 'object') return;
+        var id = tornId(row.id !== undefined ? row.id : row.player_id);
+        if (id) map[id] = text(row.name) || ('#' + id);
+      });
+      ownNames = map;
+      stamps.ownNames = Date.now();
+      return map;
+    }
+
+    return {
+      identity: function () { return identity; },
+      war: function () { return war; },
+      targets: function () { return targets; },
+      nameOf: function (id) { return (ownNames && ownNames[id]) || ''; },
+      stamps: function () { return stamps; },
+      lastError: function () { return lastError; },
+      setError: function (message) { lastError = message || ''; },
+      loadIdentity: loadIdentity,
+      loadWar: loadWar,
+      loadTargets: loadTargets,
+      loadOwnNames: loadOwnNames,
+      forget: function () {
+        identity = null; war = null; targets = null; ownNames = null;
+        stamps = { identity: 0, war: 0, targets: 0, ownNames: 0 };
+        lastError = '';
+      }
+    };
+  })();
+
+  // ============================================== ROSTER SOURCE ends here ===
+
+  // =========================================================================
+  // FF SOURCE - the only place that talks to FFScouter.
+  //
+  // The same wall as the roster source above. Nothing outside this block
+  // knows the address, the key or the shape of the answer: it is asked a few
+  // plain questions and hands back plain values. To take FF and EST from
+  // somewhere else - the claim server, another service - this block is
+  // replaced and nothing in the claim layer or the rendering changes.
+  //
+  //   hasKey()       a usable FFScouter key is on the page
+  //   refresh(ids)   read these targets and refill the cache; returns nothing
+  //   get(id)        { ff, est, estText, fetchedAt, state }   state: ok | unknown
+  //   state()        nokey | checking | ok | stale | error
+  //   lastError()    one line for the bar when state() is error - never the key
+  //
+  // The cache lives in memory and nowhere else. Figures from before a reload
+  // would look current and be old, and the page reads again within seconds.
+  // =========================================================================
+
+  var statSource = (function () {
+    var cache = {};        // tornId -> { value: { ff, est, estText, updated }, fetchedAt, source, schemaVersion }
+    var fetchedAt = 0;     // when the last successful read arrived; 0 until one has
+    var lastError = '';
+    var generation = 0;    // every refresh takes a number; an answer to an older one is dropped
+    var controller = null; // aborts the read that is out when a newer one starts
+    var CHUNK = 200;       // the endpoint takes 205 at most; chunks go one after another
+    var SHAPE = /^[A-Za-z0-9]{16}$/;
+
+    // The key is read from the field and checked every time. Anything that is
+    // not exactly sixteen letters and digits is no key: nothing is sent.
+    function key() {
+      var k = el.ffKey.value.trim();
+      return SHAPE.test(k) ? k : '';
+    }
+
+    function hasKey() { return key() !== ''; }
+
+    function num(value) { return (typeof value === 'number' && isFinite(value)) ? value : null; }
+
+    function id12(value) {
+      if (typeof value !== 'number' && typeof value !== 'string') return '';
+      var s = String(value).trim();
+      return (/^[0-9]{1,12}$/.test(s) && Number(s) > 0) ? String(Number(s)) : '';
+    }
+
+    // Whatever the service says, the key is not repeated back.
+    function scrub(text, k) {
+      return String(text).split(k).join('[key]').slice(0, 160).replace(/[.\s]+$/, '');
+    }
+
+    function forgetAll() { cache = {}; fetchedAt = 0; }
+
+    // Older than FF_DROP_MS: the figures go. The time of the read stays, so
+    // the bar can still say when it was.
+    function prune() {
+      if (fetchedAt && Date.now() - fetchedAt > FF_DROP_MS) cache = {};
+    }
+
+    async function readChunk(k, ids, signal) {
+      var url = 'https://ffscouter.com/api/v1/get-stats?key=' + encodeURIComponent(k) +
+        '&targets=' + ids.join(',');
+      var response;
+      try {
+        response = await fetch(url, signal ? { signal: signal } : undefined);
+      } catch (failure) {
+        if (failure && failure.name === 'AbortError') throw failure;
+        throw new Error('FFScouter could not be reached.');
+      }
+      var payload = null;
+      try { payload = await response.json(); } catch (e) { payload = null; }
+      if (payload && !Array.isArray(payload) && typeof payload === 'object' &&
+          (payload.error !== undefined || payload.code !== undefined)) {
+        throw new Error('FFScouter refused the request' +
+          (typeof payload.error === 'string'
+            ? ': ' + scrub(payload.error, k)
+            : (payload.code !== undefined ? ' (code ' + String(payload.code).slice(0, 8) + ')' : '')) + '.');
+      }
+      if (!response.ok) throw new Error('FFScouter answered HTTP ' + response.status + '.');
+      if (!Array.isArray(payload)) throw new Error('FFScouter answered something this page cannot read.');
+      return payload;
+    }
+
+    // Five fields are read from a row. Everything else in it is left alone.
+    function pick(row) {
+      var ff = num(row.fair_fight);
+      var est = num(row.bs_estimate);
+      var estText = (typeof row.bs_estimate_human === 'string' && row.bs_estimate_human.trim() !== '')
+        ? row.bs_estimate_human.trim().slice(0, 24) : null;
+      // The figure and its text go together. One without the other would sort
+      // as a value and show as none, or the other way round.
+      if (est === null || estText === null) { est = null; estText = null; }
+      return { ff: ff, est: est, estText: estText, updated: num(row.last_updated) };
+    }
+
+    async function refresh(ids) {
+      generation += 1;
+      var mine = generation;
+      if (controller) { controller.abort(); controller = null; }
+      var k = key();
+      if (!k) { forgetAll(); lastError = ''; return; }
+      var list = [];
+      (Array.isArray(ids) ? ids : []).forEach(function (id) {
+        var clean = id12(id);
+        if (clean) list.push(clean);
+      });
+      var own = (typeof AbortController === 'function') ? new AbortController() : null;
+      controller = own;
+      var fresh = {};
+      try {
+        for (var at = 0; at < list.length; at += CHUNK) {
+          var rows = await readChunk(k, list.slice(at, at + CHUNK), own ? own.signal : null);
+          if (mine !== generation) return;   // a newer read owns the cache now
+          rows.forEach(function (row) {
+            if (!row || typeof row !== 'object') return;
+            var id = id12(row.player_id);
+            if (id) fresh[id] = pick(row);
+          });
+        }
+      } catch (failure) {
+        if (mine !== generation || (failure && failure.name === 'AbortError')) return;
+        // Fail closed: nothing old stays up beside a source that just failed.
+        forgetAll();
+        lastError = (failure && failure.message) || 'FFScouter could not be read.';
+        return;
+      } finally {
+        if (controller === own) controller = null;
+      }
+      var now = Date.now();
+      var next = {};
+      Object.keys(fresh).forEach(function (id) {
+        next[id] = { value: fresh[id], fetchedAt: now, source: 'ffscouter', schemaVersion: 1 };
+      });
+      cache = next;
+      fetchedAt = now;
+      lastError = '';
+    }
+
+    var NONE = { ff: null, est: null, estText: null, fetchedAt: 0, state: 'unknown' };
+
+    function get(id) {
+      if (!hasKey() || !fetchedAt) return NONE;
+      prune();
+      var entry = cache[id];
+      if (!entry) return { ff: null, est: null, estText: null, fetchedAt: fetchedAt, state: 'unknown' };
+      return { ff: entry.value.ff, est: entry.value.est, estText: entry.value.estText,
+               fetchedAt: entry.fetchedAt, state: 'ok' };
+    }
+
+    function state() {
+      if (!hasKey()) return 'nokey';
+      if (lastError) return 'error';
+      if (!fetchedAt) return 'checking';
+      return (Date.now() - fetchedAt > FF_STALE_MS) ? 'stale' : 'ok';
+    }
+
+    return {
+      hasKey: hasKey,
+      refresh: refresh,
+      get: get,
+      state: state,
+      lastError: function () { return lastError; }
+    };
+  })();
+
+  // ================================================== FF SOURCE ends here ===
+
+  // ------------------------------------------------------------ claim layer
+
+  var Claims = (function () {
+    // board is null whenever the server has not just confirmed the picture.
+    // Nothing refills it from memory: a stale board that looks fresh is exactly
+    // how two members end up on one target.
+    var board = null;
+    var status = 'idle';   // idle | ok | offline | unauthorized
+    var lastError = '';
+    var lastRaw = '';
+
+    function password() { return read(PASS_STORE); }
+
+    // ---------------------------------------------------------------- the wall
+    //
+    // Every request this page makes goes out through call(), and call() gets
+    // its war ID from here. Callers hand in the real war's ID and never a
+    // finished one, so there is no flag further up that a later change can
+    // forget to read: to write to the real war in simulation, this function
+    // would have to be edited.
+    //
+    // Two refusals, both checked on the value that is about to go into the
+    // address, and both throwing rather than sending anything:
+    //   - in simulation the ID must have been replaced, and must carry sim-
+    //   - a wipe in simulation may only ever go to a sim- ID
+    function wireWarId(realWarId, op) {
+      var wire = (SIM && typeof realWarId === 'string') ? SIM_PREFIX + realWarId : realWarId;
+      if (SIM && (wire === realWarId || String(wire).lastIndexOf(SIM_PREFIX, 0) !== 0)) {
+        throw new Error('Refused: simulation would have written to the real war. Nothing was sent.');
+      }
+      if (SIM && op === 'wipe' && String(wire).lastIndexOf(SIM_PREFIX, 0) !== 0) {
+        throw new Error('Refused: a wipe may only ever reach a test war. Nothing was sent.');
+      }
+      return wire;
+    }
+
+    async function call(method, warId, op, body) {
+      var wire = wireWarId(warId, op);
+      var pass = password();
+      if (!pass) {
+        board = null; status = 'idle';
+        throw new Error('No War Room password on this device yet.');
+      }
+      var init = { method: method, headers: { 'X-KS-Auth': pass } };
+      if (body) {
+        init.headers['Content-Type'] = 'application/json';
+        init.body = JSON.stringify(body);
+      }
+      var response;
+      try {
+        response = await fetch(CLAIM_SERVER + '/war/' + encodeURIComponent(wire) + '/' + op, init);
+      } catch (networkFailure) {
+        board = null; status = 'offline';
+        lastError = 'The claim server could not be reached.';
+        lastRaw = JSON.stringify({ op: op, result: 'no answer' }, null, 2);
+        throw new Error(lastError);
+      }
+      var payload = null;
+      try { payload = await response.json(); } catch (e) { payload = null; }
+      // The password is not part of this and never will be.
+      lastRaw = JSON.stringify({ op: op, http: response.status, body: payload }, null, 2);
+
+      if (response.status === 401) {
+        // 401 says exactly one thing: the word was not accepted. Nothing else
+        // is guessed from it.
+        board = null; status = 'unauthorized';
+        lastError = 'The claim server did not accept the War Room password.';
+        var refusal = new Error(lastError);
+        refusal.unauthorized = true;
+        throw refusal;
+      }
+      if (!payload || typeof payload !== 'object') {
+        board = null; status = 'offline';
+        lastError = 'The claim server answered something this page cannot read.';
+        throw new Error(lastError);
+      }
+      return { http: response.status, body: payload };
+    }
+
+    async function refresh(warId) {
+      var result = await call('GET', warId, 'claims', null);
+      var body = result.body;
+      if (result.http !== 200 || body.ok !== true || !Array.isArray(body.claims)) {
+        board = null; status = 'offline';
+        lastError = 'The claim server could not say who holds what' +
+          (typeof body.error === 'string' ? ' (' + body.error + ')' : '') + '.';
+        throw new Error(lastError);
+      }
+      var claims = {};
+      body.claims.forEach(function (claim) {
+        if (claim && typeof claim.targetId === 'string' && typeof claim.memberId === 'string') {
+          claims[claim.targetId] = claim;
+        }
+      });
+      // Targets the server said it cannot read. They are shown as UNKNOWN and
+      // are never takeable - never as free.
+      var unreadable = {};
+      if (Array.isArray(body.unreadable)) {
+        body.unreadable.forEach(function (entry) {
+          if (entry && typeof entry.targetId === 'string') unreadable[entry.targetId] = true;
+        });
+      }
+      board = {
+        claims: claims,
+        unreadable: unreadable,
+        degraded: body.degraded === true,
+        serverTime: Number(body.serverTime) || 0,
+        ttl: Number(body.claimTtlSeconds) || 0,
+        receivedAt: Date.now()
+      };
+      status = 'ok';
+      lastError = '';
+      return board;
+    }
+
+    return {
+      board: function () { return board; },
+      status: function () { return status; },
+      wireWarId: wireWarId,
+      lastError: function () { return lastError; },
+      lastRaw: function () { return lastRaw; },
+      hasPassword: function () { return password() !== ''; },
+      drop: function () { board = null; status = 'idle'; },
+      refresh: refresh,
+      claim: function (warId, targetId, memberId) {
+        return call('POST', warId, 'claim', { targetId: targetId, memberId: memberId });
+      },
+      unclaim: function (warId, targetId, memberId) {
+        return call('POST', warId, 'unclaim', { targetId: targetId, memberId: memberId });
+      },
+      wipe: function (warId, memberId) {
+        return call('POST', warId, 'wipe', { memberId: memberId });
+      }
+    };
+  })();
+
+  // ------------------------------------------------------------------- view
+
+  function passRender() {
+    var have = Claims.hasPassword();
+    el.passHave.hidden = !have;
+    el.passAsk.hidden = have;
+  }
+
+  function passRejected() {
+    write(PASS_STORE, '');
+    Claims.drop();
+    el.warPass.value = '';
+    el.passSaid.textContent = 'That word was not accepted. Type it again, or ask Kingshade for the ' +
+      'one the faction is using now.';
+    el.passSaid.hidden = false;
+    passRender();
+  }
+
+  // The server owns the clock. This is the browser's guess at how much of the
+  // server's window is left. It is drawn as a guess and is never used to decide
+  // that a claim is over - only the server decides that.
+  function estimateLeft(claim, board) {
+    if (!claim || !board || !board.serverTime) return null;
+    var elapsed = Date.now() - board.receivedAt;
+    var left = claim.expiresAt - board.serverTime - elapsed;
+    return left > 0 ? left : 0;
+  }
+
+  function leftText(ms) {
+    if (ms === null) return '';
+    var seconds = Math.round(ms / 1000);
+    if (seconds <= 0) return 'about to lapse';
+    if (seconds < 60) return '~' + seconds + 's left';
+    return '~' + Math.floor(seconds / 60) + 'm ' + (seconds % 60) + 's left';
+  }
+
+  function statusPill(target) {
+    var span = document.createElement('span');
+    var state = target.state || 'Unknown';
+    var left = target.until ? target.until - Math.floor(Date.now() / 1000) : 0;
+    if (state === 'Okay') { span.className = 'pill good'; span.textContent = 'Okay'; return span; }
+    span.className = state === 'Hospital' ? 'pill bad' : (state === 'Jail' ? 'pill warn' : 'pill');
+    span.textContent = state + (left > 0 ? ' ' + (left < 60 ? left + 's' : Math.ceil(left / 60) + 'm') : '');
+    return span;
+  }
+
+  // The hue for a Fair Fight figure, on the same scale FFScouter uses in its
+  // own column on Torn's faction page: sixty degrees per FF step, blue at
+  // FF 1 falling through cyan, green, yellow and orange to red at FF 5.
+  // Clipped at both ends, so FF 153 is simply red and never wraps back round
+  // the wheel into a colour that would read as safe.
+  //
+  // STATUS: ANTAGANDE. The formula was derived from two screenshots of that
+  // column, not from FFScouter's code or any published spec. It reproduces the
+  // colour on all nine values read off those pictures, which makes it visually
+  // equivalent - but their real formula may differ in detail. It is one line
+  // to change if it ever needs adjusting; there are deliberately no hard-coded
+  // thresholds, because steps would show as banding across the table.
+  function ffHue(ff) {
+    if (typeof ff !== 'number' || !isFinite(ff)) return null;
+    var hue = 240 - (ff - 1) * 60;
+    if (hue > 240) hue = 240;
+    if (hue < 0) hue = 0;
+    return Math.round(hue);
+  }
+
+  // One cell of FF or EST. The column's state is decided first - no key, first
+  // read under way, source failed - and only then the row's own value. What is
+  // not known is a word, never a zero and never a dash that could pass for one.
+  function ffCell(target, kind, columnState) {
+    var td = document.createElement('td');
+    if (columnState === 'nokey') {
+      td.className = 'ffcell none';
+      td.textContent = '—';
+      return td;
+    }
+    if (columnState === 'checking') {
+      td.className = 'ffcell word checking';
+      td.textContent = 'CHECKING';
+      return td;
+    }
+    var row = columnState === 'error' ? null : statSource.get(target.id);
+    var value = (row && row.state === 'ok') ? (kind === 'ff' ? row.ff : row.estText) : null;
+    if (value === null) {
+      td.className = 'ffcell word unknown';
+      td.textContent = 'UNKNOWN';
+      return td;
+    }
+    td.className = 'ffcell' + (columnState === 'stale' ? ' old' : '');
+    // estText is a string from an outside service: textContent, never markup.
+    td.textContent = kind === 'ff' ? value.toFixed(2) : value;
+    // Both columns take their colour from the row's FF: EST has no scale of
+    // its own and no original to copy. Only a cell that is showing a figure is
+    // ever tinted - a coloured UNKNOWN would look like something the page
+    // knows. A row carrying EST but no FF has nothing to derive a colour from
+    // and stays plain.
+    //
+    // The colour says how hard the target is. It says nothing about whether it
+    // may be called: that is the FF range in ffAllowsClaim(), a separate rule
+    // deliberately kept in a separate place.
+    var hue = ffHue(row.ff);
+    if (hue !== null) {
+      td.classList.add('tinted');
+      td.style.setProperty('--ff-hue', String(hue));
+    }
+    return td;
+  }
+
+  // The span, written out from the constants. The figures are never typed into
+  // a string anywhere on this page.
+  function ffRangeText() {
+    return FF_CLAIM_MIN.toFixed(2) + '-' + FF_CLAIM_MAX.toFixed(2);
+  }
+
+  // May this member call this target, as far as his own Fair Fight goes?
+  // Three answers - 'ok', 'out_of_range', 'unknown' - and the row asks once.
+  //
+  // The limit sits in the page and not in the server, and that is a decision,
+  // not an oversight. The server holds no FF and has no way to get one without
+  // fetching FFScouter itself, which would tear down the line statSource is
+  // drawn along: one place reads FF, everything else asks it a question. The
+  // owner took the call on 2026-09-10 on the ground that there is no sabotage
+  // risk inside the faction. Do not "correct" this into the server.
+  //
+  // Fail closed. Anything that is not a figure this page has actually read -
+  // no key, first read still out, the source failed, or a value already dropped
+  // for being older than FF_DROP_MS - is 'unknown', and 'unknown' does not
+  // claim. Stale but under FF_DROP_MS does claim: battle stats move slowly and
+  // the page already drops the figure at thirty minutes, so the limit follows
+  // that lifetime instead of inventing a second one. Owner's decision,
+  // 2026-09-10.
+  //
+  // No request goes out from here. It reads the same cache the FF cell on this
+  // very row has just read.
+  function ffAllowsClaim(targetId) {
+    var columnState = statSource.state();
+    if (columnState === 'nokey' || columnState === 'checking' || columnState === 'error') {
+      return 'unknown';
+    }
+    var row = statSource.get(targetId);
+    if (!row || row.state !== 'ok' || row.ff === null) return 'unknown';
+    // Compared on the same two decimals the FF cell prints. A row showing the
+    // lower end in one column and refusing in the next, because the figure
+    // behind it is a shade under, would be the page contradicting itself on
+    // one line.
+    var shown = Number(row.ff.toFixed(2));
+    return (shown >= FF_CLAIM_MIN && shown <= FF_CLAIM_MAX) ? 'ok' : 'out_of_range';
+  }
+
+  // The line above the list that says why FF and EST are not simply there.
+  // Silent when they are. No longer silent when there is no key: the FF range
+  // now decides what may be called, so a missing key is a blockage and not
+  // merely two empty columns.
+  function renderFfBar(rows, columnState) {
+    var text = '';
+    if (columnState === 'nokey') {
+      text = 'DIBS needs your FF. Paste your FFScouter key above - without it the page cannot ' +
+        'check that a target is inside your FF range (' + ffRangeText() + '), so no target can ' +
+        'be called. Everything else on this page works as usual.';
+    } else if (columnState === 'error') {
+      text = 'FF and EST are off. ' + (statSource.lastError() || 'The source did not answer.') +
+        ' Both columns show UNKNOWN until the next read succeeds.' +
+        ' No target can be called until FF can be read again.';
+    } else if (columnState === 'stale' && rows.length) {
+      var readAt = statSource.get(rows[0].id).fetchedAt;
+      var when = readAt ? new Date(readAt).toLocaleTimeString() : 'an unknown time';
+      text = (readAt && Date.now() - readAt > FF_DROP_MS)
+        ? 'FF and EST were last read from FFScouter at ' + when + ', more than thirty minutes ' +
+          'ago, and have been dropped. Both columns show UNKNOWN until a fresh read arrives.'
+        : 'FF and EST are stale. Last read from FFScouter at ' + when + ' — the figures may be ' +
+          'out of date.';
+    }
+    el.ffBar.textContent = text;
+    el.ffBar.hidden = !text;
+  }
+
+  // Under the key field. A key of the wrong shape is treated as no key at all -
+  // nothing is sent - but the member is told, or a pasted key that silently
+  // does nothing would look like a broken page.
+  function ffKeyRender() {
+    var typed = el.ffKey.value.trim();
+    var wrong = typed !== '' && !statSource.hasKey();
+    el.ffSaid.textContent = wrong
+      ? 'That does not look like an FFScouter key (16 letters and digits), so FF and EST stay ' +
+        'empty. Nothing was sent.'
+      : '';
+    el.ffSaid.hidden = !wrong;
+  }
+
+  // For the Advanced panel: the column's state and how many rows have a
+  // figure. The key is not part of this and never will be.
+  function ffAdvancedLine() {
+    var columnState = statSource.state();
+    var targets = Roster.targets() || [];
+    if (columnState === 'nokey') return 'no FFScouter key on this page';
+    if (columnState === 'error') return 'error · ' + (statSource.lastError() || 'no detail');
+    var readAt = 0, withFf = 0, withEst = 0;
+    targets.forEach(function (target) {
+      var row = statSource.get(target.id);
+      if (row.fetchedAt) readAt = row.fetchedAt;
+      if (row.ff !== null) withFf += 1;
+      if (row.est !== null) withEst += 1;
+    });
+    return columnState + ' · ' + withFf + ' of ' + targets.length + ' rows with FF, ' + withEst +
+      ' with EST' + (readAt ? ' · read ' + new Date(readAt).toLocaleTimeString() : '');
+  }
+
+  // ---------------------------------------------------------------- sorting
+  //
+  // A pure view. It reorders rows that are already on the page and touches
+  // nothing else: no request leaves the page when a header is clicked, the
+  // claim layer is asked for nothing it has not already answered, and the
+  // roster array is never sorted in place.
+  //
+  // FF and EST are one entry each in COLUMNS, like the rest. Their values come
+  // through statSource, and a row that has none sits last whichever way the list
+  // is turned; numberCompare below is what keeps it there.
+
+  var STATE_RANK = { Okay: 1, Hospital: 2, Traveling: 3, Abroad: 4, Federal: 5 };
+
+  function stateRank(target) { return STATE_RANK[target.state] || 6; }
+
+  // Case-blind, and digits read as numbers, so a name that starts with a figure
+  // or an underscore lands somewhere predictable instead of wherever the code
+  // points happen to fall.
+  function nameCompare(a, b) {
+    try {
+      return String(a).localeCompare(String(b), undefined, { sensitivity: 'base', numeric: true });
+    } catch (e) {
+      var x = String(a).toLowerCase(), y = String(b).toLowerCase();
+      return x < y ? -1 : (x > y ? 1 : 0);
+    }
+  }
+
+  // Usefulness, not the alphabet: free first, then the ones you hold, then
+  // someone else's, then everything that cannot be taken at all.
+  function dibsRank(target, ctx) {
+    if (!ctx.boardUsable || !ctx.board) return 4;   // Locked or Offline
+    if (ctx.board.unreadable[target.id]) return 4;  // Unknown
+    var claim = ctx.board.claims[target.id];
+    if (!claim) return 1;                           // Free
+    return claim.memberId === ctx.me ? 2 : 3;
+  }
+
+  // Two figures, either of which may be missing. A missing one sorts last in
+  // both directions: sortRows flips the sign of every comparison for a
+  // descending sort, so the missing side is flipped back here, and the engine
+  // itself is not touched.
+  function numberCompare(x, y, ctx) {
+    var xm = x === null, ym = y === null;
+    if (xm && ym) return 0;
+    if (!xm && !ym) return x - y;
+    return (xm ? 1 : -1) * (ctx && ctx.dir === 'desc' ? -1 : 1);
+  }
+
+  var COLUMNS = [
+    { id: 'target', label: 'Target',
+      compare: function (a, b) { return nameCompare(a.name, b.name); } },
+    { id: 'level', label: 'Level',
+      compare: function (a, b) { return (a.level || 0) - (b.level || 0); } },
+    { id: 'ff', label: 'FF',
+      compare: function (a, b, ctx) { return numberCompare(statSource.get(a.id).ff, statSource.get(b.id).ff, ctx); } },
+    { id: 'est', label: 'EST',
+      compare: function (a, b, ctx) { return numberCompare(statSource.get(a.id).est, statSource.get(b.id).est, ctx); } },
+    { id: 'status', label: 'Status',
+      compare: function (a, b) {
+        var byState = stateRank(a) - stateRank(b);
+        if (byState) return byState;
+        // Same state: inside Hospital and Federal, out soonest first. until is
+        // an absolute timestamp, so this order does not churn as it counts down.
+        if (a.state === 'Hospital' || a.state === 'Federal') return (a.until || 0) - (b.until || 0);
+        return 0;
+      } },
+    { id: 'dibs', label: 'DIBS',
+      compare: function (a, b, ctx) { return dibsRank(a, ctx) - dibsRank(b, ctx); } }
+  ];
+
+  function columnById(id) {
+    var found = null;
+    COLUMNS.forEach(function (column) { if (column.id === id) found = column; });
+    return found;
+  }
+
+  // This browser, this device, nothing sent anywhere. It is a convenience:
+  // anything that cannot be read back is simply no sort at all, and the list
+  // shows in the order Torn gave it.
+  function readSort() {
+    var parts = read(SORT_STORE).split(':');
+    if (parts.length !== 2 || !columnById(parts[0])) return null;
+    if (parts[1] !== 'asc' && parts[1] !== 'desc') return null;
+    return { id: parts[0], dir: parts[1] };
+  }
+
+  var sortState = readSort();
+
+  function setSort(id) {
+    if (!columnById(id)) return;
+    sortState = (sortState && sortState.id === id)
+      ? { id: id, dir: sortState.dir === 'asc' ? 'desc' : 'asc' }
+      : { id: id, dir: 'asc' };
+    write(SORT_STORE, sortState.id + ':' + sortState.dir);
+    renderTargets();
+  }
+
+  function sortRows(targets, ctx) {
+    var column = sortState ? columnById(sortState.id) : null;
+    if (!column) return targets;
+    var sign = sortState.dir === 'desc' ? -1 : 1;
+    // A copy. The roster keeps the order Torn sent it in.
+    return targets.slice().sort(function (a, b) {
+      var d = column.compare(a, b, ctx);
+      // Ties fall back on the Torn ID so equal rows keep one fixed order
+      // instead of shuffling on every redraw.
+      if (!d) d = Number(a.id) - Number(b.id);
+      return sign * d;
+    });
+  }
+
+  var pendingTarget = '';
+
+  // The last refusal the server gave, and which row it belongs to.
+  // { targetId, text, at }. One at a time on purpose: two messages on screen
+  // at once is worse than none. It lives in memory and nowhere else - an old
+  // refusal turning up after a reload would be telling the member about a war
+  // moment that has long passed.
+  var lastRefusal = null;
+
+  // The refusal still worth showing, or null. Its age is checked here, at
+  // render, because the page already redraws itself regularly. A timer would
+  // be a second lifecycle to start, clear and get wrong on navigation.
+  function currentRefusal() {
+    if (lastRefusal && Date.now() - lastRefusal.at > REFUSAL_SHOW_MS) lastRefusal = null;
+    return lastRefusal;
+  }
+
+  // The server's status word in words a member can read. An unknown word is
+  // never guessed at: the row points at the box up top, which already prints
+  // the word itself and is the one place that should carry a surprise.
+  function refusalLine(status) {
+    if (status === 'already_holding') return 'You already hold another target';
+    if (status === 'taken') return 'Someone else got there first';
+    if (status === 'not_owner') return 'That claim is not yours';
+    if (status === 'unreadable') return 'The server cannot read this row';
+    return 'Refused - see the message at the top';
+  }
+
+  function renderTargets() {
+    var war = Roster.war();
+    var targets = Roster.targets();
+    var board = Claims.board();
+    var claimStatus = Claims.status();
+    var me = Roster.identity() ? Roster.identity().playerId : '';
+
+    el.targetPanel.hidden = !targets;
+    if (!targets) return;
+
+    var boardUsable = claimStatus === 'ok' && !!board;
+    // In simulation the war's own state is not a gate: the whole point is to
+    // work the buttons before a war has started. Nothing else is relaxed - a
+    // board the server has not just confirmed still closes them.
+    var canClaim = !!(war && me && boardUsable && (SIM || war.state === 'live'));
+
+    el.simResetBar.hidden = !(SIM && war && me);
+
+    var hint = [targets.length + ' on their roster'];
+    if (SIM) hint.push('simulation · claims go to ' + Claims.wireWarId(war ? war.warId : '', 'claims'));
+    if (!me) hint.push('your own Torn ID could not be read, so DIBS is off');
+    else if (!SIM && (!war || war.state !== 'live')) hint.push('no live war, so DIBS is off');
+    else if (claimStatus === 'unauthorized') hint.push('the password was not accepted, so DIBS is off');
+    else if (claimStatus === 'idle') hint.push('no War Room password yet, so DIBS is locked');
+    else if (claimStatus !== 'ok') hint.push('the claim board is not answering');
+    else if (board && board.degraded) hint.push('the server could not read every claim');
+    el.targetHint.textContent = hint.join(' · ');
+
+    // Sorting is a view over the rows Torn already gave us. It never changes
+    // which targets exist and never reorders Roster's own array, so losing the
+    // sort falls straight back to the order the roster arrived in.
+    var rows = sortRows(targets, { boardUsable: boardUsable, board: board, me: me,
+      dir: sortState ? sortState.dir : 'asc' });
+    // Decided once for the whole column; each cell then reads its own row.
+    var ffState = statSource.state();
+    // Read once for the whole table, and matched to a row by Torn ID below -
+    // never by position, so re-sorting cannot move it onto another player.
+    var refusal = currentRefusal();
+    var table = document.createElement('table');
+    var thead = document.createElement('thead');
+    var headRow = document.createElement('tr');
+    // Every column sorts, and each header is a real button so the list can be
+    // ordered from the keyboard as well as the mouse. A click here never asks
+    // the server anything: it reorders what is already on the page.
+    COLUMNS.forEach(function (column) {
+      var th = document.createElement('th');
+      th.className = 'sort';
+      th.scope = 'col';
+      var trigger = document.createElement('button');
+      trigger.type = 'button';
+      var label = document.createElement('span');
+      label.textContent = column.label;
+      var mark = document.createElement('span');
+      mark.className = 'sortmark';
+      mark.setAttribute('aria-hidden', 'true');
+      if (sortState && sortState.id === column.id) {
+        th.setAttribute('aria-sort', sortState.dir === 'asc' ? 'ascending' : 'descending');
+        mark.textContent = sortState.dir === 'asc' ? '▲' : '▼';
+      }
+      trigger.appendChild(label);
+      trigger.appendChild(mark);
+      trigger.onclick = function () { setSort(column.id); };
+      th.appendChild(trigger);
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    var tbody = document.createElement('tbody');
+
+    rows.forEach(function (target) {
+      var tr = document.createElement('tr');
+      // The row carries its Torn ID, and every button built below is closed
+      // over this same target object. Sorting reorders the objects, never the
+      // bindings, so a re-sorted row still acts on the player it names.
+      tr.setAttribute('data-target-id', target.id);
+
+      var tdName = document.createElement('td');
+      var name = document.createElement('div');
+      name.className = 'tname';
+      var link = document.createElement('a');
+      link.href = 'https://www.torn.com/profiles.php?XID=' + target.id;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = target.name;
+      name.appendChild(link);
+      var idLine = document.createElement('div');
+      idLine.className = 'tid';
+      idLine.textContent = target.id;
+      tdName.appendChild(name);
+      tdName.appendChild(idLine);
+
+      var tdLevel = document.createElement('td');
+      tdLevel.className = 'tid';
+      tdLevel.textContent = target.level ? String(target.level) : '';
+
+      var tdFf = ffCell(target, 'ff', ffState);
+      var tdEst = ffCell(target, 'est', ffState);
+      // Asked once for the row and read twice below: by the free branch and by
+      // the simulation button at the end of the row.
+      var ffSays = ffAllowsClaim(target.id);
+
+      var tdStatus = document.createElement('td');
+      tdStatus.appendChild(statusPill(target));
+
+      var tdDibs = document.createElement('td');
+      // One column, not two. The state comes first and the button that acts on
+      // it comes straight after: a row is read once during a war and decided on
+      // there and then, so the two must not sit half a screen apart. Nothing is
+      // added here and nothing is dropped - only the placing changed.
+      var dibsCell = document.createElement('div');
+      dibsCell.className = 'toolbar';
+      var dibsState = document.createElement('div');
+      dibsCell.appendChild(dibsState);
+
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn small';
+      button.textContent = 'Take DIBS';
+      button.disabled = true;
+
+      if (!boardUsable) {
+        // Never the last known list. Either the server just said it, or the
+        // column says it does not know.
+        if (claimStatus === 'offline') {
+          dibsState.className = 'dibs offline';
+          dibsState.textContent = 'Offline';
+        } else {
+          dibsState.className = 'dibs locked';
+          dibsState.textContent = 'Locked';
+        }
+        tr.className = 'blocked';
+      } else if (board.unreadable[target.id]) {
+        dibsState.className = 'dibs unknown';
+        dibsState.textContent = 'Unknown';
+        tr.className = 'blocked';
+      } else {
+        var claim = board.claims[target.id];
+        if (claim) {
+          var mine = claim.memberId === me;
+          var holder = mine ? 'you' : (Roster.nameOf(claim.memberId) || ('Torn ' + claim.memberId));
+          dibsState.className = 'dibs';
+          var who = document.createElement('div');
+          who.className = 'holder';
+          who.textContent = 'Taken by ' + holder;
+          var left = document.createElement('div');
+          left.className = 'left';
+          left.textContent = leftText(estimateLeft(claim, board));
+          dibsState.appendChild(who);
+          dibsState.appendChild(left);
+          if (mine) {
+            tr.className = 'mine';
+            button.textContent = 'Release';
+            button.disabled = !canClaim;
+            button.onclick = function () { act('unclaim', target.id); };
+          } else {
+            button.textContent = 'Taken';
+          }
+        } else {
+          dibsState.className = 'dibs free';
+          dibsState.textContent = 'Free';
+          button.className = 'btn small primary';
+          if (ffSays === 'ok') {
+            button.disabled = !canClaim;
+            button.onclick = function () { act('claim', target.id); };
+          } else {
+            // The word stays Free, because the target is free: another member
+            // with another FF may take it. FF is personal - two members see
+            // different figures on the same row, and that is right. Saying
+            // Taken here would be the page telling a lie about the board.
+            var ffWhy = document.createElement('div');
+            ffWhy.className = 'left';
+            ffWhy.textContent = ffSays === 'out_of_range'
+              ? 'Outside your FF range (' + ffRangeText() + ')'
+              : 'FF unknown - cannot check';
+            dibsState.appendChild(ffWhy);
+            // No handler is attached at all, rather than a live one behind a
+            // disabled button.
+            button.disabled = true;
+          }
+        }
+      }
+
+      // A refusal is shown on the row that was clicked, because that is where
+      // the member is looking. The box at the top of the page still says the
+      // same thing and is untouched - but during a war the table sits several
+      // screen heights below it, and nobody scrolls up mid-war. This is added
+      // to whatever the cell already says; no existing line is changed, moved
+      // or removed, and no row is scrolled to.
+      if (refusal && refusal.targetId === target.id) {
+        var refused = document.createElement('div');
+        refused.className = 'left';
+        refused.textContent = refusal.text;
+        dibsState.appendChild(refused);
+      }
+
+      if (pendingTarget === target.id) { button.disabled = true; button.textContent = '…'; }
+      dibsCell.appendChild(button);
+
+      // Simulation only, and only on a target nobody holds: claiming one that
+      // is already held would be asking the server something it has answered.
+      // This is how the refusal is tried - take as the other, then take it
+      // yourself and watch your own button go dead.
+      if (SIM) {
+        var other = document.createElement('button');
+        other.type = 'button';
+        other.className = 'btn small';
+        other.textContent = 'Take as other';
+        var free = boardUsable && !board.unreadable[target.id] && !board.claims[target.id];
+        // The FF range holds here too. Taking a target in somebody else's name
+        // must not be the way around the check, or the check is a door with a
+        // window beside it.
+        other.disabled = !(canClaim && free && ffSays === 'ok') || pendingTarget === target.id;
+        if (!other.disabled) {
+          other.onclick = function () { act('claim', target.id, SIM_OTHER_ID); };
+        }
+        dibsCell.appendChild(other);
+      }
+
+      tdDibs.appendChild(dibsCell);
+
+      tr.appendChild(tdName);
+      tr.appendChild(tdLevel);
+      tr.appendChild(tdFf);
+      tr.appendChild(tdEst);
+      tr.appendChild(tdStatus);
+      tr.appendChild(tdDibs);
+      tbody.appendChild(tr);
+    });
+
+    table.appendChild(tbody);
+    el.targetHost.textContent = '';
+    el.targetHost.appendChild(table);
+
+    var readAt = Roster.stamps().targets;
+    if (readAt && Date.now() - readAt > ROSTER_POLL_MS * 3) {
+      el.staleBar.hidden = false;
+      el.staleBar.textContent = 'Roster is stale. Last read from Torn at ' +
+        new Date(readAt).toLocaleTimeString() + ' — the levels and hospital times below are ' +
+        'from then, not from now.';
+    } else {
+      el.staleBar.hidden = true;
+    }
+    renderFfBar(rows, ffState);
+  }
+
+  function renderWar() {
+    var identity = Roster.identity();
+    var war = Roster.war();
+    if (SIM) {
+      // The banner names both boards by their real names as soon as the war is
+      // known, so nobody has to take on trust which one is being written to.
+      el.simRealWar.textContent = war ? war.warId : 'the running war';
+      el.simWireWar.textContent = war ? Claims.wireWarId(war.warId, 'claims') : 'sim-<war>';
+    }
+    el.warPanel.hidden = !identity;
+    if (!identity) return;
+    if (!war) {
+      el.warWho.textContent = 'No Ranked War running';
+      el.warMeta.textContent = 'Torn reports no ranked war for this faction right now, so there is ' +
+        'nothing to call.';
+      el.warScore.textContent = '';
+      return;
+    }
+    el.warWho.textContent = 'vs ' + war.opponentName;
+    el.warMeta.textContent = (war.state === 'live' ? 'War is live'
+      : war.state === 'prewar' ? (SIM ? 'War has not started yet — this page is simulating instead'
+                                      : 'War has not started yet — DIBS stays off until it does')
+      : (SIM ? 'War is over — this page is simulating instead' : 'War is over — DIBS stays off'))
+      + ' · war ' + war.warId;
+    el.warScore.textContent = war.ourScore + ' – ' + war.theirScore;
+  }
+
+  function renderAdvanced() {
+    var war = Roster.war();
+    var identity = Roster.identity();
+    var board = Claims.board();
+    el.advServer.textContent = CLAIM_SERVER;
+    el.advWar.textContent = war
+      ? (SIM
+          ? Claims.wireWarId(war.warId, 'claims') + ' · simulating, real war ' + war.warId + ' untouched'
+          : war.warId)
+      : 'none';
+    el.advMe.textContent = identity ? identity.playerId : 'not established';
+    el.advClaims.textContent = Claims.status() + (board
+      ? ' · ' + Object.keys(board.claims).length + ' held · degraded=' + board.degraded +
+        ' · ttl=' + board.ttl + 's · read ' + new Date(board.receivedAt).toLocaleTimeString()
+      : ' · no board held');
+    el.advRoster.textContent = Roster.stamps().targets
+      ? (Roster.targets() || []).length + ' rows · read ' +
+        new Date(Roster.stamps().targets).toLocaleTimeString()
+      : 'not loaded';
+    el.advFf.textContent = ffAdvancedLine();
+    el.advError.textContent = Claims.lastError() || Roster.lastError() || 'none';
+    el.advRaw.textContent = Claims.lastRaw() || '—';
+    el.wipeBtn.disabled = !(war && identity && Claims.hasPassword());
+    // In simulation the reset above the list is the wipe that is used. Leaving
+    // a second wipe here would only invite a mistake about which board it hits.
+    el.wipeBtn.hidden = SIM;
+    if (SIM) el.wipeNote.textContent = 'Use Reset test war above the list. This one is off while ' +
+      'the page is simulating.';
+  }
+
+  function render() {
+    passRender();
+    ffKeyRender();
+    renderWar();
+    renderTargets();
+    renderAdvanced();
+  }
+
+  // ---------------------------------------------------------------- actions
+
+  // actorId is whose claim this is. It is the member's own Torn ID everywhere
+  // except the simulation's Take as other, which is the only caller that ever
+  // passes anything else - and only ever the made-up test ID.
+  async function act(op, targetId, actorId) {
+    var war = Roster.war();
+    var identity = Roster.identity();
+    if (!war || !identity) return;
+    var actor = (SIM && actorId === SIM_OTHER_ID) ? SIM_OTHER_ID : identity.playerId;
+    var asOther = actor !== identity.playerId;
+    hide(el.errorBox); hide(el.okBox);
+    // A new click clears the old refusal before anything is sent. Two messages
+    // on screen at once is worse than none, and the member is asking about
+    // this row now, not the one before it.
+    lastRefusal = null;
+    pendingTarget = targetId;
+    render();
+    try {
+      var result = op === 'claim'
+        ? await Claims.claim(war.warId, targetId, actor)
+        : await Claims.unclaim(war.warId, targetId, actor);
+      var body = result.body;
+
+      // Refused or not is decided once, here, so the branches below stay what
+      // they were: the wording for the box at the top of the page.
+      lastRefusal = (result.http === 200 && body.ok === true)
+        ? null
+        : { targetId: targetId, text: refusalLine(body.status), at: Date.now() };
+
+      if (result.http === 200 && body.ok === true) {
+        if (body.status === 'claimed' || body.status === 'renewed') {
+          show(el.okBox, asOther
+            ? 'Torn ' + actor + ' holds ' + targetId + '. Your own button on that row is now off.'
+            : 'You hold ' + targetId + '.');
+        } else {
+          show(el.okBox, targetId + ' is free again.');
+        }
+      } else if (result.http === 409 && body.status === 'already_holding') {
+        // The target the member is already on comes back in the answer, so the
+        // box can name it instead of repeating the server's word at him.
+        var held = (body.claim && body.claim.targetId) || 'another target';
+        show(el.errorBox, asOther
+          ? 'Torn ' + actor + ' already holds ' + held + '.'
+          : 'You already hold ' + held + '. Release it before calling another target.');
+      } else if (result.http === 409 && body.status === 'taken') {
+        // Who holds it. Not who was quicker - the server cannot know that.
+        var holder = body.claim && body.claim.memberId;
+        show(el.errorBox, targetId + ' is held by ' +
+          (holder === identity.playerId ? 'you' : (Roster.nameOf(holder) || ('Torn ' + holder))) + '.');
+      } else if (result.http === 409 && body.status === 'not_owner') {
+        var other = body.claim && body.claim.memberId;
+        show(el.errorBox, targetId + ' is held by ' +
+          (Roster.nameOf(other) || ('Torn ' + other)) + ' and was not released.');
+      } else if (result.http === 409 && body.status === 'unreadable') {
+        show(el.errorBox, 'The server cannot read who holds ' + targetId +
+          ', so it will not hand it out. Leave that one alone.');
+      } else {
+        show(el.errorBox, 'The claim server refused this: ' +
+          (body.error || body.status || ('HTTP ' + result.http)) + '.');
+      }
+    } catch (error) {
+      if (error.unauthorized) passRejected();
+      else show(el.errorBox, error.message);
+    } finally {
+      pendingTarget = '';
+      await pollClaims();
+      render();
+    }
+  }
+
+  var wipeArmed = false;
+  var wipeIdle = 'Wipe every claim in this war';
+
+  el.wipeBtn.addEventListener('click', async function () {
+    var war = Roster.war();
+    var identity = Roster.identity();
+    if (!war || !identity) return;
+    if (!wipeArmed) {
+      wipeArmed = true;
+      el.wipeBtn.textContent = 'Confirm: wipe war ' + war.warId;
+      el.wipeNote.textContent = 'This empties the whole war board for the entire faction, not just ' +
+        'your own claims. Click again within six seconds to do it.';
+      setTimeout(function () {
+        wipeArmed = false;
+        el.wipeBtn.textContent = wipeIdle;
+        el.wipeNote.textContent = 'Empties the whole war’s claim board, for everyone in the faction.';
+      }, 6000);
+      return;
+    }
+    wipeArmed = false;
+    el.wipeBtn.textContent = wipeIdle;
+    hide(el.errorBox); hide(el.okBox);
+    try {
+      var result = await Claims.wipe(war.warId, identity.playerId);
+      if (result.http === 200 && result.body.ok === true) {
+        show(el.okBox, 'Wiped. The server removed ' + result.body.removed + ' claims from war ' + war.warId + '.');
+      } else {
+        show(el.errorBox, 'The claim server refused the wipe: ' +
+          (result.body.error || result.body.status || ('HTTP ' + result.http)) + '.');
+      }
+    } catch (error) {
+      if (error.unauthorized) passRejected();
+      else show(el.errorBox, error.message);
+    }
+    await pollClaims();
+    render();
+  });
+
+  // The reset that belongs to the simulation. It sends a wipe like the one in
+  // Advanced, but only ever through the wall, which refuses a wipe that is not
+  // aimed at a sim- war. Two clicks, same as the other one.
+  var simResetArmed = false;
+  var SIM_RESET_IDLE = 'Reset test war';
+  var SIM_RESET_NOTE = 'Empties the test war’s board so the whole run can be started over. ' +
+    'The real war is not touched.';
+
+  el.simResetBtn.addEventListener('click', async function () {
+    var war = Roster.war();
+    var identity = Roster.identity();
+    if (!SIM || !war || !identity) return;
+    if (!simResetArmed) {
+      simResetArmed = true;
+      el.simResetBtn.textContent = 'Confirm: reset ' + Claims.wireWarId(war.warId, 'wipe');
+      el.simResetNote.textContent = 'This frees every target on the test board, including the ones ' +
+        'the test member holds. Click again within six seconds to do it.';
+      setTimeout(function () {
+        simResetArmed = false;
+        el.simResetBtn.textContent = SIM_RESET_IDLE;
+        el.simResetNote.textContent = SIM_RESET_NOTE;
+      }, 6000);
+      return;
+    }
+    simResetArmed = false;
+    el.simResetBtn.textContent = SIM_RESET_IDLE;
+    el.simResetNote.textContent = SIM_RESET_NOTE;
+    hide(el.errorBox); hide(el.okBox);
+    try {
+      var result = await Claims.wipe(war.warId, identity.playerId);
+      if (result.http === 200 && result.body.ok === true) {
+        show(el.okBox, 'Test war reset. The server removed ' + result.body.removed +
+          ' claims from ' + Claims.wireWarId(war.warId, 'wipe') + '. The real war was not touched.');
+      } else {
+        show(el.errorBox, 'The claim server refused the reset: ' +
+          (result.body.error || result.body.status || ('HTTP ' + result.http)) + '.');
+      }
+    } catch (error) {
+      if (error.unauthorized) passRejected();
+      else show(el.errorBox, error.message);
+    }
+    await pollClaims();
+    render();
+  });
+
+  // ---------------------------------------------------------------- polling
+
+  async function pollClaims() {
+    var war = Roster.war();
+    if (!war || !Claims.hasPassword()) { Claims.drop(); return; }
+    try {
+      await Claims.refresh(war.warId);
+    } catch (error) {
+      if (error.unauthorized) passRejected();
+      // Any other failure has already dropped the board. The column says so.
+    }
+  }
+
+  async function loadAll() {
+    hide(el.errorBox); hide(el.okBox);
+    var key = el.apiKey.value.trim();
+    if (!key) { show(el.errorBox, 'Paste your Torn key first.'); return; }
+    write(KEY_STORE, key);
+    el.loadBtn.disabled = true;
+    el.loadBtn.textContent = 'Loading';
+    try {
+      await Roster.loadIdentity();
+      await Roster.loadWar();
+      if (Roster.war()) {
+        await Roster.loadTargets();
+        try { await Roster.loadOwnNames(); } catch (e) { /* names are decoration, not identity */ }
+        await pollClaims();
+      }
+      Roster.setError('');
+    } catch (error) {
+      Roster.setError(error.message);
+      show(el.errorBox, error.message);
+    } finally {
+      el.loadBtn.disabled = false;
+      el.loadBtn.textContent = 'Load the war';
+      // Not awaited: FF and EST never hold up the roster or the board.
+      ffTick();
+      render();
+    }
+  }
+
+  async function tick() {
+    if (!Roster.identity()) return;
+    var now = Date.now();
+    var stamps = Roster.stamps();
+    try {
+      if (now - stamps.war > WAR_POLL_MS) await Roster.loadWar();
+      if (Roster.war() && now - Roster.stamps().targets > ROSTER_POLL_MS) await Roster.loadTargets();
+      if (Roster.war() && now - Roster.stamps().ownNames > OWN_MEMBERS_MS) {
+        try { await Roster.loadOwnNames(); } catch (e) { /* decoration only */ }
+      }
+      Roster.setError('');
+    } catch (error) {
+      // The rows already on screen stay, and the stale bar says how old they
+      // are. Nothing old is ever redrawn as if it were current.
+      Roster.setError(error.message);
+    }
+    await pollClaims();
+    render();
+  }
+
+  // FF and EST run on a clock of their own, apart from the claim board's five
+  // seconds. The source caches for five minutes, so asking sooner only spends
+  // calls; the list of IDs is watched as well, so a changed roster is asked
+  // about at the next check and the same roster is not asked about again
+  // before FF_POLL_MS has passed.
+  var ffLastAttempt = 0;
+  var ffLastIds = '';
+  var ffTimer = null;
+
+  async function ffTick() {
+    var targets = Roster.targets();
+    if (!targets || !targets.length) return;
+    var ids = targets.map(function (target) { return target.id; });
+    var signature = ids.join(',');
+    var now = Date.now();
+    if (signature === ffLastIds && now - ffLastAttempt < FF_POLL_MS) return;
+    ffLastAttempt = now;
+    ffLastIds = signature;
+    await statSource.refresh(ids);
+    renderTargets();
+    renderAdvanced();
+  }
+
+  // The timer runs only while the page is on screen. Hidden or left, it stops;
+  // shown again, it starts and asks at once whether a read is due.
+  function ffStart() {
+    if (ffTimer !== null) return;
+    ffTimer = setInterval(ffTick, FF_CHECK_MS);
+    ffTick();
+  }
+
+  function ffStop() {
+    if (ffTimer === null) return;
+    clearInterval(ffTimer);
+    ffTimer = null;
+  }
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) ffStop(); else ffStart();
+  });
+  window.addEventListener('pagehide', ffStop);
+  window.addEventListener('pageshow', function () { if (!document.hidden) ffStart(); });
+
+  // ----------------------------------------------------------------- wiring
+
+  el.toggleKey.addEventListener('click', function () {
+    var showing = el.apiKey.type === 'text';
+    el.apiKey.type = showing ? 'password' : 'text';
+    el.toggleKey.textContent = showing ? 'Show' : 'Hide';
+    el.toggleKey.setAttribute('aria-pressed', showing ? 'false' : 'true');
+  });
+
+  el.loadBtn.addEventListener('click', loadAll);
+  el.apiKey.addEventListener('keydown', function (e) { if (e.key === 'Enter') loadAll(); });
+
+  el.forgetKey.addEventListener('click', function () {
+    write(KEY_STORE, '');
+    el.apiKey.value = '';
+    Roster.forget();
+    Claims.drop();
+    el.targetPanel.hidden = true;
+    el.warPanel.hidden = true;
+    show(el.okBox, 'Torn key removed from this browser.');
+    render();
+  });
+
+  el.toggleFfKey.addEventListener('click', function () {
+    var showing = el.ffKey.type === 'text';
+    el.ffKey.type = showing ? 'password' : 'text';
+    el.toggleFfKey.textContent = showing ? 'Show' : 'Hide';
+    el.toggleFfKey.setAttribute('aria-pressed', showing ? 'false' : 'true');
+  });
+
+  // Saved when the field is left or Enter is pressed. The same value twice is
+  // not a change, so Enter followed by leaving the field is one read, not two.
+  var ffKeyWritten = read(FF_STORE);
+  function ffKeyChanged() {
+    var value = el.ffKey.value.trim();
+    if (value === ffKeyWritten) return;
+    ffKeyWritten = value;
+    write(FF_STORE, value);
+    ffLastAttempt = 0;
+    ffLastIds = '';
+    ffTick();
+    render();
+  }
+  el.ffKey.addEventListener('change', ffKeyChanged);
+  el.ffKey.addEventListener('keydown', function (e) { if (e.key === 'Enter') ffKeyChanged(); });
+
+  el.forgetFfKey.addEventListener('click', function () {
+    write(FF_STORE, '');
+    el.ffKey.value = '';
+    ffKeyWritten = '';
+    ffLastAttempt = 0;
+    ffLastIds = '';
+    // No key on the page now, so this empties the cache and sends nothing.
+    statSource.refresh([]);
+    show(el.okBox, 'FFScouter key removed from this browser.');
+    render();
+  });
+
+  el.passSave.addEventListener('click', function () {
+    var value = el.warPass.value;
+    if (!value) {
+      el.passSaid.textContent = 'Nothing typed yet.';
+      el.passSaid.hidden = false;
+      return;
+    }
+    write(PASS_STORE, value);
+    // Emptied at once. The word is never put back into the box, never written
+    // into the page and never logged.
+    el.warPass.value = '';
+    el.passSaid.hidden = true;
+    passRender();
+    pollClaims().then(render);
+  });
+  el.warPass.addEventListener('keydown', function (e) { if (e.key === 'Enter') el.passSave.click(); });
+
+  el.passChange.addEventListener('click', function () {
+    write(PASS_STORE, '');
+    Claims.drop();
+    el.passSaid.hidden = true;
+    passRender();
+    el.warPass.focus();
+    render();
+  });
+
+  el.passForget.addEventListener('click', function () {
+    write(PASS_STORE, '');
+    Claims.drop();
+    el.passSaid.hidden = true;
+    passRender();
+    show(el.okBox, 'War Room password removed from this browser.');
+    render();
+  });
+
+  if (SIM) {
+    el.simBanner.hidden = false;
+    el.simOtherId.textContent = SIM_OTHER_ID;
+    el.simResetNote.textContent = SIM_RESET_NOTE;
+  }
+
+  var storedMirror = read(MIRROR_STORE);
+  if (storedMirror) el.mirrorId.value = storedMirror;
+  function mirrorChanged() {
+    var value = el.mirrorId.value.trim();
+    write(MIRROR_STORE, value);
+    el.mirrorSaid.textContent = value
+      ? 'Mirroring faction ' + value + '. Press Load the war to read it.'
+      : 'No faction to mirror, so no war is read.';
+    el.mirrorSaid.hidden = false;
+  }
+  el.mirrorId.addEventListener('change', mirrorChanged);
+  el.mirrorId.addEventListener('keydown', function (e) { if (e.key === 'Enter') mirrorChanged(); });
+  el.forgetMirror.addEventListener('click', function () {
+    el.mirrorId.value = '';
+    write(MIRROR_STORE, '');
+    Roster.forget();
+    el.mirrorSaid.textContent = 'Mirror faction cleared from this browser.';
+    el.mirrorSaid.hidden = false;
+    render();
+  });
+
+  var storedKey = read(KEY_STORE);
+  if (storedKey) el.apiKey.value = storedKey;
+  var storedFfKey = read(FF_STORE);
+  if (storedFfKey) el.ffKey.value = storedFfKey;
+  render();
+  if (storedKey) loadAll();
+
+  setInterval(tick, CLAIM_POLL_MS);
+  if (!document.hidden) ffStart();
+  // Only redraws the estimate beside a claim the server has already confirmed.
+  setInterval(function () { if (Claims.board()) renderTargets(); }, 1000);
+})();
+</script>
+</body>
+</html>
