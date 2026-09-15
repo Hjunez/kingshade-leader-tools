@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PDA
 // @namespace    kingshade.torn
-// @version      1.5.169
+// @version      1.5.175
 // @description  Roster-local PDA presentation with v1.5.145 authority and shared-claim safety.
 // @author       Kingshade
 // @match        https://www.torn.com/factions.php*
@@ -76,6 +76,93 @@
  * evidence: an unmounted panel has to be rebuilt and that reads as delayed,
  * and blur does not explain Torn's own roster folding. The lifecycle is
  * deliberately untouched here.
+ * 1.5.170: PC's bound clock is ported to PDA and placed at the top of
+ * getTornNowMs(). PDA's getTornNowMs() previously tried
+ * window.getCurrentTimestamp(), then the median of measured offsets, then the
+ * phone's own clock -- the method PC abandoned in 1.0.35 after 9.21% low
+ * reads against 0 of 144,000 with the bound clock. A low read means PDA shows
+ * less time left than there actually is, and someone walks into a hospital.
+ * The median path (median(), tornClockOffsetsMs, CONFIG.tornClockMaxSamples)
+ * is removed: PC does not have it, and two clients with different clocks
+ * cannot say the same thing about the same target. PDA's existing fallbacks
+ * (getCurrentTimestamp, then the phone's clock) stay under the bound clock,
+ * in the same order PC already has them.
+ * 1.5.172: the clock label gets its own always-visible panel row, derived
+ * fresh on every updatePanel() instead of being frozen inside the Torn
+ * row's message string. Root cause (measured 2026-09-15 via the 1.5.171
+ * DIAG build, since discarded): tornStatusState.message is a saved string,
+ * built once when a VIEW/own-RW fetch completes, with
+ * `clock: ${tornClockSourceLabel()}` baked in at that moment.
+ * tornClockSourceLabel() reads tornClockSource, which is set only as a side
+ * effect inside getTornNowMs() -- so unless something had already called
+ * getTornNowMs() after the clock samples came in and before that string was
+ * built, the label stayed frozen at whatever it was on the first render
+ * ("device clock — UNSYNCED"), even after the bound clock had real values.
+ * The new Clock row calls getTornNowMs() once to freshen that side effect
+ * immediately before reading tornClockSourceLabel(), every time it is
+ * built. No clock logic changes: getTornNowMs, recordTornWholeSecondMs,
+ * recordTornClockFromHeaders, recordTornClockOffset and tornDateHeaderMs
+ * are untouched.
+ * 1.5.173: the panel is slimmed to what the member actually needs. Owner
+ * 2026-09-15: "I want to remove all the unnecessary buttons and other
+ * things that show in the panel. It just confuses players and they might
+ * press things they shouldn't." and "the width is fine but the height
+ * feels unnecessarily large right now." Normal mode now shows only the
+ * brand row, one fail-closed summary status row and a Settings button
+ * (plus a key button if a key is missing). The four status rows, all
+ * secondary controls, the LIVE note and the api-policy disclosure move
+ * behind Settings, collapsed by default and never remembered -- a plain
+ * class toggle, nothing persisted, no new observer or timer. Demo no
+ * longer exists in the DOM at all outside VIEW, per the 2026-09-12
+ * decision that it must never be able to be active in the owner's own
+ * war. No decision logic changes: the clock, claim path, release path,
+ * busy-retry, phase detection, auto-release and the DIBS buttons on the
+ * roster rows are untouched -- this is presentation only.
+ * 1.5.174: a short burst of extra Torn reads, run once when runtime becomes
+ * active (resumeRuntime), purely to feed the bound clock. Owner-measured
+ * 2026-09-15 in VIEW: the bound width went ±998ms -> ±758ms -> ±621ms over
+ * about a minute, because VIEW polls Torn about once every 30s and each
+ * fresh interval is ~1000ms + round trip wide -- narrowing only happens
+ * where two intervals intersect, so sparse responses converge slowly. The
+ * reading was never wrong (the low edge never reads less time than there
+ * is, at any width), but a wide interval opens the DIBS gate up to N ms
+ * later than it could, which matters in a claim race. The burst makes up
+ * to 5 extra reads, 1200ms apart, stopping as soon as the bound width is
+ * 250ms or less, using exactly the endpoint the current mode's own path
+ * already reads (own war: SCRIPT.tornOwnWarsPath; VIEW: the same members
+ * path fetchViewMembers uses) through the same tornApiRequest/
+ * tornReadWithTransportRetry every other read goes through -- same gate,
+ * same retry, same budget, no new endpoint, no cache-buster. Responses are
+ * never written to ownWarsState/viewMembersState/opponentMembersState.
+ * The clock label also gains sample/reset counts: M is how many calls to
+ * recordTornWholeSecondMs actually wrote the bounds, R is how many of
+ * those were the nextLow >= nextHigh branch throwing the intersection away
+ * and starting over -- the only evidence available for why the width
+ * sometimes widens again, not yet explained and not fixed here. Getting
+ * these counts without touching the math itself: recordTornWholeSecondMs,
+ * getTornNowMs, tornDateHeaderMs, tornResponseIsFresh and
+ * recordTornClockOffset are byte-identical to 1.5.173. A snapshot-and-
+ * classify wrapper (trackClockBoundsWrite) observes tornClockLowMs/
+ * tornClockHighMs/tornClockBoundsAt before and after the real, untouched
+ * call and works out which branch ran from that plus the same
+ * startedAt/endedAt/secondStartMs and CONFIG.tornClockDriftPpm the call
+ * already used -- recordTornClockFromHeaders (not on the byte-identical
+ * list) wraps its own call inline; recordTornClockOffset's three existing
+ * call sites are wrapped from the outside instead, since that function's
+ * own source cannot change.
+ * 1.5.175: CONFIG.tornClockDriftPpm 500 -> 50. Owner-measured 2026-09-15 in
+ * VIEW, 1.5.174 with 0 resets throughout (recordTornWholeSecondMs never
+ * threw the intersection away, so a contradicting response is ruled out as
+ * the cause): the bound width went ±449ms -> ±558ms over 6 samples across
+ * 120s. slack = age * CONFIG.tornClockDriftPpm / 1e6 relaxes the kept
+ * bounds by that much each side before intersecting, so width grows by
+ * 2*slack per input that does not happen to cut in -- at ~20s between
+ * samples and 500 ppm that predicts 120ms of growth; measured was 109ms.
+ * The margin was widening faster than sparse new evidence could narrow it.
+ * 50 ppm is 4 seconds/day, well inside what a network-synced phone clock
+ * actually drifts, and cuts that per-sample growth by ten. No function
+ * changes: recordTornWholeSecondMs reads the same CONFIG.tornClockDriftPpm
+ * it always has, just a smaller value.
  */
 
 (() => {
@@ -83,8 +170,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs",
-    version: "1.5.169",
-    instanceKey: "__ksTornWarDibsPdaV15169Test",
+    version: "1.5.175",
+    instanceKey: "__ksTornWarDibsPdaV15175Test",
     layerId: "ks-twd-pda-layer",
     rowHostPrefix: "ks-twd-pda-row-",
     panelId: "ks-twd-pda-panel",
@@ -129,7 +216,13 @@
     tornTransportRetryAttempts: 2,
     tornTransportOfflineThreshold: 2,
     tornTransportRecoveryDelayMs: 1800,
-    tornClockMaxSamples: 5,
+    tornClockMaxRoundTripMs: 10000,
+    tornClockDriftPpm: 50,
+    // 1.5.174: the one-time post-start clock sync burst. Same transport
+    // retry/backoff as every other read; this only bounds the series itself.
+    tornClockSyncBurstMaxAttempts: 5,
+    tornClockSyncBurstDelayMs: 1200,
+    tornClockSyncBurstTargetWidthMs: 250,
     rowRefreshMs: 1000,
     sharedPollMs: 2500,
     sharedTransportRetryDelayMs: 450,
@@ -289,7 +382,19 @@
   const publicBasicStatusPending = new Map();
   let publicBasicRequestSerial = 0;
   let lastPublicBasicFetchAt = 0;
-  let tornClockOffsetsMs = [];
+  // Running intersection of every interval Torn's own responses allow the true
+  // clock offset to lie in. Null until the first usable sample.
+  let tornClockLowMs = null;
+  let tornClockHighMs = null;
+  let tornClockBoundsAt = 0;
+  // 1.5.174: evidence only, never read by getTornNowMs. M = calls to
+  // recordTornWholeSecondMs that actually wrote the bounds. R = how many of
+  // those were the nextLow >= nextHigh branch discarding the intersection.
+  let tornClockSampleCount = 0;
+  let tornClockResetCount = 0;
+  // The runtimeGeneration the clock sync burst has already run (or started)
+  // for. -1 so generation 0 still runs once.
+  let tornClockSyncBurstGeneration = -1;
   let pendingTargetId = "";
   let ownClaimLastConfirmedAt = 0;
   // Claim id the auto-release has already acted on. One attempt per claim:
@@ -418,33 +523,149 @@
   function nowSeconds() { return Math.floor(getTornNowMs() / 1000); }
   function wait(ms) { return new Promise(resolve => window.setTimeout(resolve, ms)); }
 
-  function median(values) {
-    const nums = values.filter(Number.isFinite).sort((a, b) => a - b);
-    if (!nums.length) return null;
-    const middle = Math.floor(nums.length / 2);
-    return nums.length % 2 ? nums[middle] : (nums[middle - 1] + nums[middle]) / 2;
+  // Torn's HTTP Date header is the server's own clock and comes back with every
+  // response the script already makes. Sampling it here is what lets VIEW mode
+  // -- which never fetches own wars -- run on Torn time instead of the PC's.
+  function tornDateHeaderMs(headers) {
+    const text = String(headers ?? "");
+    if (!text) return null;
+    const match = /^[ \t]*date[ \t]*:[ \t]*(.+?)[ \t]*$/im.exec(text);
+    if (!match) return null;
+    const parsed = Date.parse(match[1]);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   }
 
-  // "pda" = Torn PDA's own clock, "api" = offset sampled from Torn API replies,
+  // A reply replayed from a cache carries an old Date and would drag the offset
+  // backwards, so anything with a non-zero Age is refused.
+  function tornResponseIsFresh(headers) {
+    const match = /^[ \t]*age[ \t]*:[ \t]*(\d+)[ \t]*$/im.exec(String(headers ?? ""));
+    if (!match) return true;
+    return Number(match[1]) === 0;
+  }
+
+  // A response that names a whole server second is not a guess about the clock,
+  // it is a constraint on it. The second S was current at some instant inside
+  // the round trip, so with offset = tornNow - pcNow:
+  //
+  //     offset  in  [ S - endedAt , S + 1000 - startedAt )
+  //
+  // Every response gives another such interval and the truth lies in all of
+  // them, so the running intersection can only narrow and can never exclude the
+  // real offset. There is no rounding step left to get wrong.
+  function recordTornWholeSecondMs(secondStartMs, startedAt, endedAt) {
+    if (!Number.isFinite(secondStartMs) || secondStartMs <= 0) return;
+    if (!Number.isFinite(startedAt) || !Number.isFinite(endedAt)) return;
+    if (endedAt < startedAt) return;
+    // A round trip this long says almost nothing and may itself be stale.
+    if (endedAt - startedAt > CONFIG.tornClockMaxRoundTripMs) return;
+
+    const low = secondStartMs - endedAt;
+    const high = secondStartMs + 1000 - startedAt;
+
+    if (!Number.isFinite(tornClockLowMs) || !Number.isFinite(tornClockHighMs)) {
+      tornClockLowMs = low;
+      tornClockHighMs = high;
+      tornClockBoundsAt = endedAt;
+      return;
+    }
+
+    // Two crystals drift apart. Let the kept bounds relax by that much before
+    // intersecting, so a long session does not slowly contradict itself.
+    const age = Math.max(0, endedAt - tornClockBoundsAt);
+    const slack = (age * CONFIG.tornClockDriftPpm) / 1e6;
+    const nextLow = Math.max(low, tornClockLowMs - slack);
+    const nextHigh = Math.min(high, tornClockHighMs + slack);
+
+    if (nextLow >= nextHigh) {
+      // Contradiction: the PC clock stepped, or an old reply slipped through.
+      // The newest evidence wins outright rather than poisoning the running set.
+      tornClockLowMs = low;
+      tornClockHighMs = high;
+      tornClockBoundsAt = endedAt;
+      return;
+    }
+
+    tornClockLowMs = nextLow;
+    tornClockHighMs = nextHigh;
+    tornClockBoundsAt = endedAt;
+  }
+
+  // 1.5.174 observability only: classifies what a recordTornWholeSecondMs
+  // call did, purely from tornClockLowMs/tornClockHighMs/tornClockBoundsAt
+  // before and after the real, untouched call, plus the same
+  // startedAt/endedAt/secondStartMs it was given and the same
+  // CONFIG.tornClockDriftPpm slack formula recordTornWholeSecondMs documents
+  // on itself. Never writes tornClockLowMs/tornClockHighMs -- read-only.
+  // Must be kept in sync with recordTornWholeSecondMs's own
+  // nextLow >= nextHigh condition if that function is ever revised.
+  function trackClockBoundsWrite(secondStartMs, startedAt, endedAt, invoke) {
+    const beforeLow = tornClockLowMs;
+    const beforeHigh = tornClockHighMs;
+    const beforeBoundsAt = tornClockBoundsAt;
+    invoke();
+    if (tornClockLowMs === beforeLow && tornClockHighMs === beforeHigh && tornClockBoundsAt === beforeBoundsAt) return;
+    tornClockSampleCount += 1;
+    if (!Number.isFinite(beforeLow) || !Number.isFinite(beforeHigh)) return;
+    const rawLow = secondStartMs - endedAt;
+    const rawHigh = secondStartMs + 1000 - startedAt;
+    const age = Math.max(0, endedAt - beforeBoundsAt);
+    const slack = (age * CONFIG.tornClockDriftPpm) / 1e6;
+    const wouldBeLow = Math.max(rawLow, beforeLow - slack);
+    const wouldBeHigh = Math.min(rawHigh, beforeHigh + slack);
+    if (wouldBeLow >= wouldBeHigh) tornClockResetCount += 1;
+  }
+
+  // 1.5.174 observability only: wraps recordTornClockOffset (byte-identical,
+  // untouched) so its writes are also tracked. recordTornClockOffset's own
+  // source cannot change, so this wraps its three existing call sites plus
+  // the clock sync burst's own-war call from the outside instead.
+  function trackedRecordTornClockOffset(result, body) {
+    trackClockBoundsWrite(
+      Number(body?.timestamp) * 1000,
+      Number(result?.startedAt),
+      Number(result?.endedAt),
+      () => recordTornClockOffset(result, body)
+    );
+  }
+
+  function recordTornClockFromHeaders(result) {
+    if (!result?.ok || !tornResponseIsFresh(result.headers)) return;
+    const serverMs = tornDateHeaderMs(result.headers);
+    if (serverMs === null) return;
+    const startedAt = Number(result.startedAt);
+    const endedAt = Number(result.endedAt);
+    // Date is a whole second, so the value is that second's own start.
+    trackClockBoundsWrite(serverMs, startedAt, endedAt, () => recordTornWholeSecondMs(serverMs, startedAt, endedAt));
+  }
+
+  // "bounded" = PC's bound-clock intersection, "pda" = Torn PDA's own clock,
   // "device" = the phone's clock with no correction at all. Shown in the panel.
   let tornClockSource = "device";
 
+  // The low edge of the interval, never the middle. The middle is unbiased but
+  // wrong in both directions, and one direction is unacceptable: a clock that
+  // runs ahead makes the cell show less time than there is and somebody attacks
+  // early. The low edge puts our clock as far behind Torn as the evidence
+  // permits, so the remaining time reads as high as the evidence permits. The
+  // cell can read high while the interval is still wide. It can never read low.
   function getTornNowMs() {
+    if (Number.isFinite(tornClockLowMs)) { tornClockSource = "bounded"; return nowMs() + tornClockLowMs; }
     if (typeof window.getCurrentTimestamp === "function") {
       try {
         const value = window.getCurrentTimestamp();
         if (Number.isFinite(value)) { tornClockSource = "pda"; return value; }
       } catch {}
     }
-    const offset = median(tornClockOffsetsMs);
-    if (Number.isFinite(offset)) { tornClockSource = "api"; return nowMs() + offset; }
     tornClockSource = "device";
     return nowMs();
   }
 
   function tornClockSourceLabel() {
+    if (tornClockSource === "bounded") {
+      const widthMs = Math.round(tornClockHighMs - tornClockLowMs);
+      return `Torn bounded clock (±${widthMs} ms · ${tornClockSampleCount} samples · ${tornClockResetCount} resets)`;
+    }
     if (tornClockSource === "pda") return "Torn PDA clock";
-    if (tornClockSource === "api") return `Torn API offset (${tornClockOffsetsMs.length} samples)`;
     return "device clock — UNSYNCED";
   }
 
@@ -1343,6 +1564,7 @@
       ? { Accept: "application/json", "Cache-Control": "no-cache", Pragma: "no-cache" }
       : { Accept: "application/json" };
     const result = await gmXhr({ method: "GET", url: url.toString(), headers });
+    recordTornClockFromHeaders(result);
     const body = parseJsonSafe(result.responseText);
     const rejected = isPdaTornKeyRejectedError(body);
     const capabilityRejected = isTornCapabilityRejectedError(body);
@@ -1562,7 +1784,7 @@
       ) throw new Error("Ranked War surface changed during capability check");
       const committedWars = normalizeOwnWars(operational.warsResult.body, operational.warsFetchedAt, committedSurface);
       if (!committedWars) throw new Error("faction wars capability response malformed");
-      recordTornClockOffset(operational.warsResult, operational.warsResult.body);
+      trackedRecordTornClockOffset(operational.warsResult, operational.warsResult.body);
       ownWarsState = committedWars;
       opponentMembersState = {
         factionId: committedSurface.opponentFactionId,
@@ -2228,11 +2450,10 @@
 
   function recordTornClockOffset(result, body) {
     const timestamp = Number(body?.timestamp);
-    if (Number.isFinite(timestamp) && timestamp > 0) {
-      const midpoint = (Number(result.startedAt) + Number(result.endedAt)) / 2;
-      tornClockOffsetsMs.push((timestamp + 0.5) * 1000 - midpoint);
-      if (tornClockOffsetsMs.length > CONFIG.tornClockMaxSamples) tornClockOffsetsMs.splice(0, tornClockOffsetsMs.length - CONFIG.tornClockMaxSamples);
-    }
+    if (!Number.isFinite(timestamp) || timestamp <= 0) return;
+    // Same whole-second evidence as the Date header, from the body instead.
+    // Torn reports the floor of its clock, so the value names the second start.
+    recordTornWholeSecondMs(timestamp * 1000, Number(result.startedAt), Number(result.endedAt));
   }
 
   function tornPageUrl(value) {
@@ -2445,6 +2666,48 @@
     return result;
   }
 
+  // 1.5.174: a short burst of extra Torn reads, run once per runtime start,
+  // purely to feed the bound clock. Same transport wrapper, same gate, same
+  // budget as every other read. Never touches ownWarsState/viewMembersState/
+  // opponentMembersState -- the clock is fed automatically by
+  // tornApiRequest's own recordTornClockFromHeaders, plus (own war only)
+  // the body timestamp via trackedRecordTornClockOffset.
+  async function runTornClockSyncBurst() {
+    if (tornClockSyncBurstGeneration === runtimeGeneration) return;
+    tornClockSyncBurstGeneration = runtimeGeneration;
+    const key = effectiveTornApiKey();
+    if (!key) return;
+    const generation = runtimeGeneration;
+    const credentialEpoch = tornCredentialEpoch;
+    const isCurrentBurst = () => (
+      generation === runtimeGeneration &&
+      credentialEpoch === tornCredentialEpoch &&
+      key === effectiveTornApiKey() &&
+      runtimeActive &&
+      isRuntimeEligible()
+    );
+    const clockBoundsWidthMs = () => (
+      Number.isFinite(tornClockLowMs) && Number.isFinite(tornClockHighMs)
+        ? tornClockHighMs - tornClockLowMs
+        : Infinity
+    );
+    for (let attempt = 0; attempt < CONFIG.tornClockSyncBurstMaxAttempts; attempt += 1) {
+      if (!isCurrentBurst() || clockBoundsWidthMs() <= CONFIG.tornClockSyncBurstTargetWidthMs) return;
+      if (viewOnlyMode()) {
+        const factionId = viewPermittedFactionIds()[0];
+        if (!validTargetId(factionId)) return;
+        await tornReadWithTransportRetry(`/v2/faction/${factionId}/members`, key, { isCurrent: isCurrentBurst });
+        // No further action: recordTornClockFromHeaders already ran inside
+        // tornApiRequest. The response is discarded, same as its headers.
+      } else {
+        const result = await tornReadWithTransportRetry(SCRIPT.tornOwnWarsPath, key, { isCurrent: isCurrentBurst });
+        if (isCurrentBurst() && result?.ok && !result.body?.error) trackedRecordTornClockOffset(result, result.body);
+      }
+      if (!isCurrentBurst() || clockBoundsWidthMs() <= CONFIG.tornClockSyncBurstTargetWidthMs) return;
+      if (attempt < CONFIG.tornClockSyncBurstMaxAttempts - 1) await wait(CONFIG.tornClockSyncBurstDelayMs);
+    }
+  }
+
   async function fetchOwnWars({ force = false } = {}) {
     const key = effectiveTornApiKey();
     if (!key || !keyScopeReady || !validTargetId(selfFactionId) || !runtimeActive || !isRuntimeEligible()) return false;
@@ -2459,7 +2722,7 @@
       const result = await tornReadWithTransportRetry(SCRIPT.tornOwnWarsPath, key, { cacheBust: force, isCurrent: isCurrentRequest });
       if (!isCurrentRequest() || !result?.ok || result.body?.error) return false;
       const fetchedAt = Number(result.endedAt) || nowMs();
-      recordTornClockOffset(result, result.body);
+      trackedRecordTornClockOffset(result, result.body);
       const next = normalizeOwnWars(result.body, fetchedAt, surface);
       if (!next) {
         ownWarsState = emptyOwnWarsState(fetchedAt, surface);
@@ -2562,7 +2825,7 @@
         if (!viewReady) throw new Error("members unavailable");
         tornStatusBackoffUntil = 0;
         tornTransportFailureStreak = 0;
-        setTornStatusState("ready", `Torn: VIEW · ${viewMembersState.members.size} members · clock: ${tornClockSourceLabel()}`, viewMembersState.members.size);
+        setTornStatusState("ready", `Torn: VIEW · ${viewMembersState.members.size} members`, viewMembersState.members.size);
         scanWarRows();
         return true;
       } catch (error) {
@@ -2596,7 +2859,7 @@
       tornTransportFailureStreak = 0;
       const memberCount = membersReady && opponentMembersState.factionId === opponentFactionId ? opponentMembersState.members.size : 0;
       const rwLabel = ownWarsState.live ? "LIVE" : (ownWarsState.phase === RW_PHASE.PREWAR ? "PREWAR" : "not confirmed");
-      setTornStatusState(membersReady ? "ready" : "error", `Torn: own RW ${rwLabel} · ${memberCount} members · clock: ${tornClockSourceLabel()}`, memberCount);
+      setTornStatusState(membersReady ? "ready" : "error", `Torn: own RW ${rwLabel} · ${memberCount} members`, memberCount);
       scanWarRows();
       return true;
     } catch (error) {
@@ -2972,7 +3235,7 @@
       !isInt32(profile.id, { positive: true }) || String(profile.id) !== String(targetId) ||
       !isPlainRecord(status) || !fetchedAt || nowMs() - fetchedAt > CONFIG.targetBasicWriteMaxAgeMs
     ) return null;
-    recordTornClockOffset(result, body);
+    trackedRecordTornClockOffset(result, body);
     const hospital =
       isHospitalStatusValue(status.state) ||
       isHospitalStatusValue(status.description) ||
@@ -3427,6 +3690,12 @@
   // altered. The hospital countdowns stay real -- only the DIBS state and the
   // FF/Est values are illustrative, because a foreign roster has neither.
   let demoMode = false;
+  // 1.5.173: whether the Settings/About sections are expanded. In-memory
+  // only, never written to storage, always false on a fresh script
+  // instance (page load) and reset to false whenever the presentation
+  // layer is rebuilt against a genuinely new root (see ensurePresentationLayer).
+  let settingsExpanded = false;
+  let aboutExpanded = false;
 
 
   function demoActive() {
@@ -3485,7 +3754,9 @@
     "sync",
     "demo",
     "forget-ff",
-    "forget-torn"
+    "forget-torn",
+    "settings-toggle",
+    "about-toggle"
   ]);
   let ownedPresentationLayer = null;
   let inlinePanelHost = null;
@@ -3795,11 +4066,23 @@
         scanWarRows();
         return;
       case "demo":
-        // Powerless on the owner's own war by owner decision: the control is
-        // kept disabled there, so this never runs, and it sends nothing anywhere.
+        // Powerless on the owner's own war by owner decision: the control
+        // does not exist in the DOM there at all (see updatePanel), so this
+        // never runs, and it sends nothing anywhere. Kept as a second,
+        // redundant guard.
         if (!viewOnlyMode()) { demoMode = false; updatePanel(); return; }
         demoMode = !demoMode;
         scanWarRows();
+        updatePanel();
+        return;
+      case "settings-toggle":
+        registerTrustedInteraction();
+        settingsExpanded = !settingsExpanded;
+        updatePanel();
+        return;
+      case "about-toggle":
+        registerTrustedInteraction();
+        aboutExpanded = !aboutExpanded;
         updatePanel();
         return;
       default:
@@ -3819,6 +4102,9 @@
       ownedPresentationLayer = null;
       presentationRoot = root;
       presentationRootEpoch += 1;
+      // A genuinely new root is a remount: Settings/About never survive one.
+      settingsExpanded = false;
+      aboutExpanded = false;
     }
     let layer = presentationLayer();
     if (layer?.shadowRoot) {
@@ -3908,34 +4194,56 @@
         .api-policy strong { color:#d8e1eb; font-weight:750; }
         .api-policy a { color:#b9d7f2; text-decoration:underline; }
         .warning { color:#fbbf24; }
+        /* 1.5.173: normal mode is the brand row, one summary row and Settings.
+           Everything else lives here, collapsed by default, a class toggle only. */
+        .summary-item { margin-top:5px; }
+        .settings-panel { display:none; }
+        .settings-panel.open { display:block; }
+        .about-panel { display:none; margin-top:5px; }
+        .about-panel.open { display:block; }
+        .danger-zone { margin-top:6px; padding-top:6px; border-top:1px solid rgba(148,163,184,.18); }
+        .danger-zone-label { color:#fca5a5; font:750 7px/1.3 system-ui,sans-serif; text-transform:uppercase; letter-spacing:.04em; margin-bottom:5px; }
         @media (max-width:520px) { .status-grid { grid-template-columns:1fr; } .panel { padding-left:8px; padding-right:8px; } }
       </style>
       <div data-role="row-surface"></div>
       <div class="panel" data-role="panel" id="${SCRIPT.panelId}">
         <div class="top"><span class="brand">KS Torn War Dibs</span><span class="version">v${SCRIPT.version}</span></div>
-        <div class="status-grid">
-          <div class="status-item" data-role="shared-item"><span class="dot"></span><span class="status" data-role="status">Shared: loading…</span></div>
-          <div class="status-item" data-role="torn-item"><span class="dot"></span><span class="status" data-role="torn-status">Torn: loading…</span></div>
-          <div class="status-item" data-role="rw-item"><span class="dot"></span><span class="status" data-role="rw-status">DIBS: checking RW…</span></div>
-        </div>
-        <div class="controls">
-          <button type="button" data-role="key">FFScouter key</button>
-          <button type="button" data-role="torn-key">Torn key</button>
-          <a data-role="create-key" target="_blank" rel="noopener noreferrer">Create custom API key</a>
-          <button type="button" data-role="sync">Sync</button>
-          <button type="button" data-role="demo">Demo</button>
-          <a data-role="war-room" target="_blank" rel="noopener noreferrer">War Room</a>
-          <button type="button" data-role="forget-ff">Forget FF key</button>
-          <button type="button" data-role="forget-torn">Forget Torn key</button>
-        </div>
-        <div class="editor" data-role="key-editor"><input data-role="key-input" type="text" maxlength="16" autocomplete="off" placeholder="16-character FFScouter key"><button type="button" data-role="key-save">Save</button><button type="button" data-role="key-cancel">Cancel</button></div>
-        <div class="editor" data-role="torn-key-editor"><input data-role="torn-key-input" type="text" maxlength="16" autocomplete="off" placeholder="16-character Torn API key"><button type="button" data-role="torn-key-save">Save</button><button type="button" data-role="torn-key-cancel">Cancel</button></div>
-        <div class="note" data-role="note">LIVE: Hospital ≤2:00 + FF 2.00–5.00. First successful DIBS wins; claimant can RELEASE.</div>
-        <div class="api-policy">
-          <strong>Torn API key:</strong> stored only locally, encrypted in this browser; sent only to api.torn.com. Torn API data is processed locally and is not sent to FFScouter. Purpose: faction member Hospital/status data and key-owner identity for Ranked War DIBS. Access: Custom key requiring faction → members; key → info is used to identify the key owner.
-          <br>
-          <strong>FFScouter key/integration:</strong> key stored only locally, encrypted in this browser; sent only to FFScouter. Visible target IDs from the actively viewed war page are sent to FFScouter for FF/Est lookup and Hit Calling. Claim/release data is shared with faction members through FFScouter Hit Calling.
-          <a data-role="ff-terms" target="_blank" rel="noopener noreferrer">FFScouter terms/data policy</a> · <a data-role="ff-privacy" target="_blank" rel="noopener noreferrer">Privacy</a>.
+        <div class="status-item summary-item" data-role="summary-item"><span class="dot"></span><span class="status" data-role="summary-status">Loading…</span></div>
+        <div class="controls"><button type="button" data-role="settings-toggle" aria-expanded="false">Settings</button></div>
+        <div class="controls" data-role="key-breakout" hidden></div>
+        <div class="settings-panel" data-role="settings-panel">
+          <div class="status-grid">
+            <div class="status-item" data-role="shared-item"><span class="dot"></span><span class="status" data-role="status">Shared: loading…</span></div>
+            <div class="status-item" data-role="torn-item"><span class="dot"></span><span class="status" data-role="torn-status">Torn: loading…</span></div>
+            <div class="status-item" data-role="rw-item"><span class="dot"></span><span class="status" data-role="rw-status">DIBS: checking RW…</span></div>
+            <div class="status-item" data-role="clock-item"><span class="dot"></span><span class="status" data-role="clock-status">Clock: loading…</span></div>
+          </div>
+          <div class="controls" data-role="controls-primary">
+            <button type="button" data-role="key">FFScouter key</button>
+            <button type="button" data-role="torn-key">Torn key</button>
+            <a data-role="create-key" target="_blank" rel="noopener noreferrer">Create custom API key</a>
+            <button type="button" data-role="sync">Sync</button>
+            <a data-role="war-room" target="_blank" rel="noopener noreferrer">War Room</a>
+          </div>
+          <div class="editor" data-role="key-editor"><input data-role="key-input" type="text" maxlength="16" autocomplete="off" placeholder="16-character FFScouter key"><button type="button" data-role="key-save">Save</button><button type="button" data-role="key-cancel">Cancel</button></div>
+          <div class="editor" data-role="torn-key-editor"><input data-role="torn-key-input" type="text" maxlength="16" autocomplete="off" placeholder="16-character Torn API key"><button type="button" data-role="torn-key-save">Save</button><button type="button" data-role="torn-key-cancel">Cancel</button></div>
+          <div class="note" data-role="note">LIVE: Hospital ≤2:00 + FF 2.00–5.00. First successful DIBS wins; claimant can RELEASE.</div>
+          <div class="controls"><button type="button" data-role="about-toggle" aria-expanded="false">About — data &amp; privacy</button></div>
+          <div class="about-panel" data-role="about-panel">
+            <div class="api-policy">
+              <strong>Torn API key:</strong> stored only locally, encrypted in this browser; sent only to api.torn.com. Torn API data is processed locally and is not sent to FFScouter. Purpose: faction member Hospital/status data and key-owner identity for Ranked War DIBS. Access: Custom key requiring faction → members; key → info is used to identify the key owner.
+              <br>
+              <strong>FFScouter key/integration:</strong> key stored only locally, encrypted in this browser; sent only to FFScouter. Visible target IDs from the actively viewed war page are sent to FFScouter for FF/Est lookup and Hit Calling. Claim/release data is shared with faction members through FFScouter Hit Calling.
+              <a data-role="ff-terms" target="_blank" rel="noopener noreferrer">FFScouter terms/data policy</a> · <a data-role="ff-privacy" target="_blank" rel="noopener noreferrer">Privacy</a>.
+            </div>
+          </div>
+          <div class="danger-zone">
+            <div class="danger-zone-label">Danger zone</div>
+            <div class="controls" data-role="controls-danger">
+              <button type="button" data-role="forget-ff">Forget FF key</button>
+              <button type="button" data-role="forget-torn">Forget Torn key</button>
+            </div>
+          </div>
         </div>
       </div>
     `;
@@ -4741,6 +5049,31 @@
     if (!unavailable) element.title = "";
   }
 
+  // 1.5.173: the summary row's own text for a Torn-error condition. Pure
+  // display formatting of an already-set, unmodified tornStatusState.message.
+  function tornStatusReasonText() {
+    const message = normalizeText(tornStatusState.message);
+    return message.replace(/^Torn:\s*/i, "") || "unknown";
+  }
+
+  // Fail-closed, first matching condition wins. Reuses the same rwState
+  // currentRwPhase() already produced for the RW row this render, so the
+  // decision engine is read, never called twice.
+  function summaryRowState(rwState) {
+    if (!sharedApiKey) return { state: "error", text: "Set your FFScouter key" };
+    if (!effectiveTornApiKey()) return { state: "error", text: "Set your Torn API key" };
+    if (viewOnlyMode()) return { state: "idle", text: "Viewing another faction's war — read only" };
+    if (tornStatusState.state === "error") {
+      return { state: "error", text: `Torn unavailable — ${tornStatusReasonText()}` };
+    }
+    if (sharedStatus.state !== "online" && sharedStatus.state !== "degraded") {
+      return { state: "syncing", text: "Claims offline — DIBS unavailable" };
+    }
+    if (rwState.phase !== RW_PHASE.LIVE) return { state: "idle", text: "Waiting for the war to go live" };
+    const memberCount = opponentMembersState.factionId === opponentFactionId ? opponentMembersState.members.size : 0;
+    return { state: "ready", text: `Ready · ${memberCount} members` };
+  }
+
   function updatePanel() {
     const shadow = presentationShadow();
     if (!shadow) return;
@@ -4751,9 +5084,24 @@
 
     // Never let DEMO survive a route change onto the owner's own war.
     if (demoMode && !viewOnlyMode()) demoMode = false;
-    if ($("demo")) {
-      $("demo").textContent = demoMode ? "Demo: ON" : "Demo";
-      $("demo").disabled = !viewOnlyMode();
+    // Demo does not exist in the DOM at all outside VIEW -- not disabled,
+    // absent -- per the 2026-09-12 decision that it must never be active in
+    // the owner's own war.
+    const controlsPrimary = $("controls-primary");
+    let demoButton = $("demo");
+    if (viewOnlyMode()) {
+      if (!demoButton && controlsPrimary) {
+        demoButton = document.createElement("button");
+        demoButton.type = "button";
+        demoButton.dataset.role = "demo";
+        controlsPrimary.appendChild(demoButton);
+      }
+      if (demoButton) {
+        demoButton.textContent = demoMode ? "Demo: ON" : "Demo";
+        demoButton.disabled = false;
+      }
+    } else if (demoButton) {
+      demoButton.remove();
     }
     const rwState = currentRwPhase();
     if (rwItem) {
@@ -4785,8 +5133,31 @@
         $("rw-status").title = "DIBS stays locked until own-faction wars confirms this visible war LIVE";
       }
     }
-    if ($("status")) { $("status").textContent = sharedStatus.message; $("status").title = sharedStatus.message; }
+    if ($("status")) {
+      // In VIEW, gmXhr blocks every FFScouter request by construction
+      // (viewOnlyBlocked), so sharedStatus's own "offline"/"HTTP 0" text
+      // would claim the transport is down when it is simply not used. A
+      // panel row must not say something it cannot know. sharedStatus
+      // itself is untouched -- this only changes what is displayed.
+      if (viewOnlyMode()) {
+        $("status").textContent = "Shared: not used in VIEW";
+        $("status").title = "Shared: not used in VIEW";
+        if (sharedItem) sharedItem.dataset.state = "idle";
+      } else {
+        $("status").textContent = sharedStatus.message;
+        $("status").title = sharedStatus.message;
+      }
+    }
     if ($("torn-status")) { $("torn-status").textContent = tornStatusState.message; $("torn-status").title = tornStatusState.message; }
+    if ($("clock-status")) {
+      // Freshen the tornClockSource side effect before reading the label, so
+      // this row can never freeze on a stale value the way the old
+      // clock-in-the-Torn-row text did.
+      getTornNowMs();
+      const clockText = `Clock: ${tornClockSourceLabel()}`;
+      $("clock-status").textContent = clockText;
+      $("clock-status").title = clockText;
+    }
     const ffExternalLock = ffCredentialExternalLockActive();
     const ffChangeBusy = ffCredentialChangeBusy();
     if (ffExternalLock) $("key-editor")?.classList.remove("open");
@@ -4832,6 +5203,62 @@
     if (note) {
       note.textContent = "LIVE: Hospital ≤2:00 + FF 2.00–5.00. First successful DIBS wins; claimant can RELEASE.";
     }
+
+    // Relocate the FF/Torn key controls: broken out into the always-visible
+    // normal-mode slot while the key is missing, back into Settings (in
+    // front of Create custom API key, which never moves) once it is set.
+    // The editor moves with its button -- inserted right before the LIVE
+    // note, which also never moves -- so it always opens where the button
+    // that opened it currently lives, in or out of Settings.
+    const keyBreakout = $("key-breakout");
+    const keyButton = $("key");
+    const keyEditor = $("key-editor");
+    const tornKeyButton = $("torn-key");
+    const tornKeyEditor = $("torn-key-editor");
+    const createKeyAnchor = $("create-key");
+    const noteAnchor = $("note");
+    const ffKeyMissing = !sharedApiKey;
+    const tornKeyMissing = !effectiveTornApiKey();
+    if (keyBreakout && keyButton && keyEditor && createKeyAnchor && noteAnchor) {
+      if (ffKeyMissing) {
+        keyBreakout.appendChild(keyButton);
+        keyBreakout.appendChild(keyEditor);
+      } else {
+        createKeyAnchor.before(keyButton);
+        noteAnchor.before(keyEditor);
+      }
+    }
+    if (keyBreakout && tornKeyButton && tornKeyEditor && createKeyAnchor && noteAnchor) {
+      if (tornKeyMissing) {
+        keyBreakout.appendChild(tornKeyButton);
+        keyBreakout.appendChild(tornKeyEditor);
+      } else {
+        createKeyAnchor.before(tornKeyButton);
+        noteAnchor.before(tornKeyEditor);
+      }
+    }
+    if (keyBreakout) keyBreakout.hidden = !ffKeyMissing && !tornKeyMissing;
+
+    // Summary row: the one thing normal mode always shows besides Settings.
+    const summary = summaryRowState(rwState);
+    const summaryItem = $("summary-item");
+    if (summaryItem) summaryItem.dataset.state = summary.state;
+    if ($("summary-status")) {
+      $("summary-status").textContent = summary.text;
+      $("summary-status").title = summary.text;
+    }
+
+    // Settings/About: a class toggle, nothing else. Never persisted --
+    // settingsExpanded/aboutExpanded are in-memory only (see their
+    // declaration) and this just renders their current value.
+    const settingsPanel = $("settings-panel");
+    if (settingsPanel) settingsPanel.classList.toggle("open", settingsExpanded);
+    const settingsToggle = $("settings-toggle");
+    if (settingsToggle) settingsToggle.setAttribute("aria-expanded", String(settingsExpanded));
+    const aboutPanel = $("about-panel");
+    if (aboutPanel) aboutPanel.classList.toggle("open", aboutExpanded);
+    const aboutToggle = $("about-toggle");
+    if (aboutToggle) aboutToggle.setAttribute("aria-expanded", String(aboutExpanded));
   }
 
   async function runFfCredentialMutation(mutation) {
@@ -5593,7 +6020,7 @@
 
     if (apiKeyStorageReady) {
       if (sharedApiKey) { void fetchSharedClaims(); void fetchFairFightStats({ force: true }); }
-      if (effectiveTornApiKey()) void fetchTornStatuses({ force: true });
+      if (effectiveTornApiKey()) { void fetchTornStatuses({ force: true }); void runTornClockSyncBurst(); }
     }
   }
 
