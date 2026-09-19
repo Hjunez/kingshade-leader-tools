@@ -575,6 +575,48 @@
     };
   })();
 
+  // ------------------------------------------------- what to say about it
+  //
+  // Says was written in etapp 3D-2 to explain a REFUSAL, and on the board page
+  // it is only ever called on one. Here it was being asked to describe the
+  // successes as well, and for everything except already_claimed it fell
+  // through to its last-resort line - so a call that WORKED told the member
+  // "The server refused that ... Nothing was changed."
+  //
+  // Kingshade caught it in T1: the log line said CLAIMED and the box under the
+  // button said refused, about the same press.
+  //
+  // Says itself is left exactly as it is. It is lifted verbatim from the page
+  // that is already approved, and editing it here would quietly make the two
+  // disagree about the same answer. The successes get their words here.
+  function sentenceFor(result) {
+    var body = result.body || {};
+    var status = typeof body.status === 'string' ? body.status : '';
+    var succeeded = result.http === 200 && body.ok === true;
+
+    if (succeeded) {
+      if (status === 'claimed') {
+        // Naming the Torn ID the server wrote it on is the whole point of the
+        // "in someone else's name" press: the member has to be able to SEE
+        // that it landed on his own ID and not the one he typed in.
+        var holder = (body.claim && body.claim.memberId) ? body.claim.memberId : 'you';
+        return 'You hold the target. The server put the call on Torn ' + holder + '.';
+      }
+      if (status === 'unclaimed') return 'Released. The target is free again.';
+      if (status === 'absent') return 'There was nothing of yours to release.';
+
+      var said = Says.of(result.http, body);
+      // Says knows already_claimed and says the right thing about it. Anything
+      // else that WORKED must never borrow its refusal wording.
+      if (said === Says.unknown) {
+        return 'The server accepted that. The line below says exactly what it answered.';
+      }
+      return said;
+    }
+
+    return Says.of(result.http, body);
+  }
+
   // ---------------------------------------------------------------- talking
   //
   // Every request is a POST with a JSON body carrying the sign-in slip, exactly
@@ -637,7 +679,7 @@
     }
 
     logLine(what, answerPhrase(result));
-    var sentence = Says.of(result.http, result.body);
+    var sentence = sentenceFor(result);
     if (result.http === 200 && result.body.ok === true) {
       show(el.okBox, sentence);
     } else {
