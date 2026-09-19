@@ -1,0 +1,765 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>War Room — two-player test</title>
+<style>
+  :root {
+    --ground: #eaedf1; --surface: #ffffff; --surface-2: #f4f6f9;
+    --ink: #14202b; --muted: #5c6d7e; --faint: #8b9aa8;
+    --line: #d3dae1; --line-strong: #b8c3cd;
+    --accent: #a3512a; --accent-ink: #ffffff; --accent-soft: #f2ded4;
+    --good: #1c7355; --good-soft: #dfeee8;
+    --warn: #8c6210; --warn-soft: #f6ecd6;
+    --bad: #a12f2a; --bad-soft: #f6dedc;
+    --shadow: 0 1px 2px rgba(20,32,43,.06), 0 8px 24px rgba(20,32,43,.06);
+    --display: 'Saira Condensed','Arial Narrow',Helvetica,sans-serif;
+    --body: 'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
+    --mono: 'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+      --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+      --line: #26313b; --line-strong: #35434f;
+      --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+      --good: #46a583; --good-soft: #172a24;
+      --warn: #cc9f3f; --warn-soft: #2a2417;
+      --bad: #dd6a61; --bad-soft: #2c1b1a;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink);
+         font-family: var(--body); line-height: 1.5; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 20px 16px 60px; }
+  h1 { font-family: var(--display); font-size: 30px; margin: 0 0 4px;
+       letter-spacing: .01em; }
+  h2 { font-family: var(--display); font-size: 20px; margin: 0 0 2px; }
+  p { margin: 0 0 10px; }
+  .panel { background: var(--surface); border: 1px solid var(--line);
+           border-radius: 10px; box-shadow: var(--shadow); margin: 0 0 16px; }
+  .panel-head { padding: 14px 16px 0; }
+  .panel-body { padding: 14px 16px; }
+  .hint { color: var(--muted); font-size: 14px; }
+  .testbanner { background: var(--warn-soft); border: 1px solid var(--warn);
+                border-radius: 10px; padding: 14px 16px; margin: 0 0 16px; }
+  .testbanner .title { font-family: var(--display); font-size: 18px;
+                       color: var(--warn); display: block; margin-bottom: 4px;
+                       letter-spacing: .04em; text-transform: uppercase; }
+  .lbl { display: block; font-size: 13px; color: var(--muted); margin: 0 0 4px; }
+  input[type="password"], input[type="text"] {
+    background: var(--surface-2); color: var(--ink); border: 1px solid var(--line-strong);
+    border-radius: 7px; padding: 9px 11px; font: 15px var(--mono); min-width: 0; }
+  .grow { flex: 1 1 220px; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+             margin: 0 0 10px; }
+  .btn { background: var(--surface-2); color: var(--ink); border: 1px solid var(--line-strong);
+         border-radius: 7px; padding: 9px 13px; font: 600 14px var(--body);
+         cursor: pointer; }
+  .btn:hover:not(:disabled) { border-color: var(--accent); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .btn.wide { min-width: 250px; text-align: left; }
+  .facts { font: 13px var(--mono); color: var(--muted); background: var(--surface-2);
+           border: 1px solid var(--line); border-radius: 7px; padding: 10px 12px;
+           margin: 0 0 12px; }
+  .facts b { color: var(--ink); }
+  .state { font-family: var(--display); font-size: 19px; letter-spacing: .05em;
+           padding: 3px 10px; border-radius: 6px; background: var(--surface-2);
+           border: 1px solid var(--line-strong); }
+  .said { color: var(--muted); font-size: 14px; margin: 8px 0 0; }
+  .msg { border-radius: 7px; padding: 10px 12px; margin: 10px 0 0; font-size: 14px; }
+  .msg.err { background: var(--bad-soft); color: var(--bad); border: 1px solid var(--bad); }
+  .msg.ok  { background: var(--good-soft); color: var(--good); border: 1px solid var(--good); }
+  #log { font: 13px/1.6 var(--mono); background: var(--surface-2);
+         border: 1px solid var(--line); border-radius: 7px; padding: 12px;
+         white-space: pre-wrap; word-break: break-word; margin: 0;
+         min-height: 90px; color: var(--ink); }
+  details { border-top: 1px solid var(--line); margin-top: 4px; }
+  summary { cursor: pointer; padding: 12px 16px; font-weight: 600; font-size: 14px; }
+  dl { margin: 0; } dt { font-weight: 700; margin-top: 10px; font-size: 14px; }
+  dd { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
+  code { font: 13px var(--mono); background: var(--surface-2); padding: 1px 5px;
+         border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <div class="testbanner">
+    <span class="title">This is a test page</span>
+    <p>It exists to prove two things about the faction's DIBS board, and it needs
+      <strong>two people</strong> to prove them: that one member cannot release another
+      member's call, and that when two people call the same target at the same moment,
+      exactly one of them gets it.</p>
+    <p><strong>It cannot touch a real war.</strong> The war it writes to is fixed in this
+      page's code and its name begins with <code>sim-</code>, which is the only kind of
+      war the server will let anyone empty or experiment on. The target is a made-up
+      Torn ID that belongs to nobody. Changing the web address does not change either of
+      them.</p>
+    <p>Nothing you do here is seen by the faction, and nothing here affects any real
+      target, any real war, or your own account.</p>
+  </div>
+
+  <header>
+    <h1>War Room &mdash; two-player test</h1>
+    <p class="hint">Kingshade and one other faction member, each on their own device,
+      each signed in with their own Torn key.</p>
+  </header>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>1 &middot; Sign in</h2>
+      <p class="hint">Your Torn key is sent to the faction's own claim server, which asks
+        Torn who it belongs to. It is never sent to Kingshade and never to anybody else.</p>
+    </div>
+    <div class="panel-body">
+      <label class="lbl" for="apiKey">Your Torn API key (level Public is enough)</label>
+      <div class="toolbar">
+        <input type="password" id="apiKey" class="grow" autocomplete="off" spellcheck="false"
+               placeholder="Paste your key">
+        <button type="button" class="btn" id="toggleKey" aria-pressed="false">Show</button>
+        <button type="button" class="btn primary" id="signInBtn">Sign in</button>
+        <button type="button" class="btn" id="forgetKey">Forget key</button>
+      </div>
+      <div class="toolbar">
+        <span class="state" id="sessionState">CHECKING</span>
+        <span class="hint" id="whoami">not signed in</span>
+      </div>
+      <p class="said" id="sessionSaid" hidden></p>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>2 &middot; The test</h2>
+      <p class="hint">Press these in whatever order you are asked to. The page never
+        guesses what happened &mdash; it shows what the server answered.</p>
+    </div>
+    <div class="panel-body">
+      <div class="facts">
+        test war &nbsp; <b id="factWar">&mdash;</b><br>
+        target &nbsp;&nbsp;&nbsp; <b id="factTarget">&mdash;</b> &nbsp;(a made-up Torn ID,
+        nobody's account)
+      </div>
+
+      <div class="toolbar">
+        <button type="button" class="btn wide" id="btnTake" disabled>Take the target</button>
+        <button type="button" class="btn wide" id="btnBoard" disabled>Show the board</button>
+      </div>
+      <div class="toolbar">
+        <button type="button" class="btn wide" id="btnReleaseOther" disabled>Try to release the other one's target</button>
+        <button type="button" class="btn wide" id="btnReleaseMine" disabled>Release my own target</button>
+      </div>
+
+      <label class="lbl" for="otherId">The other participant's Torn ID &mdash; for the last
+        button only. A Torn ID is public; ask them, or read it off Show the board.</label>
+      <div class="toolbar">
+        <input type="text" id="otherId" class="grow" autocomplete="off" spellcheck="false"
+               inputmode="numeric" placeholder="e.g. 1234567">
+        <button type="button" class="btn wide" id="btnTakeAsOther" disabled>Take it in someone else's name</button>
+      </div>
+
+      <p class="msg err" id="errorBox" role="alert" hidden></p>
+      <p class="msg ok" id="okBox" role="status" hidden></p>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>3 &middot; What to send back</h2>
+      <p class="hint">Every press adds one line here. Copy the whole box and send it to
+        Kingshade. There is no key and no sign-in token in it &mdash; only what was done
+        and what the server answered.</p>
+    </div>
+    <div class="panel-body">
+      <pre id="log">Nothing yet.</pre>
+      <div class="toolbar" style="margin-top:10px">
+        <button type="button" class="btn" id="copyLog">Copy these lines</button>
+        <button type="button" class="btn" id="clearLog">Clear</button>
+      </div>
+    </div>
+
+    <details>
+      <summary>What this page does, calls and stores</summary>
+      <div class="panel-body">
+
+        <p class="hint">Torn asks every tool that takes a key to say these five things.</p>
+        <dl>
+          <dt>Data Storage</dt><dd>Temporary (&lt; 1 day). The test war's board is deleted
+            by the server after twelve hours without a change.</dd>
+          <dt>Data Sharing</dt><dd>Faction. Only this faction can read the board.</dd>
+          <dt>Purpose of Use</dt><dd>Competitive advantage.</dd>
+          <dt>Key Storage &amp; Sharing</dt><dd>Not stored/shared. Your key is never stored
+            on the server, never written to its log, and never shown to another member.</dd>
+          <dt>Key Access Level</dt><dd>Public. The lowest level Torn offers is enough.</dd>
+        </dl>
+
+        <dl>
+          <dt>Torn calls</dt>
+          <dd><strong>None from this page.</strong> This page never contacts Torn. It sends
+            your key once to the faction's claim server, and that server asks Torn the one
+            question &mdash; whose key is this, and is that person in the faction.</dd>
+          <dt>Signing in</dt>
+          <dd>Your key goes to the claim server in the body of one request. It answers with
+            a signed slip that says your Torn ID and when it runs out. The slip lives in
+            this browser tab only &mdash; not in storage &mdash; and is replaced from your
+            key when it runs out.</dd>
+          <dt>Claim server</dt>
+          <dd>Reads and writes one test board at
+            <code>ks-war-room-claims-staging.hans-viklund.workers.dev</code>. Every request
+            is a POST and carries the slip in its body: never in a web address, never in a
+            header. It is sent the test war's name, the made-up target ID, and nothing else
+            about you beyond what the slip already says.</dd>
+          <dt>Who a call belongs to</dt>
+          <dd>The server takes your Torn ID from the signed slip, not from anything this
+            page puts in the request. That is one of the two things this test exists to
+            show.</dd>
+          <dt>Stored in this browser</dt>
+          <dd>Your Torn key, in this device's local storage, so you do not have to paste it
+            again between presses. Nothing else &mdash; and not the sign-in slip. The
+            Forget key button removes it.</dd>
+          <dt>Writes</dt>
+          <dd>Nothing in Torn, ever. No attacks, no clicks, no navigation, no page
+            scraping, no background watching, nothing to do with captcha. The only thing
+            this page writes is a line on a test board that no real war can see.</dd>
+        </dl>
+      </div>
+    </details>
+  </section>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // =========================================================================
+  // THE TWO THINGS THAT ARE LOCKED, AND WHY THEY ARE LOCKED IN CODE
+  //
+  // Neither of these is read from the web address, and there is no code here
+  // that could read them from it. A test page that could be pointed at a real
+  // war by editing a URL is a test page that will one day be pointed at a real
+  // war by editing a URL.
+  //
+  // The server refuses to empty any war whose name does not begin with sim-,
+  // so this name is also the thing that keeps the wipe rule honest. The guard
+  // just below is belt and braces: if someone edits the constant and forgets
+  // the prefix, the page refuses to do anything at all rather than quietly
+  // write somewhere real.
+  // =========================================================================
+  var SIM_PREFIX = 'sim-';
+  var TEST_WAR_ID = 'sim-2p-test-20260919';
+  var TEST_TARGET_ID = '999000222333';   // twelve digits, belongs to nobody
+
+  var CLAIM_SERVER = 'https://ks-war-room-claims-staging.hans-viklund.workers.dev';
+  var SESSION_RENEW_MARGIN_MS = 60000;
+  var TORN_API_KEY_PATTERN = /^[A-Za-z0-9]{8,64}$/;
+  var TORN_ID_PATTERN = /^[0-9]{1,12}$/;
+  var KEY_STORE = 'ks-warroom-2p-key';
+
+  if (TEST_WAR_ID.lastIndexOf(SIM_PREFIX, 0) !== 0) {
+    document.body.innerHTML =
+      '<p style="padding:40px;font:16px sans-serif">This page is misconfigured and has ' +
+      'switched itself off. The test war must begin with sim-. Nothing was sent.</p>';
+    return;
+  }
+
+  var el = {};
+  ['apiKey','toggleKey','signInBtn','forgetKey','sessionState','sessionSaid','whoami',
+   'factWar','factTarget','otherId','btnTake','btnBoard','btnReleaseOther',
+   'btnReleaseMine','btnTakeAsOther','errorBox','okBox','log','copyLog','clearLog']
+    .forEach(function (id) { el[id] = document.getElementById(id); });
+
+  function read(store) { try { return localStorage.getItem(store) || ''; } catch (e) { return ''; } }
+  function write(store, value) {
+    try { if (value) localStorage.setItem(store, value); else localStorage.removeItem(store); }
+    catch (e) { /* a browser that refuses storage still works, it just forgets */ }
+  }
+  function show(box, message) { box.textContent = message; box.hidden = false; }
+  function hide(box) { box.textContent = ''; box.hidden = true; }
+
+
+  // ---------------------------------------------------------------- the log
+  //
+  // G7. One line per press, in plain words, for the member to copy and send.
+  //
+  // What goes in: what was pressed, and what the server answered. What never
+  // goes in: the key, the sign-in slip. Torn IDs DO go in - they are the whole
+  // point of the test, and a Torn ID is public.
+  var lines = [];
+
+  function logLine(what, answer) {
+    var t = new Date().toTimeString().slice(0, 8);
+    lines.push(t + '  ' + what + '  ->  ' + answer);
+    el.log.textContent = lines.join('\n');
+  }
+
+  // Turns a server answer into one short readable phrase for the log. Uses the
+  // server's CODE, never its text - same rule as the rest of the page.
+  function answerPhrase(result) {
+    var body = result.body || {};
+    var status = typeof body.status === 'string' ? body.status : '';
+    var error = typeof body.error === 'string' ? body.error : '';
+    var holder = (body.claim && typeof body.claim.memberId === 'string')
+      ? body.claim.memberId : '';
+
+    if (status === 'claimed') {
+      return 'CLAIMED by Torn ' + (body.claim ? body.claim.memberId : '?') + '  (you got it)';
+    }
+    if (status === 'already_claimed') {
+      return 'ALREADY YOURS, time unchanged  (holder Torn ' + holder + ')';
+    }
+    if (status === 'taken') {
+      return 'TAKEN by Torn ' + holder + '  (somebody else got it first)';
+    }
+    if (status === 'already_holding') {
+      return 'REFUSED, you already hold another target';
+    }
+    if (status === 'not_owner') {
+      return 'REFUSED, not yours - still held by Torn ' + holder;
+    }
+    if (status === 'unclaimed') return 'RELEASED';
+    if (status === 'absent') return 'nothing there to release';
+    if (status === 'unreadable') return 'REFUSED, the server cannot read that row';
+    if (error) return 'REFUSED, ' + error;
+    return 'answer this page does not recognise';
+  }
+
+  // --------------------------------------------------------- what to say
+  //
+  // EVERY sentence a member reads about a refusal is written here, in
+  // English, and it is chosen on the CODE in the answer - never on the
+  // server's own words.
+  //
+  // The server answers in Swedish. That is deliberate and it stays: those
+  // exact strings are read back by the acceptance suite, and rewriting them
+  // to fix a wording would tear up a locked decision for no gain.
+  //
+  // But only one person in the faction reads Swedish, and this page is open
+  // on everybody's screen during a war. A member who cannot read what went
+  // wrong cannot fix it while the war is running. So the page does its own
+  // talking, and the server's text is never shown.
+  //
+  // Three rules for the sentences below:
+  //   - no error code, no HTTP status, no path. A member is not debugging.
+  //   - when there is something to do about it, say what.
+  //   - when the answer cannot be explained, say THAT. Never a guess, and
+  //     never something that sounds like a verdict.
+  var Says = (function () {
+    function minutes(seconds) {
+      var m = Math.ceil((Number(seconds) || 0) / 60);
+      return m > 0 ? m : 1;
+    }
+
+    // The last resort. Fail-closed applies to words too: this says it did not
+    // work and that we cannot say why - it never invents a reason.
+    var UNKNOWN = 'The server refused that, and did not say why in a way this page ' +
+      'can explain. Nothing was changed.';
+
+    function of(http, body) {
+      var error = (body && typeof body.error === 'string') ? body.error : '';
+      var reason = (body && typeof body.reason === 'string') ? body.reason : '';
+      var status = (body && typeof body.status === 'string') ? body.status : '';
+
+      // ---- signing in -------------------------------------------------
+      if (reason === 'key_malformed' || error === 'invalid_key') {
+        return 'That does not look like a Torn API key. Copy the whole key from ' +
+          'Torn, with no spaces around it.';
+      }
+      if (error === 'key_rejected') {
+        if (reason === 'invalid_key') {
+          return 'Torn did not accept that key. Check that you copied all of it, ' +
+            'or make a new one in Torn.';
+        }
+        if (reason === 'key_owner_in_federal_jail') {
+          return 'That key cannot be used while its owner is in federal jail.';
+        }
+        if (reason === 'key_owner_inactive') {
+          return 'Torn has switched that key off after seven days without a login. ' +
+            'Log in to Torn and make a new key.';
+        }
+        if (reason === 'key_access_too_low') {
+          return 'That key does not have enough access. A key at level Public is ' +
+            'enough - make a new one in Torn.';
+        }
+        if (reason === 'key_paused') {
+          return 'That key is paused. Turn it back on in Torn, or make a new one.';
+        }
+        // retryable:true - Torn was busy, off, or would not answer about the key
+        return 'Torn could not check that key just now. Try again in a minute.';
+      }
+      if (error === 'not_a_member') {
+        return 'Torn says that key does not belong to this faction. Only members ' +
+          'can use the board.';
+      }
+      if (error === 'login_blocked') {
+        return 'Too many failed sign-ins from here. Wait about ' +
+          minutes(body && body.retryAfterSeconds) + ' minute(s) and try again.';
+      }
+      if (error === 'login_paused') {
+        return 'The board has paused new sign-ins for a moment, so that Torn does ' +
+          'not shut the whole faction out. Wait about ' +
+          minutes(body && body.retryAfterSeconds) + ' minute(s) and try again.';
+      }
+      if (error === 'server_not_configured') {
+        return 'The claim server is not set up yet. Tell Kingshade - nobody can ' +
+          'sign in until that is done.';
+      }
+      if (error === 'torn_unreadable') {
+        return 'Torn answered something the server could not read. Try again in a minute.';
+      }
+      if (error === 'torn_unreachable') {
+        return 'The server could not reach Torn. Try again in a minute.';
+      }
+
+      // ---- being signed in --------------------------------------------
+      if (error === 'unauthorized') {
+        if (reason === 'expired') {
+          return 'Your sign-in ran out. Press Load the war to sign in again.';
+        }
+        return 'You are not signed in. Paste your Torn key and press Load the war.';
+      }
+
+      // ---- the board ---------------------------------------------------
+      if (error === 'wipe_not_allowed') {
+        return 'Your Torn ID is not on the list of people who may empty a war.';
+      }
+      if (error === 'wipe_real_war_forbidden') {
+        return 'A real war is never emptied. Only a test war can be.';
+      }
+      if (error === 'storage_error' || status === 'unreadable') {
+        return 'The server cannot tell who holds what right now, so it will not ' +
+          'hand anything out. Leave those rows alone until it can.';
+      }
+      if (error === 'method_not_allowed' || error === 'not_found' ||
+          error === 'bad_request') {
+        return 'The page asked the server something it did not understand. ' +
+          'Reload the page and try again.';
+      }
+      if (error === 'internal_error') {
+        return 'Something went wrong at the server’s end. Try again in a moment.';
+      }
+
+      // ---- answers that are not refusals, but are shown -----------------
+      if (status === 'already_claimed') {
+        return 'That target was already yours. The time on it has not changed.';
+      }
+      if (status === 'already_holding') {
+        return 'You already hold another target. Release it before calling another.';
+      }
+      if (status === 'taken') {
+        return 'Someone else got there first.';
+      }
+      if (status === 'not_owner') {
+        return 'That claim belongs to somebody else, and it was not released.';
+      }
+
+      if (http === 0) return 'The claim server could not be reached. Try again in a moment.';
+      return UNKNOWN;
+    }
+
+    return { of: of, unknown: UNKNOWN };
+  })();
+
+  var Session = (function () {
+    var token = '';
+    var expiresAt = 0;
+    var tornId = '';
+    var state = 'idle';   // idle | checking | signed_in | not_a_member | key_rejected | offline
+    var said = '';
+    var inFlight = null;
+
+    // The five words the page is allowed to show, and nothing else.
+    var WORDS = {
+      idle: 'CHECKING',
+      checking: 'CHECKING',
+      signed_in: 'SIGNED IN',
+      not_a_member: 'NOT A MEMBER',
+      key_rejected: 'KEY REJECTED',
+      offline: 'SERVER OFFLINE'
+    };
+
+    function word() { return WORDS[state] || 'SERVER OFFLINE'; }
+
+    function forget() {
+      token = ''; expiresAt = 0; tornId = '';
+      state = 'idle'; said = '';
+    }
+
+    // Good for a while yet? The margin is deliberate: a slip that expires
+    // between the check and the answer is a refusal the member did nothing to
+    // deserve.
+    function fresh() {
+      return token !== '' && Date.now() < expiresAt - SESSION_RENEW_MARGIN_MS;
+    }
+
+    async function signIn() {
+      // Two clicks, or a click on top of the automatic renewal, must not send
+      // the key twice. The second caller waits for the first one's answer.
+      if (inFlight) return inFlight;
+      inFlight = (async function () {
+        var key = el.apiKey.value.trim();
+        if (!key) { forget(); said = 'Paste your Torn key first.'; return false; }
+        if (!TORN_API_KEY_PATTERN.test(key)) {
+          // Stopped here. Not sent to our server, and above all not sent to
+          // Torn, where it would have counted as a try with a bad key.
+          forget();
+          state = 'key_rejected';
+          said = 'That does not look like a Torn API key. Copy the whole key from ' +
+            'Torn, with no spaces around it.';
+          return false;
+        }
+        state = 'checking'; said = '';
+        var response;
+        try {
+          response = await fetch(CLAIM_SERVER + '/session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ apiKey: key })
+          });
+        } catch (networkFailure) {
+          token = ''; expiresAt = 0;
+          state = 'offline';
+          said = 'The claim server could not be reached.';
+          return false;
+        }
+        var body = null;
+        try { body = await response.json(); } catch (e) { body = null; }
+
+        if (response.status === 200 && body && body.ok === true && typeof body.session === 'string') {
+          token = body.session;
+          expiresAt = Number(body.expiresAt) || 0;
+          tornId = typeof body.tornId === 'string' ? body.tornId : '';
+          state = 'signed_in'; said = '';
+          return true;
+        }
+
+        token = ''; expiresAt = 0;
+        // The server's own `detail` is NOT used. It is written in Swedish for
+        // whoever runs the server; what a member reads is written by Says, in
+        // English, chosen on the code in this answer.
+        said = Says.of(response.status, body);
+        if (response.status === 403) {
+          state = 'not_a_member';
+        } else if (response.status === 401 || response.status === 400) {
+          state = 'key_rejected';
+        } else {
+          state = 'offline';
+        }
+        return false;
+      })();
+      try { return await inFlight; } finally { inFlight = null; }
+    }
+
+    return {
+      token: function () { return token; },
+      tornId: function () { return tornId; },
+      state: function () { return state; },
+      word: word,
+      said: function () { return said; },
+      fresh: fresh,
+      signedIn: function () { return token !== ''; },
+      forget: forget,
+      signIn: signIn,
+      // The slip every request needs. Renews itself when it is about to run
+      // out, so the member never sees a sign-in screen mid-war.
+      ensure: async function () {
+        if (fresh()) return token;
+        await signIn();
+        return token;
+      }
+    };
+  })();
+
+  // ---------------------------------------------------------------- talking
+  //
+  // Every request is a POST with a JSON body carrying the sign-in slip, exactly
+  // as the board itself does. Never a header, never the address.
+  async function call(op, fields) {
+    var slip = await Session.ensure();
+    if (!slip) {
+      return { http: 0, body: { error: 'unauthorized' }, blocked: true };
+    }
+    var body = { session: slip };
+    if (fields) {
+      Object.keys(fields).forEach(function (k) {
+        if (fields[k] !== undefined && fields[k] !== null) body[k] = fields[k];
+      });
+    }
+    var response;
+    try {
+      response = await fetch(
+        CLAIM_SERVER + '/war/' + encodeURIComponent(TEST_WAR_ID) + '/' + op,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body) });
+    } catch (networkFailure) {
+      return { http: 0, body: null };
+    }
+    var payload = null;
+    try { payload = await response.json(); } catch (e) { payload = null; }
+    return { http: response.status, body: payload };
+  }
+
+  // ---------------------------------------------------------------- the view
+  function sessionRender() {
+    el.sessionState.textContent = Session.word();
+    var said = Session.said();
+    el.sessionSaid.textContent = said;
+    el.sessionSaid.hidden = !said;
+    var inGame = Session.signedIn();
+    el.whoami.textContent = inGame
+      ? 'signed in as Torn ' + Session.tornId()
+      : 'not signed in';
+    ['btnTake','btnBoard','btnReleaseOther','btnReleaseMine'].forEach(function (b) {
+      el[b].disabled = !inGame;
+    });
+    el.btnTakeAsOther.disabled = !inGame || !TORN_ID_PATTERN.test(el.otherId.value.trim());
+  }
+
+  async function run(what, op, fields) {
+    hide(el.errorBox); hide(el.okBox);
+    var result = await call(op, fields);
+    sessionRender();
+
+    if (result.blocked) {
+      logLine(what, 'not signed in');
+      show(el.errorBox, Session.said() || 'You are not signed in.');
+      return result;
+    }
+    if (result.http === 0 || !result.body) {
+      logLine(what, 'no answer from the server');
+      show(el.errorBox, 'The claim server could not be reached. Try again in a moment.');
+      return result;
+    }
+
+    logLine(what, answerPhrase(result));
+    var sentence = Says.of(result.http, result.body);
+    if (result.http === 200 && result.body.ok === true) {
+      show(el.okBox, sentence);
+    } else {
+      show(el.errorBox, sentence);
+    }
+    return result;
+  }
+
+  // ---------------------------------------------------------------- buttons
+  el.toggleKey.addEventListener('click', function () {
+    var showing = el.apiKey.type === 'text';
+    el.apiKey.type = showing ? 'password' : 'text';
+    el.toggleKey.textContent = showing ? 'Show' : 'Hide';
+    el.toggleKey.setAttribute('aria-pressed', showing ? 'false' : 'true');
+  });
+
+  el.signInBtn.addEventListener('click', async function () {
+    hide(el.errorBox); hide(el.okBox);
+    var key = el.apiKey.value.trim();
+    if (!key) { show(el.errorBox, 'Paste your Torn key first.'); return; }
+    el.signInBtn.disabled = true;
+    await Session.signIn();
+    el.signInBtn.disabled = false;
+    sessionRender();
+    if (Session.signedIn()) {
+      write(KEY_STORE, key);
+      logLine('SIGN IN', 'SIGNED IN as Torn ' + Session.tornId());
+      show(el.okBox, 'Signed in as Torn ' + Session.tornId() + '.');
+    } else {
+      logLine('SIGN IN', 'refused - ' + Session.word());
+      show(el.errorBox, Session.said() || 'The sign-in did not go through.');
+    }
+  });
+
+  el.forgetKey.addEventListener('click', function () {
+    write(KEY_STORE, '');
+    el.apiKey.value = '';
+    Session.forget();
+    sessionRender();
+    hide(el.errorBox);
+    show(el.okBox, 'Key removed from this browser.');
+  });
+
+  el.btnTake.addEventListener('click', function () {
+    run('TAKE THE TARGET', 'claim', { targetId: TEST_TARGET_ID, hospitalUntil: 0 });
+  });
+
+  el.btnBoard.addEventListener('click', async function () {
+    hide(el.errorBox); hide(el.okBox);
+    var result = await call('claims', null);
+    sessionRender();
+    if (result.blocked) { logLine('SHOW THE BOARD', 'not signed in'); return; }
+    if (result.http !== 200 || !result.body || result.body.ok !== true) {
+      logLine('SHOW THE BOARD', 'no readable answer');
+      show(el.errorBox, Says.of(result.http, result.body));
+      return;
+    }
+    var claims = Array.isArray(result.body.claims) ? result.body.claims : [];
+    var mine = null;
+    claims.forEach(function (c) { if (c && c.targetId === TEST_TARGET_ID) mine = c; });
+    if (mine) {
+      logLine('SHOW THE BOARD', 'target held by Torn ' + mine.memberId);
+      show(el.okBox, 'The target is held by Torn ' + mine.memberId + '.');
+    } else {
+      logLine('SHOW THE BOARD', 'target is free');
+      show(el.okBox, 'Nobody holds the target right now.');
+    }
+    if (result.body.degraded === true) {
+      show(el.errorBox, 'The server could not read every row, so it will not say the ' +
+        'target is free. Treat it as unknown.');
+    }
+  });
+
+  el.btnReleaseOther.addEventListener('click', function () {
+    run('RELEASE THE OTHER ONE\'S TARGET', 'unclaim', { targetId: TEST_TARGET_ID });
+  });
+
+  el.btnReleaseMine.addEventListener('click', function () {
+    run('RELEASE MY OWN TARGET', 'unclaim', { targetId: TEST_TARGET_ID });
+  });
+
+  el.otherId.addEventListener('input', sessionRender);
+
+  el.btnTakeAsOther.addEventListener('click', function () {
+    var other = el.otherId.value.trim();
+    if (!TORN_ID_PATTERN.test(other)) {
+      show(el.errorBox, 'Type the other participant\'s Torn ID first - digits only.');
+      return;
+    }
+    // memberId is put in the body ON PURPOSE. The server is supposed to ignore
+    // it and write the call on whoever the sign-in slip says. If it ever did
+    // otherwise, anybody could call a target in somebody else's name.
+    run('TAKE IT AS TORN ' + other, 'claim',
+        { targetId: TEST_TARGET_ID, hospitalUntil: 0, memberId: other });
+  });
+
+  el.copyLog.addEventListener('click', function () {
+    var text = lines.length ? lines.join('\n') : 'Nothing yet.';
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        show(el.okBox, 'Copied. Paste it to Kingshade.');
+      }, function () {
+        show(el.errorBox, 'Could not copy. Select the lines and copy them by hand.');
+      });
+    } else {
+      show(el.errorBox, 'This browser will not let the page copy. Select the lines and ' +
+        'copy them by hand.');
+    }
+  });
+
+  el.clearLog.addEventListener('click', function () {
+    lines = [];
+    el.log.textContent = 'Nothing yet.';
+  });
+
+  // ---------------------------------------------------------------- start
+  el.factWar.textContent = TEST_WAR_ID;
+  el.factTarget.textContent = TEST_TARGET_ID;
+  var storedKey = read(KEY_STORE);
+  if (storedKey) el.apiKey.value = storedKey;
+  sessionRender();
+})();
+</script>
+</body>
+</html>
