@@ -544,6 +544,20 @@
   // server refuses anything older, so sending it would only be noise.
   var REPORT_MAX_AGE_MS = 30000;
 
+  // What has to be true of a key before it is sent ANYWHERE.
+  //
+  // This is a shape check, not a claim about Torn's key format - the exact
+  // length is not written down in anything read for this work, so it is not
+  // guessed at. What it does is stop an empty box, a sentence, a pasted URL
+  // or a key with a space in it from ever leaving this page.
+  //
+  // It matters because of what Torn does with such an attempt: api.html says
+  // repeated requests with invalid keys may earn a temporary IP ban, and a
+  // key that is obviously not a key still counts as one of those attempts.
+  // The server has the same check for the same reason. The page needs its own
+  // because the page has its own way to Torn.
+  var TORN_API_KEY_PATTERN = /^[A-Za-z0-9]{8,64}$/;
+
   var CLAIM_POLL_MS = 5000;    // the claim board changes every few seconds during a war
   var ROSTER_POLL_MS = 30000;  // hospital and jail timers do not need more than this
   var WAR_POLL_MS = 120000;    // which war is running changes twice a week, not twice a minute
@@ -1004,6 +1018,15 @@
       inFlight = (async function () {
         var key = el.apiKey.value.trim();
         if (!key) { forget(); said = 'Paste your Torn key first.'; return false; }
+        if (!TORN_API_KEY_PATTERN.test(key)) {
+          // Stopped here. Not sent to our server, and above all not sent to
+          // Torn, where it would have counted as a try with a bad key.
+          forget();
+          state = 'key_rejected';
+          said = 'That does not look like a Torn API key. Copy the whole key from ' +
+            'Torn, with no spaces around it.';
+          return false;
+        }
         state = 'checking'; said = '';
         var response;
         try {
@@ -2096,20 +2119,59 @@
     }
   }
 
+  // THE ORDER HERE IS THE POINT, and it was wrong once.
+  //
+  // The sign-in goes FIRST, before this page says a word to Torn. Two reasons,
+  // and both of them were found by a member clicking the page, not by a test:
+  //
+  //   The words on screen. If Torn is asked first, a bad key makes that call
+  //   throw, and everything after it - the sign-in included - never runs. The
+  //   box then keeps whatever it said before: CHECKING in a fresh window,
+  //   SIGNED IN in one that had already signed in. KEY REJECTED and
+  //   NOT A MEMBER were unreachable, which is to say the five words S1 asks
+  //   for were three.
+  //
+  //   The calls to Torn. If our server has already asked Torn about this key
+  //   and been told it is wrong, asking Torn the same question again from
+  //   here adds nothing and spends a second bad-key attempt. Those are what
+  //   api.html warns can end in an IP ban.
+  //
+  // So: shape check, then sign in, then - only if the key is not already
+  // known to be dead - Torn.
   async function loadAll() {
     hide(el.errorBox); hide(el.okBox);
     var key = el.apiKey.value.trim();
     if (!key) { show(el.errorBox, 'Paste your Torn key first.'); return; }
-    write(KEY_STORE, key);
     el.loadBtn.disabled = true;
     el.loadBtn.textContent = 'Loading';
     try {
+      // Asks our server, which asks Torn once. Never throws - a refusal is an
+      // answer, and the answer is what the box on screen shows.
+      var signedIn = await Session.signIn();
+      sessionRender();
+
+      if (Session.state() === 'key_rejected') {
+        // Torn itself said this key is no good, or it never looked like one.
+        // The roster below would fail on the very same key. Asking is a
+        // wasted call and a second bad-key attempt, so we do not ask.
+        Claims.drop();
+        Roster.forget();
+        el.targetPanel.hidden = true;
+        el.warPanel.hidden = true;
+        show(el.errorBox, Session.said() || 'The key was not accepted.');
+        return;
+      }
+
+      // Past this point the key is one Torn accepted. Worth keeping, and
+      // worth using. A key that never got that far is not written down.
+      write(KEY_STORE, key);
+      if (!signedIn) {
+        // Not a member, or our server is not answering. The roster still
+        // loads - it always did - and only the DIBS column stays shut.
+        show(el.errorBox, Session.said() || 'The War Room sign-in did not go through.');
+      }
+
       await Roster.loadIdentity();
-      // The War Room sign-in is its own thing: Torn is asked by OUR server,
-      // with this key, whether the person holding it is in the faction. A
-      // refusal here does not stop the roster below from loading - it only
-      // keeps the DIBS column shut.
-      await Session.signIn();
       await Roster.loadWar();
       if (Roster.war()) {
         await Roster.loadTargets();
