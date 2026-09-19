@@ -337,7 +337,7 @@
       </div>
 
       <div>
-        <label class="lbl" for="ffKey">Your FFScouter API key (optional)</label>
+        <label class="lbl" for="ffKey">Your FFScouter API key (required to call targets)</label>
         <div class="toolbar">
           <input type="password" id="ffKey" class="grow" autocomplete="off" spellcheck="false"
                  placeholder="Paste your FFScouter key">
@@ -345,7 +345,9 @@
           <button type="button" class="btn quiet" id="forgetFfKey">Forget key</button>
         </div>
         <p class="fieldhint">Not your Torn key. Get this from ffscouter.com. Without it the
-          FF and EST columns stay empty; everything else works as usual.</p>
+          FF and EST columns stay empty and <strong>no target can be called</strong> &mdash; the
+          page cannot check that a target is inside your FF range without it. The roster, the
+          hospital times and the board still load as usual.</p>
         <p class="fieldhint said" id="ffSaid" hidden></p>
       </div>
 
@@ -429,9 +431,10 @@
             key on this page, this browser asks <code>ffscouter.com</code> for Fair Fight and
             estimated battle stats for the targets on the list: one request for the whole list, at
             most every five minutes, only while the page is on screen. It sends that key and the
-            targets' Torn IDs, nothing else. Without a key the two columns show a dash and nothing
-            is sent. Figures older than fifteen minutes are marked stale; older than thirty they
-            are dropped and the cells say UNKNOWN.</dd>
+            targets' Torn IDs, nothing else. Without a key the two columns show a dash, nothing
+            is sent, and no target can be called &mdash; calling needs a target's FF to be known,
+            so that it can be checked against your FF range. Figures older than fifteen minutes
+            are marked stale; older than thirty they are dropped and the cells say UNKNOWN.</dd>
         </dl>
       </div>
     </details>
@@ -617,6 +620,9 @@
     var ownNames = null;   // tornId -> name, our own faction, for labelling claim holders
     var stamps = { identity: 0, war: 0, targets: 0, ownNames: 0 };
     var lastError = '';
+    // Kept apart from lastError on purpose: this one carries the path and the
+    // Torn code, and it is only ever shown in Advanced.
+    var lastDiagnostic = '';
 
     function key() { return el.apiKey.value.trim(); }
 
@@ -642,12 +648,17 @@
         response = await fetch('https://api.torn.com/v2' + path + joiner + 'comment=KSWarRoom',
           { headers: { Authorization: 'ApiKey ' + k } });
       } catch (networkFailure) {
-        throw new Error('Could not reach Torn.  [GET /v2' + path + ' — network or CORS failure]');
+        var offline = new Error('Could not reach Torn. Check your connection and try again.');
+        offline.diagnostic = '[GET /v2' + path + ' — network or CORS failure]';
+        throw offline;
       }
       var payload = await response.json();
       if (payload && payload.error) {
-        var error = new Error(describeError(payload.error.code) + '  [GET /v2' + path +
-          ' → Torn error ' + payload.error.code + ']');
+        // The MESSAGE is what a member reads: one plain sentence, no code, no
+        // path. The DIAGNOSTIC is for Advanced, where whole answer bodies are
+        // already on show and the reader is looking for exactly this.
+        var error = new Error(describeError(payload.error.code));
+        error.diagnostic = '[GET /v2' + path + ' → Torn error ' + payload.error.code + ']';
         error.tornCode = payload.error.code;
         throw error;
       }
@@ -779,7 +790,11 @@
       nameOf: function (id) { return (ownNames && ownNames[id]) || ''; },
       stamps: function () { return stamps; },
       lastError: function () { return lastError; },
-      setError: function (message) { lastError = message || ''; },
+      lastDiagnostic: function () { return lastDiagnostic; },
+      setError: function (message, diagnostic) {
+        lastError = message || '';
+        lastDiagnostic = diagnostic || '';
+      },
       loadIdentity: loadIdentity,
       loadWar: loadWar,
       loadTargets: loadTargets,
@@ -787,7 +802,7 @@
       forget: function () {
         identity = null; war = null; targets = null; ownNames = null;
         stamps = { identity: 0, war: 0, targets: 0, ownNames: 0 };
-        lastError = '';
+        lastError = ''; lastDiagnostic = '';
       }
     };
   })();
@@ -962,6 +977,142 @@
 
   // ------------------------------------------------------------ claim layer
 
+  // --------------------------------------------------------- what to say
+  //
+  // EVERY sentence a member reads about a refusal is written here, in
+  // English, and it is chosen on the CODE in the answer - never on the
+  // server's own words.
+  //
+  // The server answers in Swedish. That is deliberate and it stays: those
+  // exact strings are read back by the acceptance suite, and rewriting them
+  // to fix a wording would tear up a locked decision for no gain.
+  //
+  // But only one person in the faction reads Swedish, and this page is open
+  // on everybody's screen during a war. A member who cannot read what went
+  // wrong cannot fix it while the war is running. So the page does its own
+  // talking, and the server's text is never shown.
+  //
+  // Three rules for the sentences below:
+  //   - no error code, no HTTP status, no path. A member is not debugging.
+  //   - when there is something to do about it, say what.
+  //   - when the answer cannot be explained, say THAT. Never a guess, and
+  //     never something that sounds like a verdict.
+  var Says = (function () {
+    function minutes(seconds) {
+      var m = Math.ceil((Number(seconds) || 0) / 60);
+      return m > 0 ? m : 1;
+    }
+
+    // The last resort. Fail-closed applies to words too: this says it did not
+    // work and that we cannot say why - it never invents a reason.
+    var UNKNOWN = 'The server refused that, and did not say why in a way this page ' +
+      'can explain. Nothing was changed.';
+
+    function of(http, body) {
+      var error = (body && typeof body.error === 'string') ? body.error : '';
+      var reason = (body && typeof body.reason === 'string') ? body.reason : '';
+      var status = (body && typeof body.status === 'string') ? body.status : '';
+
+      // ---- signing in -------------------------------------------------
+      if (reason === 'key_malformed' || error === 'invalid_key') {
+        return 'That does not look like a Torn API key. Copy the whole key from ' +
+          'Torn, with no spaces around it.';
+      }
+      if (error === 'key_rejected') {
+        if (reason === 'invalid_key') {
+          return 'Torn did not accept that key. Check that you copied all of it, ' +
+            'or make a new one in Torn.';
+        }
+        if (reason === 'key_owner_in_federal_jail') {
+          return 'That key cannot be used while its owner is in federal jail.';
+        }
+        if (reason === 'key_owner_inactive') {
+          return 'Torn has switched that key off after seven days without a login. ' +
+            'Log in to Torn and make a new key.';
+        }
+        if (reason === 'key_access_too_low') {
+          return 'That key does not have enough access. A key at level Public is ' +
+            'enough - make a new one in Torn.';
+        }
+        if (reason === 'key_paused') {
+          return 'That key is paused. Turn it back on in Torn, or make a new one.';
+        }
+        // retryable:true - Torn was busy, off, or would not answer about the key
+        return 'Torn could not check that key just now. Try again in a minute.';
+      }
+      if (error === 'not_a_member') {
+        return 'Torn says that key does not belong to this faction. Only members ' +
+          'can use the board.';
+      }
+      if (error === 'login_blocked') {
+        return 'Too many failed sign-ins from here. Wait about ' +
+          minutes(body && body.retryAfterSeconds) + ' minute(s) and try again.';
+      }
+      if (error === 'login_paused') {
+        return 'The board has paused new sign-ins for a moment, so that Torn does ' +
+          'not shut the whole faction out. Wait about ' +
+          minutes(body && body.retryAfterSeconds) + ' minute(s) and try again.';
+      }
+      if (error === 'server_not_configured') {
+        return 'The claim server is not set up yet. Tell Kingshade - nobody can ' +
+          'sign in until that is done.';
+      }
+      if (error === 'torn_unreadable') {
+        return 'Torn answered something the server could not read. Try again in a minute.';
+      }
+      if (error === 'torn_unreachable') {
+        return 'The server could not reach Torn. Try again in a minute.';
+      }
+
+      // ---- being signed in --------------------------------------------
+      if (error === 'unauthorized') {
+        if (reason === 'expired') {
+          return 'Your sign-in ran out. Press Load the war to sign in again.';
+        }
+        return 'You are not signed in. Paste your Torn key and press Load the war.';
+      }
+
+      // ---- the board ---------------------------------------------------
+      if (error === 'wipe_not_allowed') {
+        return 'Your Torn ID is not on the list of people who may empty a war.';
+      }
+      if (error === 'wipe_real_war_forbidden') {
+        return 'A real war is never emptied. Only a test war can be.';
+      }
+      if (error === 'storage_error' || status === 'unreadable') {
+        return 'The server cannot tell who holds what right now, so it will not ' +
+          'hand anything out. Leave those rows alone until it can.';
+      }
+      if (error === 'method_not_allowed' || error === 'not_found' ||
+          error === 'bad_request') {
+        return 'The page asked the server something it did not understand. ' +
+          'Reload the page and try again.';
+      }
+      if (error === 'internal_error') {
+        return 'Something went wrong at the server’s end. Try again in a moment.';
+      }
+
+      // ---- answers that are not refusals, but are shown -----------------
+      if (status === 'already_claimed') {
+        return 'That target was already yours. The time on it has not changed.';
+      }
+      if (status === 'already_holding') {
+        return 'You already hold another target. Release it before calling another.';
+      }
+      if (status === 'taken') {
+        return 'Someone else got there first.';
+      }
+      if (status === 'not_owner') {
+        return 'That claim belongs to somebody else, and it was not released.';
+      }
+
+      if (http === 0) return 'The claim server could not be reached. Try again in a moment.';
+      return UNKNOWN;
+    }
+
+    return { of: of, unknown: UNKNOWN };
+  })();
+
   // ------------------------------------------------------------- sign-in
   //
   // What replaced the faction password. The member's own Torn key is sent to
@@ -1053,23 +1204,16 @@
         }
 
         token = ''; expiresAt = 0;
-        // The server writes these in plain language and means them to be shown.
-        // Nothing is invented here where it has already said something.
-        var detail = (body && typeof body.detail === 'string') ? body.detail : '';
+        // The server's own `detail` is NOT used. It is written in Swedish for
+        // whoever runs the server; what a member reads is written by Says, in
+        // English, chosen on the code in this answer.
+        said = Says.of(response.status, body);
         if (response.status === 403) {
           state = 'not_a_member';
-          said = detail || 'Torn says this key does not belong to the faction.';
         } else if (response.status === 401 || response.status === 400) {
           state = 'key_rejected';
-          said = detail || 'The key was not accepted.';
-        } else if (response.status === 429) {
-          state = 'offline';
-          var wait = Number(body && body.retryAfterSeconds) || 0;
-          said = (detail || 'The server is pausing sign-ins.') +
-            (wait ? ' Try again in about ' + Math.ceil(wait / 60) + ' minute(s).' : '');
         } else {
           state = 'offline';
-          said = detail || 'The claim server is not answering properly.';
         }
         return false;
       })();
@@ -1199,8 +1343,7 @@
       var body = result.body;
       if (result.http !== 200 || body.ok !== true || !Array.isArray(body.claims)) {
         board = null; status = 'offline';
-        lastError = 'The claim server could not say who holds what' +
-          (typeof body.error === 'string' ? ' (' + body.error + ')' : '') + '.';
+        lastError = Says.of(result.http, body);
         throw new Error(lastError);
       }
       var claims = {};
@@ -1887,7 +2030,11 @@
         new Date(Roster.stamps().targets).toLocaleTimeString()
       : 'not loaded';
     el.advFf.textContent = ffAdvancedLine();
-    el.advError.textContent = Claims.lastError() || Roster.lastError() || 'none';
+    var advErr = Claims.lastError() || Roster.lastError() || '';
+    var advDiag = Roster.lastDiagnostic();
+    el.advError.textContent = advErr
+      ? (advErr + (advDiag ? '  ' + advDiag : ''))
+      : 'none';
     el.advRaw.textContent = Claims.lastRaw() || '—';
     // The wipe button for a real war is gone. Emptying a board is a simulation
     // affair now - Reset test war above the list - and the server refuses it
@@ -1962,8 +2109,7 @@
         show(el.errorBox, 'The server cannot read who holds ' + targetId +
           ', so it will not hand it out. Leave that one alone.');
       } else {
-        show(el.errorBox, 'The claim server refused this: ' +
-          (body.error || body.status || ('HTTP ' + result.http)) + '.');
+        show(el.errorBox, Says.of(result.http, body));
       }
     } catch (error) {
       if (error.unauthorized) sessionRejected();
@@ -2021,8 +2167,7 @@
         show(el.okBox, 'Test war reset. The server removed ' + result.body.removed +
           ' claims from ' + Claims.wireWarId(war.warId, 'wipe') + '. The real war was not touched.');
       } else {
-        show(el.errorBox, 'The claim server refused the reset: ' +
-          (result.body.error || result.body.status || ('HTTP ' + result.http)) + '.');
+        show(el.errorBox, Says.of(result.http, result.body));
       }
     } catch (error) {
       if (error.unauthorized) sessionRejected();
@@ -2180,7 +2325,7 @@
       }
       Roster.setError('');
     } catch (error) {
-      Roster.setError(error.message);
+      Roster.setError(error.message, error.diagnostic);
       show(el.errorBox, error.message);
     } finally {
       el.loadBtn.disabled = false;
@@ -2205,7 +2350,7 @@
     } catch (error) {
       // The rows already on screen stay, and the stale bar says how old they
       // are. Nothing old is ever redrawn as if it were current.
-      Roster.setError(error.message);
+      Roster.setError(error.message, error.diagnostic);
     }
     await pollClaims();
     // After the board, so the comparison is made against claims the server has
