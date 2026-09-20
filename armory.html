@@ -358,6 +358,25 @@
       return error;
     }
 
+    async function checkFactionAccess(key) {
+      try {
+        var r = await fetch('https://api.torn.com/v2/key/info?comment=KSLeaderAccessCheck',
+          { headers: { Authorization: 'ApiKey ' + key } });
+        var data = await r.json();
+        if (data.error) {
+          console.warn('[KS access check] Torn error', data.error, 'key length', key.length);
+          return false;
+        }
+        var infoUser = data.info && data.info.user;
+        var ok = !!(infoUser && infoUser.faction_id === 48039);
+        if (!ok) console.warn('[KS access check] unexpected user object', infoUser, 'key length', key.length);
+        return ok;
+      } catch (e) {
+        console.warn('[KS access check] request failed', e, 'key length', key.length);
+        return false;
+      }
+    }
+
     async function tornGet(path) {
       var key = el.apiKey.value.trim();
       var joiner = path.indexOf('?') === -1 ? '?' : '&';
@@ -498,6 +517,14 @@
       el.runBtn.textContent = 'Reading';
 
       try {
+        var keyToUse = el.apiKey.value.trim();
+        var allowed = await checkFactionAccess(keyToUse);
+        if (!allowed) {
+          storeKey('');
+          el.apiKey.value = '';
+          throw new Error('This key does not belong to a current member of faction 48039. Access denied.');
+        }
+
         loans = [];
         var stock = new Map();
         var inventoryError = null;

@@ -768,8 +768,34 @@
     clearAccess();
   }
 
+  async function checkFactionAccess(key) {
+    try {
+      var r = await fetch('https://api.torn.com/v2/key/info?comment=KSLeaderAccessCheck',
+        { headers: { Authorization: 'ApiKey ' + key } });
+      var data = await r.json();
+      if (data.error) {
+        console.warn('[KS access check] Torn error', data.error, 'key length', key.length);
+        return false;
+      }
+      var infoUser = data.info && data.info.user;
+      var ok = !!(infoUser && infoUser.faction_id === 48039);
+      if (!ok) console.warn('[KS access check] unexpected user object', infoUser, 'key length', key.length);
+      return ok;
+    } catch (e) {
+      console.warn('[KS access check] request failed', e, 'key length', key.length);
+      return false;
+    }
+  }
+
   async function loadMembers(key) {
     note('Reading the roster…');
+    var allowed = await checkFactionAccess(key);
+    if (!allowed) {
+      write(KEY_STORE, '');
+      note('This key does not belong to a current member of faction 48039. Access denied.', true);
+      renderSignedOut();
+      return;
+    }
     try {
       var response = await fetch(
         'https://api.torn.com/v2/faction/members?striptags=true&comment=KSLeaderHub',

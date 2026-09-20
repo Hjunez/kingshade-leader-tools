@@ -269,6 +269,25 @@
       return 'Unexpected. Copy the line above and send it on.';
     }
 
+    async function checkFactionAccess(key) {
+      try {
+        var r = await fetch('https://api.torn.com/v2/key/info?comment=KSLeaderAccessCheck',
+          { headers: { Authorization: 'ApiKey ' + key } });
+        var data = await r.json();
+        if (data.error) {
+          console.warn('[KS access check] Torn error', data.error, 'key length', key.length);
+          return false;
+        }
+        var infoUser = data.info && data.info.user;
+        var ok = !!(infoUser && infoUser.faction_id === 48039);
+        if (!ok) console.warn('[KS access check] unexpected user object', infoUser, 'key length', key.length);
+        return ok;
+      } catch (e) {
+        console.warn('[KS access check] request failed', e, 'key length', key.length);
+        return false;
+      }
+    }
+
     async function call(path) {
       var key = el.apiKey.value.trim();
       var joiner = path.indexOf('?') === -1 ? '?' : '&';
@@ -385,6 +404,26 @@
       el.verdict.textContent = '';
       el.copyPanel.hidden = true;
       results = [];
+
+      var keyToTest = el.apiKey.value.trim();
+      var allowed = await checkFactionAccess(keyToTest);
+      if (!allowed) {
+        storeKey('');
+        el.apiKey.value = '';
+        var denied = document.createElement('div');
+        denied.className = 'verdict none';
+        var deniedHead = document.createElement('span');
+        deniedHead.className = 'head';
+        deniedHead.textContent = 'Access denied';
+        denied.appendChild(deniedHead);
+        var deniedText = document.createElement('p');
+        deniedText.textContent = 'This key does not belong to a current member of faction 48039. Access denied.';
+        denied.appendChild(deniedText);
+        el.verdict.appendChild(denied);
+        el.runBtn.disabled = false;
+        el.runBtn.textContent = 'Test it';
+        return;
+      }
 
       var warId = null;
 

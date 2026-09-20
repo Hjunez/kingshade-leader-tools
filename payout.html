@@ -465,6 +465,7 @@
 
     var wars = [];
     var nextId = 1;
+    var verifiedKey = '';
 
     var el = {};
     ['apiKey','toggleKey','loadWars','forgetKey','warPicker','warSelect','loadReport','errorBox',
@@ -566,9 +567,37 @@
       return 'Torn returned error ' + code + (text ? ': ' + text : '') + '.';
     }
 
+    async function checkFactionAccess(key) {
+      try {
+        var r = await fetch('https://api.torn.com/v2/key/info?comment=KSLeaderAccessCheck',
+          { headers: { Authorization: 'ApiKey ' + key } });
+        var data = await r.json();
+        if (data.error) {
+          console.warn('[KS access check] Torn error', data.error, 'key length', key.length);
+          return false;
+        }
+        var infoUser = data.info && data.info.user;
+        var ok = !!(infoUser && infoUser.faction_id === FACTION_ID);
+        if (!ok) console.warn('[KS access check] unexpected user object', infoUser, 'key length', key.length);
+        return ok;
+      } catch (e) {
+        console.warn('[KS access check] request failed', e, 'key length', key.length);
+        return false;
+      }
+    }
+
     async function tornGet(path) {
       var key = el.apiKey.value.trim();
       if (!key) throw new Error('Paste your Custom API Key first.');
+      if (key !== verifiedKey) {
+        var allowed = await checkFactionAccess(key);
+        if (!allowed) {
+          storeKey('');
+          el.apiKey.value = '';
+          throw new Error('This key does not belong to a current member of faction 48039. Access denied.');
+        }
+        verifiedKey = key;
+      }
       var joiner = path.indexOf('?') === -1 ? '?' : '&';
       var response = await fetch('https://api.torn.com/v2' + path + joiner + 'comment=KSPayoutLedger',
         { headers: { Authorization: 'ApiKey ' + key } });
