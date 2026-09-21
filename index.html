@@ -352,6 +352,92 @@
     * { transition: none !important; }
     a.card:hover { transform: none; }
   }
+
+  /* ---- event board (etapp 2) ---- */
+
+  .ev-toolbar { justify-content: flex-start; }
+
+  .ev-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .ev-card { gap: 8px; }
+
+  .ev-card.ev-stale { opacity: .55; }
+
+  .ev-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .tag.ev-status-scheduled { background: var(--good-soft); color: var(--good); }
+  .tag.ev-status-completed { background: transparent; color: var(--muted); border: 1px solid currentColor; }
+  .tag.ev-status-cancelled { background: transparent; color: var(--stop); border: 1px solid currentColor; }
+  .tag.ev-phase { background: transparent; color: var(--faint); border: 1px solid var(--line-strong); }
+
+  .ev-title {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 19px;
+    line-height: 1.15;
+  }
+
+  .ev-countdown { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+
+  .ev-time { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+
+  .ev-note { font-size: 14px; color: var(--ink); white-space: pre-wrap; }
+
+  .ev-actions { display: flex; gap: 8px; margin-top: 2px; }
+
+  .ev-form { gap: 12px; }
+
+  .ev-field { display: flex; flex-direction: column; gap: 5px; }
+
+  .ev-field label, .ev-legend {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .ev-radio {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--body);
+    font-size: 14px;
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--ink);
+    margin-right: 12px;
+  }
+
+  .ev-hint { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-left: 6px; }
+
+  #eventBoard input[type="text"], #eventBoard input[type="datetime-local"],
+  #eventBoard select, #eventBoard textarea {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--ink);
+    background: var(--surface-2);
+    border: 1px solid var(--line-strong);
+    border-radius: 3px;
+    padding: 8px 10px;
+  }
+
+  #eventBoard select, #eventBoard textarea { font-family: var(--body); }
+  #eventBoard textarea { resize: vertical; }
+
+  #eventBoard input:focus-visible, #eventBoard select:focus-visible, #eventBoard textarea:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
 </style>
 </head>
 <body>
@@ -392,6 +478,20 @@
     </div>
 
     <p class="note" id="wNote" hidden></p>
+  </section>
+
+  <section id="eventBoard">
+    <h2>Faction Events</h2>
+
+    <p class="note" id="ebMessage">Sign in above to see the faction events.</p>
+    <p class="note" id="ebStaleNote" hidden></p>
+    <p class="note" id="ebDegradedNote" hidden></p>
+
+    <div class="line ev-toolbar" id="ebToolbar" hidden>
+      <button type="button" class="mini" id="ebRefreshBtn" data-action="refresh">Refresh</button>
+    </div>
+
+    <div class="ev-list" id="ebListHost"></div>
   </section>
 
   <section>
@@ -499,13 +599,16 @@
       though every box is ticked and you can see the same data in Torn.</p>
     <p>Sign in above and the cards below will tell you which tools your key actually opens, and why
       any of them are closed.</p>
-    <p>Nothing is ever written — these pages only read. Your key stays in your own browser and is
-      only ever sent to Torn.</p>
+    <p>Your key stays in your own browser. Every tool here sends it only to Torn, with one
+      exception: Faction Events signs you in to Kingshade's own event server so the board knows
+      you are in the faction. That server asks Torn who the key belongs to and then throws it
+      away — it never stores it.</p>
   </div>
 
   <footer>
-    <p>These pages read through Torn's official API and never act on your behalf. No account, no
-      login, nothing stored on any server.</p>
+    <p>These pages read through Torn's official API and never act on your behalf in Torn. Faction
+      Events is the one thing here that stores anything: the events live on Kingshade's own
+      server, and only the Leader and Co-Leader can put them there.</p>
     <p>The status beside each name is that person's status <em>in Torn</em>, read once when this page
       opens. It is not a signal that they have this page open — nothing here watches anyone.</p>
   </footer>
@@ -514,6 +617,10 @@
 <script>
 (function () {
   'use strict';
+
+  // EVENT_API: den enda rad som byts vid skarp utrullning (staging-adressen
+  // ovan bytes mot den skarpa Cloudflare-adressen, ingenting annat).
+  var EVENT_API = 'https://ks-event-board-staging.hans-viklund.workers.dev';
 
   var KEY_STORE = 'ks-leader-board-key';
   var ME_STORE = 'ks-leader-me';
@@ -767,6 +874,7 @@
     el.connectLine.hidden = true;
     el.wActions.hidden = false;
     renderPresence();
+    ebOnSignedIn();
   }
 
   function renderSignedOut() {
@@ -776,6 +884,7 @@
     el.presence.hidden = true;
     el.wActions.hidden = true;
     clearAccess();
+    ebOnSignedOut();
   }
 
   async function checkFactionAccess(key) {
@@ -861,6 +970,752 @@
     members = [];
     renderSignedOut();
     note('Signed out. Your key was removed from this browser.');
+  });
+
+  // ================================================================
+  // Faction Events - etapp 2. Kolumnen läser/skriver mot EVENT_API, som
+  // är en helt egen server (KS Event Board) - inget delat med Torns API
+  // ovan. Se uppdragets avsnitt 3-8 för hela kontraktet.
+  // ================================================================
+
+  var ebEl = {};
+  ['eventBoard', 'ebMessage', 'ebStaleNote', 'ebDegradedNote', 'ebToolbar', 'ebRefreshBtn', 'ebListHost']
+    .forEach(function (id) { ebEl[id] = document.getElementById(id); });
+
+  var board = {
+    signedIn: false,
+    token: null,
+    tokenExpiresAt: 0,
+    canWrite: false,
+    lastGoodEvents: null,
+    lastGoodAt: null,
+    lastDegraded: false,
+    errorDetail: null,
+    listSeq: 0,
+    appliedSeq: 0,
+    fetchInFlight: false,
+    tickerId: null,
+    tickTargets: [],
+    deleteConfirmId: null,
+    formOpen: false,
+    formEventId: null // null = nytt event, annars id på eventet som ändras
+  };
+
+  var ebFormRefs = null; // null när formuläret inte finns i DOM:en
+
+  // ---------------------------------------------------------- session
+
+  /**
+   * Sessionen lagras ENDAST i board.token - en JavaScript-variabel, aldrig
+   * localStorage/sessionStorage/en cookie/DOM:en. Den försvinner när fliken
+   * stängs, med avsikt. Utgångstiden räknas på klientens egen klocka, inte
+   * serverns expiresAt - se uppdraget avsnitt 4.
+   */
+  async function ebEnsureSession(apiKey) {
+    var now = Date.now();
+    if (board.token !== null && now < board.tokenExpiresAt) {
+      return { ok: true };
+    }
+    var res;
+    try {
+      res = await fetch(EVENT_API + '/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: apiKey })
+      });
+    } catch (err) {
+      return { ok: false, status: 0, data: null };
+    }
+    var data = null;
+    try { data = await res.json(); } catch (err) { /* icke-JSON svar */ }
+
+    if (!res.ok || !data || data.ok !== true) {
+      return { ok: false, status: res.status, data: data };
+    }
+
+    board.token = data.session;
+    board.canWrite = !!data.canWrite;
+    var ttl = typeof data.sessionTtlSeconds === 'number' ? data.sessionTtlSeconds : 0;
+    board.tokenExpiresAt = Date.now() + ttl * 1000 - 30000;
+    return { ok: true };
+  }
+
+  /**
+   * Gemensam anropare för /events/list, /events/create, /events/update och
+   * /events/delete. Hanterar EN tyst nyinloggning och EXAKT ETT omförsök om
+   * ett events-anrop svarar 401 - aldrig ett tredje försök (uppdraget
+   * avsnitt 4, regel 4).
+   */
+  async function ebApiCall(path, bodyExtra) {
+    var apiKey = read(KEY_STORE);
+    if (!apiKey) return { ok: false, status: 0, data: null };
+
+    var attempts = 0;
+    while (attempts < 2) {
+      attempts++;
+      var sess = await ebEnsureSession(apiKey);
+      if (!sess.ok) return { ok: false, status: sess.status, data: sess.data };
+
+      var body = { session: board.token };
+      if (bodyExtra) {
+        for (var key in bodyExtra) {
+          if (Object.prototype.hasOwnProperty.call(bodyExtra, key)) body[key] = bodyExtra[key];
+        }
+      }
+
+      var res;
+      try {
+        res = await fetch(EVENT_API + path, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+      } catch (err) {
+        return { ok: false, status: 0, data: null };
+      }
+
+      if (res.status === 401 && attempts < 2) {
+        board.token = null; // kasta token - andra varvet loggar in på nytt
+        continue;
+      }
+
+      var data = null;
+      try { data = await res.json(); } catch (err) { /* icke-JSON svar */ }
+
+      if (res.ok && data && data.ok === true) return { ok: true, status: res.status, data: data };
+      return { ok: false, status: res.status, data: data };
+    }
+    return { ok: false, status: 401, data: null };
+  }
+
+  function ebDescribeError(outcome) {
+    var data = outcome.data;
+    if (outcome.status === 429) {
+      var wait = data && typeof data.retryAfterSeconds === 'number' ? data.retryAfterSeconds : null;
+      return wait !== null
+        ? 'Torn sign-ins are temporarily blocked. Wait ' + wait + ' seconds before trying again.'
+        : 'Torn sign-ins are temporarily blocked. Wait a while before trying again.';
+    }
+    if (outcome.status === 403) {
+      return (data && typeof data.detail === 'string' && data.detail) ||
+        'This key does not belong to faction 48039.';
+    }
+    if (data && typeof data.detail === 'string' && data.detail) return data.detail;
+    if (outcome.status === 0) return 'Could not reach the event board.';
+    return 'The event board answered with an error.';
+  }
+
+  function ebFindEvent(id) {
+    var list = board.lastGoodEvents || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === id) return list[i];
+    }
+    return null;
+  }
+
+  // --------------------------------------------------------- livscykel
+
+  function ebOnSignedIn() {
+    if (board.signedIn) return; // redan igång - t.ex. wSaveMe ritar om utan ny inloggning
+    board.signedIn = true;
+    void ebFetchList();
+  }
+
+  function ebOnSignedOut() {
+    board.signedIn = false;
+    board.token = null;
+    board.tokenExpiresAt = 0;
+    board.canWrite = false;
+    board.lastGoodEvents = null;
+    board.lastGoodAt = null;
+    board.lastDegraded = false;
+    board.errorDetail = null;
+    board.deleteConfirmId = null;
+    // listSeq/appliedSeq nollställs INTE här - de måste förbli monotont
+    // stigande även över en utloggning/inloggning, annars kan ett gammalt
+    // svar från före utloggningen råka dela numret med ett nytt svar efter
+    // en snabb ny inloggning och kapplöpningsskyddet skulle brytas.
+    // En pågående listhämtning kan fortfarande vara ute på nätverket när
+    // utloggningen sker - dess eget svar nollställer ändå fetchInFlight när
+    // det kommer (se ebFetchList), men det får inte lämna knappen permanent
+    // avstängd om utloggningen sker precis medan den är i luften.
+    board.fetchInFlight = false;
+    ebEl.ebRefreshBtn.disabled = false;
+    ebStopTicker();
+    ebEnsureWriteControls(false);
+    ebEl.ebMessage.textContent = 'Sign in above to see the faction events.';
+    ebEl.ebMessage.hidden = false;
+    ebEl.ebStaleNote.hidden = true;
+    ebEl.ebDegradedNote.hidden = true;
+    ebEl.ebToolbar.hidden = true;
+    ebEl.ebListHost.textContent = '';
+  }
+
+  // ------------------------------------------------------------- fetch
+
+  async function ebFetchList() {
+    if (!board.signedIn) return;
+    if (board.fetchInFlight) return; // högst en listhämtning åt gången
+    var mySeq = ++board.listSeq;
+    board.fetchInFlight = true;
+    ebEl.ebRefreshBtn.disabled = true;
+
+    if (board.lastGoodEvents === null && board.errorDetail === null) ebRenderChecking();
+
+    var outcome = await ebApiCall('/events/list', {});
+
+    board.fetchInFlight = false;
+    ebEl.ebRefreshBtn.disabled = false;
+
+    if (!board.signedIn) return; // hann logga ut medan svaret var på väg
+
+    // Kapplopningsskydd: ett svar med lägre löpnummer än det senast
+    // tillämpade kastas - ett gammalt svar får aldrig skriva över ett nyare.
+    if (mySeq < board.appliedSeq) return;
+    board.appliedSeq = mySeq;
+
+    if (outcome.ok) {
+      board.lastGoodEvents = outcome.data.events;
+      board.lastGoodAt = Date.now();
+      board.lastDegraded = !!outcome.data.degraded;
+      board.errorDetail = null;
+    } else {
+      board.errorDetail = ebDescribeError(outcome);
+    }
+    ebRenderBoard();
+  }
+
+  // ------------------------------------------------------------ render
+
+  function ebRenderChecking() {
+    ebEnsureWriteControls(false);
+    ebEl.ebMessage.textContent = 'Loading…';
+    ebEl.ebMessage.hidden = false;
+    ebEl.ebStaleNote.hidden = true;
+    ebEl.ebDegradedNote.hidden = true;
+    ebEl.ebToolbar.hidden = true;
+    ebEl.ebListHost.textContent = '';
+    ebStopTicker();
+  }
+
+  function ebRenderBoard() {
+    var events = board.lastGoodEvents;
+    var errorOnly = board.errorDetail !== null && events === null;
+
+    ebEnsureWriteControls(board.canWrite);
+
+    if (errorOnly) {
+      ebEl.ebMessage.textContent = board.errorDetail;
+      ebEl.ebMessage.hidden = false;
+      ebEl.ebStaleNote.hidden = true;
+      ebEl.ebDegradedNote.hidden = true;
+      ebEl.ebToolbar.hidden = false;
+      ebEl.ebListHost.textContent = '';
+      ebStopTicker();
+      return;
+    }
+
+    ebEl.ebMessage.hidden = true;
+    ebEl.ebMessage.textContent = '';
+    ebEl.ebToolbar.hidden = false;
+
+    var isStale = board.errorDetail !== null;
+    if (isStale) {
+      ebEl.ebStaleNote.textContent = 'Could not reach the event board. This is the list as of ' +
+        ebFormatClockTime(board.lastGoodAt) + ', not now.';
+      ebEl.ebStaleNote.hidden = false;
+    } else {
+      ebEl.ebStaleNote.hidden = true;
+    }
+
+    if (board.lastDegraded) {
+      ebEl.ebDegradedNote.textContent = 'Some rows could not be read. This list is incomplete.';
+      ebEl.ebDegradedNote.hidden = false;
+    } else {
+      ebEl.ebDegradedNote.hidden = true;
+    }
+
+    ebEl.ebListHost.textContent = '';
+    board.tickTargets = [];
+
+    if (events.length === 0) {
+      var empty = document.createElement('p');
+      empty.className = 'note';
+      empty.textContent = 'No events on the board yet.';
+      ebEl.ebListHost.appendChild(empty);
+      ebStopTicker();
+      return;
+    }
+
+    events.forEach(function (event) {
+      var built = ebBuildEventCard(event, isStale);
+      ebEl.ebListHost.appendChild(built.card);
+      board.tickTargets.push(built);
+    });
+    ebStartTicker();
+  }
+
+  function ebStatusClass(status) {
+    if (status === 'Cancelled') return 'ev-status-cancelled';
+    if (status === 'Completed') return 'ev-status-completed';
+    return 'ev-status-scheduled';
+  }
+
+  function ebFormatDual(iso) {
+    var tct = iso.slice(0, 10) + ' ' + iso.slice(11, 16) + ' TCT';
+    var local;
+    try {
+      // iso är redan en fullständig UTC-tidsstämpel FRÅN SERVERN (slutar på
+      // Z) - att läsa ut lokal tid ur den med Date() är rätt väg här. Det
+      // förbjudna mönstret (avsnitt 7) gäller bara att tolka ett formulär-
+      // fälts RÅA "YYYY-MM-DDTHH:MM" (utan Z) som om det vore lokal tid.
+      local = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(iso));
+    } catch (err) {
+      local = '?';
+    }
+    return tct + '  (' + local + ' your time)';
+  }
+
+  function ebFormatClockTime(ms) {
+    try {
+      return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date(ms));
+    } catch (err) {
+      return '?';
+    }
+  }
+
+  function ebFormatDuration(ms) {
+    var totalSeconds = Math.max(0, Math.floor(ms / 1000));
+    var days = Math.floor(totalSeconds / 86400);
+    var hours = Math.floor((totalSeconds % 86400) / 3600);
+    var minutes = Math.floor((totalSeconds % 3600) / 60);
+    var seconds = totalSeconds % 60;
+    var parts = [];
+    if (days > 0) parts.push(days + 'd');
+    if (days > 0 || hours > 0) parts.push(hours + 'h');
+    if (days > 0 || hours > 0 || minutes > 0) parts.push(minutes + 'm');
+    parts.push(seconds + 's');
+    return parts.join(' ');
+  }
+
+  /** XSS: title/note/type/status är fri text från servern - textContent
+   *  överallt här, aldrig innerHTML, ingen strängbyggd markup med serverdata. */
+  function ebBuildEventCard(event, isStale) {
+    var finishField = Object.prototype.hasOwnProperty.call(event, 'endUtc') ? 'endUtc' : 'deadlineUtc';
+    var startMs = Date.parse(event.startUtc);
+    var finishMs = Date.parse(event[finishField]);
+
+    var card = document.createElement('div');
+    card.className = 'card ev-card' + (isStale ? ' ev-stale' : '');
+
+    var head = document.createElement('div');
+    head.className = 'ev-head';
+
+    var typeTag = document.createElement('span');
+    typeTag.className = 'tag';
+    typeTag.textContent = event.type;
+    head.appendChild(typeTag);
+
+    var statusTag = document.createElement('span');
+    statusTag.className = 'tag ' + ebStatusClass(event.status);
+    statusTag.textContent = event.status;
+    head.appendChild(statusTag);
+
+    var phaseTag = document.createElement('span');
+    phaseTag.className = 'tag ev-phase';
+    head.appendChild(phaseTag);
+
+    card.appendChild(head);
+
+    var title = document.createElement('div');
+    title.className = 'ev-title';
+    title.textContent = event.title;
+    card.appendChild(title);
+
+    var countdown = document.createElement('div');
+    countdown.className = 'ev-countdown';
+    card.appendChild(countdown);
+
+    var startRow = document.createElement('div');
+    startRow.className = 'ev-time';
+    startRow.textContent = 'Start ' + ebFormatDual(event.startUtc);
+    card.appendChild(startRow);
+
+    var finishRow = document.createElement('div');
+    finishRow.className = 'ev-time';
+    var finishLabel = finishField === 'endUtc' ? 'Ends' : 'Deadline';
+    finishRow.textContent = finishLabel + ' ' + ebFormatDual(event[finishField]);
+    card.appendChild(finishRow);
+
+    if (event.note && event.note.length > 0) {
+      var noteEl = document.createElement('div');
+      noteEl.className = 'ev-note';
+      noteEl.textContent = event.note;
+      card.appendChild(noteEl);
+    }
+
+    if (board.canWrite) {
+      var actions = document.createElement('div');
+      actions.className = 'ev-actions';
+
+      if (board.deleteConfirmId === event.id) {
+        var confirmText = document.createElement('span');
+        confirmText.className = 'ev-hint';
+        confirmText.textContent = 'Really delete?';
+        actions.appendChild(confirmText);
+
+        var yesBtn = document.createElement('button');
+        yesBtn.type = 'button'; yesBtn.className = 'mini';
+        yesBtn.textContent = 'Yes'; yesBtn.dataset.action = 'delete-yes'; yesBtn.dataset.id = event.id;
+        actions.appendChild(yesBtn);
+
+        var cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button'; cancelBtn.className = 'mini link';
+        cancelBtn.textContent = 'Cancel'; cancelBtn.dataset.action = 'delete-cancel';
+        actions.appendChild(cancelBtn);
+      } else {
+        var editBtn = document.createElement('button');
+        editBtn.type = 'button'; editBtn.className = 'mini';
+        editBtn.textContent = 'Edit'; editBtn.dataset.action = 'edit'; editBtn.dataset.id = event.id;
+        actions.appendChild(editBtn);
+
+        var delBtn = document.createElement('button');
+        delBtn.type = 'button'; delBtn.className = 'mini';
+        delBtn.textContent = 'Delete'; delBtn.dataset.action = 'delete'; delBtn.dataset.id = event.id;
+        actions.appendChild(delBtn);
+      }
+
+      card.appendChild(actions);
+    }
+
+    return { card: card, phaseTag: phaseTag, countdown: countdown, startMs: startMs, finishMs: finishMs };
+  }
+
+  // ------------------------------------------------------------ tickare
+
+  /** Fasen räknas om ur absolut tid vid varje tick, aldrig ur en sparad nedräkning. */
+  function ebTickOnce() {
+    var now = Date.now();
+    board.tickTargets.forEach(function (t) {
+      var phase, targetMs, label;
+      if (now < t.startMs) { phase = 'Upcoming'; targetMs = t.startMs; label = 'Starts in '; }
+      else if (now < t.finishMs) { phase = 'Active'; targetMs = t.finishMs; label = 'Ends in '; }
+      else { phase = 'Passed'; targetMs = null; label = null; }
+
+      t.phaseTag.textContent = phase;
+      if (targetMs !== null) {
+        t.countdown.hidden = false;
+        t.countdown.textContent = label + ebFormatDuration(targetMs - now);
+      } else {
+        t.countdown.hidden = true;
+        t.countdown.textContent = '';
+      }
+    });
+  }
+
+  /** En och endast en timer i hela kolumnen - en sekundvis tickare. */
+  function ebStartTicker() {
+    ebTickOnce();
+    if (board.tickerId !== null) return;
+    board.tickerId = setInterval(ebTickOnce, 1000);
+  }
+
+  function ebStopTicker() {
+    board.tickTargets = [];
+    if (board.tickerId !== null) {
+      clearInterval(board.tickerId);
+      board.tickerId = null;
+    }
+  }
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) {
+      if (board.tickerId !== null) { clearInterval(board.tickerId); board.tickerId = null; }
+      return;
+    }
+    if (board.tickTargets.length > 0 && board.tickerId === null) {
+      board.tickerId = setInterval(ebTickOnce, 1000);
+      ebTickOnce();
+    }
+    if (board.signedIn && board.lastGoodAt !== null && (Date.now() - board.lastGoodAt) > 60000) {
+      void ebFetchList();
+    }
+  });
+
+  // ------------------------------------------------------ skrivkontroller
+
+  /**
+   * New/Edit/Delete/formuläret SKAPAS ALDRIG i DOM:en förrän servern sagt
+   * canWrite:true - de döljs inte med CSS eller disabled. Blir canWrite
+   * false igen (t.ex. ett 403 read_only-svar) tas de bort helt ur DOM:en.
+   */
+  function ebEnsureWriteControls(canWrite) {
+    var newBtn = document.getElementById('ebNewBtn');
+    if (canWrite) {
+      if (!newBtn) {
+        newBtn = document.createElement('button');
+        newBtn.type = 'button';
+        newBtn.className = 'mini primary';
+        newBtn.id = 'ebNewBtn';
+        newBtn.textContent = 'New event';
+        newBtn.dataset.action = 'new';
+        ebEl.ebToolbar.insertBefore(newBtn, ebEl.ebToolbar.firstChild);
+      }
+      if (!ebFormRefs) ebFormRefs = ebBuildForm();
+    } else {
+      if (newBtn) newBtn.parentNode.removeChild(newBtn);
+      if (ebFormRefs) {
+        ebFormRefs.form.parentNode.removeChild(ebFormRefs.form);
+        ebFormRefs = null;
+        board.formOpen = false;
+      }
+    }
+  }
+
+  function ebBuildForm() {
+    var form = document.createElement('form');
+    form.className = 'card ev-form';
+    form.id = 'ebForm';
+    form.hidden = true;
+    form.addEventListener('submit', function (event) { event.preventDefault(); });
+
+    function field(labelText, input) {
+      var wrap = document.createElement('div');
+      wrap.className = 'ev-field';
+      var label = document.createElement('label');
+      label.textContent = labelText;
+      if (input.id) label.setAttribute('for', input.id);
+      wrap.appendChild(label);
+      wrap.appendChild(input);
+      form.appendChild(wrap);
+      return input;
+    }
+
+    var title = document.createElement('input');
+    title.type = 'text'; title.id = 'ebTitle';
+    field('Title', title);
+
+    var type = document.createElement('select');
+    type.id = 'ebType';
+    ['Ranked War', 'Chain', 'Organized Crime', 'Custom'].forEach(function (value) {
+      var option = document.createElement('option');
+      option.value = value; option.textContent = value;
+      type.appendChild(option);
+    });
+    field('Type', type);
+
+    var status = document.createElement('select');
+    status.id = 'ebStatus';
+    ['Scheduled', 'Completed', 'Cancelled'].forEach(function (value) {
+      var option = document.createElement('option');
+      option.value = value; option.textContent = value;
+      status.appendChild(option);
+    });
+    field('Status', status);
+
+    var start = document.createElement('input');
+    start.type = 'datetime-local'; start.id = 'ebStart'; start.step = '60';
+    field('Start (TCT)', start);
+
+    var finishWrap = document.createElement('div');
+    finishWrap.className = 'ev-field';
+    var legend = document.createElement('span');
+    legend.className = 'ev-legend'; legend.textContent = 'Finish';
+    finishWrap.appendChild(legend);
+
+    var finishEndLabel = document.createElement('label');
+    finishEndLabel.className = 'ev-radio';
+    var finishEnd = document.createElement('input');
+    finishEnd.type = 'radio'; finishEnd.name = 'ebFinishKind'; finishEnd.id = 'ebFinishEnd'; finishEnd.checked = true;
+    finishEndLabel.appendChild(finishEnd);
+    finishEndLabel.appendChild(document.createTextNode(' End time'));
+    finishWrap.appendChild(finishEndLabel);
+
+    var finishDeadlineLabel = document.createElement('label');
+    finishDeadlineLabel.className = 'ev-radio';
+    var finishDeadline = document.createElement('input');
+    finishDeadline.type = 'radio'; finishDeadline.name = 'ebFinishKind'; finishDeadline.id = 'ebFinishDeadline';
+    finishDeadlineLabel.appendChild(finishDeadline);
+    finishDeadlineLabel.appendChild(document.createTextNode(' Deadline'));
+    finishWrap.appendChild(finishDeadlineLabel);
+
+    var finish = document.createElement('input');
+    finish.type = 'datetime-local'; finish.id = 'ebFinish'; finish.step = '60';
+    finishWrap.appendChild(finish);
+
+    var finishHint = document.createElement('span');
+    finishHint.className = 'ev-hint'; finishHint.textContent = 'TCT';
+    finishWrap.appendChild(finishHint);
+
+    form.appendChild(finishWrap);
+
+    var noteInput = document.createElement('textarea');
+    noteInput.id = 'ebNote'; noteInput.rows = 3;
+    field('Note', noteInput);
+
+    var formError = document.createElement('p');
+    formError.className = 'note'; formError.id = 'ebFormError'; formError.hidden = true;
+    form.appendChild(formError);
+
+    var buttons = document.createElement('div');
+    buttons.className = 'line';
+
+    var save = document.createElement('button');
+    save.type = 'button'; save.className = 'mini primary'; save.id = 'ebFormSave';
+    save.textContent = 'Save'; save.dataset.action = 'form-save';
+    buttons.appendChild(save);
+
+    var cancel = document.createElement('button');
+    cancel.type = 'button'; cancel.className = 'mini link';
+    cancel.textContent = 'Cancel'; cancel.dataset.action = 'form-cancel';
+    buttons.appendChild(cancel);
+
+    form.appendChild(buttons);
+
+    ebEl.ebToolbar.parentNode.insertBefore(form, ebEl.ebListHost);
+
+    return {
+      form: form, title: title, type: type, status: status, start: start,
+      finishEnd: finishEnd, finishDeadline: finishDeadline, finish: finish,
+      note: noteInput, error: formError, save: save
+    };
+  }
+
+  function ebOpenForm(id) {
+    if (!board.canWrite || !ebFormRefs) return;
+    board.formOpen = true;
+    board.formEventId = id;
+    board.deleteConfirmId = null;
+    ebFormRefs.error.hidden = true;
+    ebFormRefs.error.textContent = '';
+
+    if (id === null) {
+      ebFormRefs.title.value = '';
+      ebFormRefs.type.value = 'Ranked War';
+      ebFormRefs.status.value = 'Scheduled';
+      ebFormRefs.start.value = '';
+      ebFormRefs.finishEnd.checked = true;
+      ebFormRefs.finishDeadline.checked = false;
+      ebFormRefs.finish.value = '';
+      ebFormRefs.note.value = '';
+    } else {
+      var ev = ebFindEvent(id);
+      if (!ev) { board.formOpen = false; return; }
+      var isDeadline = Object.prototype.hasOwnProperty.call(ev, 'deadlineUtc');
+      ebFormRefs.title.value = ev.title;
+      ebFormRefs.type.value = ev.type;
+      ebFormRefs.status.value = ev.status;
+      // Åt andra hållet: de första 16 tecknen ur ISO-strängen rakt in i
+      // fältet, aldrig via en lokal tidszon - se uppdraget avsnitt 7.
+      ebFormRefs.start.value = ev.startUtc.slice(0, 16);
+      ebFormRefs.finishEnd.checked = !isDeadline;
+      ebFormRefs.finishDeadline.checked = isDeadline;
+      ebFormRefs.finish.value = (isDeadline ? ev.deadlineUtc : ev.endUtc).slice(0, 16);
+      ebFormRefs.note.value = ev.note;
+    }
+
+    ebFormRefs.form.hidden = false;
+    ebFormRefs.form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function ebCloseForm() {
+    board.formOpen = false;
+    board.formEventId = null;
+    if (ebFormRefs) ebFormRefs.form.hidden = true;
+  }
+
+  function ebFormError(message) {
+    if (!ebFormRefs) return;
+    ebFormRefs.error.textContent = message;
+    ebFormRefs.error.hidden = false;
+  }
+
+  async function ebSubmitForm() {
+    if (!ebFormRefs) return;
+    var title = ebFormRefs.title.value;
+    var startLocal = ebFormRefs.start.value;   // "YYYY-MM-DDTHH:MM", TCT i detta formulär
+    var finishLocal = ebFormRefs.finish.value;
+    var finishKind = ebFormRefs.finishEnd.checked ? 'endUtc' : 'deadlineUtc';
+
+    // Tyst kontroll är gratis - noll nätverksanrop om något brister.
+    if (title.trim().length === 0) { ebFormError('Title cannot be blank.'); return; }
+    if (!startLocal || startLocal.length < 16) { ebFormError('Start time is required.'); return; }
+    if (!finishLocal || finishLocal.length < 16) { ebFormError('Finish/deadline time is required.'); return; }
+
+    // STRÄNGHOPFOGNING, ALDRIG new Date()/Date.parse() på det råa
+    // formulärvärdet - det skulle tolkas som lokal tid. Se uppdraget avsnitt 7.
+    var startUtc = startLocal.slice(0, 16) + ':00.000Z';
+    var finishUtc = finishLocal.slice(0, 16) + ':00.000Z';
+
+    // Formen är fast bredd (samma antal tecken i bägge strängarna), så en
+    // strängjämförelse räcker för "strikt efter" - ingen Date-tolkning
+    // behövs för kontrollen heller.
+    if (!(finishUtc > startUtc)) {
+      ebFormError('The finish time must be strictly after the start time.');
+      return;
+    }
+
+    var eventBody = {
+      title: title,
+      type: ebFormRefs.type.value,
+      status: ebFormRefs.status.value,
+      startUtc: startUtc,
+      note: ebFormRefs.note.value
+    };
+    eventBody[finishKind] = finishUtc;
+
+    ebFormRefs.save.disabled = true;
+    var outcome = board.formEventId === null
+      ? await ebApiCall('/events/create', { event: eventBody })
+      : await ebApiCall('/events/update', { id: board.formEventId, event: eventBody });
+    ebFormRefs.save.disabled = false;
+
+    if (!outcome.ok) {
+      if (outcome.status === 403) {
+        board.canWrite = false;
+        ebCloseForm();
+        ebEl.ebMessage.textContent = 'Your Torn ID does not have write access to the board.';
+        ebEl.ebMessage.hidden = false;
+        void ebFetchList();
+        return;
+      }
+      ebFormError(ebDescribeError(outcome));
+      return;
+    }
+
+    ebCloseForm();
+    // Bygg aldrig listan lokalt ur svaret - hämta om från servern.
+    void ebFetchList();
+  }
+
+  async function ebDoDelete(id) {
+    var outcome = await ebApiCall('/events/delete', { id: id });
+    board.deleteConfirmId = null;
+
+    if (!outcome.ok && outcome.status === 403) {
+      board.canWrite = false;
+      ebEl.ebMessage.textContent = 'Your Torn ID does not have write access to the board.';
+      ebEl.ebMessage.hidden = false;
+    }
+
+    void ebFetchList();
+  }
+
+  // Händelsehanterarna installeras EN gång, delegerat på sektionselementet -
+  // aldrig på nytt vid varje omritning.
+  ebEl.eventBoard.addEventListener('click', function (event) {
+    var target = event.target.closest ? event.target.closest('[data-action]') : null;
+    if (!target) return;
+    var action = target.dataset.action;
+
+    if (action === 'refresh') { void ebFetchList(); return; }
+    if (action === 'new') { ebOpenForm(null); return; }
+    if (action === 'edit') { ebOpenForm(target.dataset.id); return; }
+    if (action === 'delete') { board.deleteConfirmId = target.dataset.id; ebRenderBoard(); return; }
+    if (action === 'delete-cancel') { board.deleteConfirmId = null; ebRenderBoard(); return; }
+    if (action === 'delete-yes') { void ebDoDelete(target.dataset.id); return; }
+    if (action === 'form-cancel') { ebCloseForm(); return; }
+    if (action === 'form-save') { void ebSubmitForm(); return; }
   });
 
   var stored = read(KEY_STORE);
