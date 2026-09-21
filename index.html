@@ -618,9 +618,10 @@
 (function () {
   'use strict';
 
-  // EVENT_API: den enda rad som byts vid skarp utrullning (staging-adressen
-  // ovan bytes mot den skarpa Cloudflare-adressen, ingenting annat).
-  var EVENT_API = 'https://ks-event-board-staging.hans-viklund.workers.dev';
+  // EVENT_API: adressen ar nu den skarpa Cloudflare-adressen. Staging-
+  // adressen (https://ks-event-board-staging.hans-viklund.workers.dev) ar
+  // den som kan bytas tillbaka till vid behov.
+  var EVENT_API = 'https://ks-event-board.hans-viklund.workers.dev';
 
   var KEY_STORE = 'ks-leader-board-key';
   var ME_STORE = 'ks-leader-me';
