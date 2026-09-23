@@ -210,6 +210,7 @@
 
   .tag.blocked { background: transparent; color: var(--stop); border: 1px solid currentColor; }
   .tag.partial { background: transparent; color: var(--warn); border: 1px solid currentColor; }
+  .tag.beta { background: transparent; color: var(--warn); border: 1px solid currentColor; padding: 2px 6px; }
   .tag.checking, .tag.unknown { background: transparent; color: var(--faint); border: 1px solid var(--line-strong); }
 
   .card .lock {
@@ -566,16 +567,8 @@
         <span class="go">Open</span>
       </a>
 
-      <a class="card" href="knowledge.html">
-        <span class="tag">Live</span>
-        <span class="name">Ask KS Leslie</span>
-        <span class="what">What Leslie can stand behind about Torn — the scripting rules, the API
-          terms, and what nobody has actually established. Every answer carries its source.</span>
-        <span class="go">Open</span>
-      </a>
-
       <a class="card" href="https://hjunez.github.io/kingshade-recruit-intelligence/">
-        <span class="tag">Beta</span>
+        <span class="tag beta">Beta</span>
         <span class="name">Faction Recruit Intelligence</span>
         <span class="what">An applicant laid out in full — level against the faction's own spread,
           what the applicant shared and what they did not, and every time they applied before. No
@@ -589,7 +582,7 @@
 
   <div class="keynote">
     <span class="title">First time here?</span>
-    <p>Ask KS Leslie needs nothing — just open it. The other three read your faction through Torn's
+    <p>These tools read your faction through Torn's
       API. Make one Custom Key in Torn under Settings → API Keys and tick these five boxes under
       <strong>faction</strong>:</p>
     <p><strong>members</strong> · <strong>rankedwars</strong> · <strong>rankedwarreport</strong> ·

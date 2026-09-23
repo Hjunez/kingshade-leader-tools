@@ -214,6 +214,104 @@
     a.card:hover { transform: none; }
   }
 
+  .welcome {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    box-shadow: var(--shadow);
+    padding: 14px 18px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 18px;
+  }
+  .welcome input[type="password"] {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--ink);
+    background: var(--surface-2);
+    border: 1px solid var(--line-strong);
+    border-radius: 3px;
+    padding: 8px 10px;
+    min-width: 0;
+    flex: 1 1 200px;
+  }
+  .mini {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    background: var(--surface-2);
+    color: var(--ink);
+    border: 1px solid var(--line-strong);
+    border-radius: 3px;
+    padding: 8px 12px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .mini:hover { border-color: var(--accent); color: var(--accent); }
+  .mini.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .mini.link { background: none; border-color: transparent; color: var(--faint); padding: 8px 4px; }
+  .mini.link:hover { color: var(--accent); }
+  .mini:focus-visible, .welcome input:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+  .ev-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .ev-card { gap: 8px; }
+
+  .ev-card.ev-stale { opacity: .55; }
+
+  .ev-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .tag.ev-status-scheduled { background: var(--good-soft); color: var(--good); }
+  .tag.ev-status-completed { background: transparent; color: var(--muted); border: 1px solid currentColor; }
+  .tag.ev-status-cancelled { background: transparent; color: var(--stop); border: 1px solid currentColor; }
+  .tag.ev-phase { background: transparent; color: var(--faint); border: 1px solid var(--line-strong); }
+
+  .ev-title {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 19px;
+    line-height: 1.15;
+  }
+
+  .ev-countdown { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+
+  .ev-time { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+
+  .ev-note { font-size: 14px; color: var(--ink); white-space: pre-wrap; }
+  .tag.beta {
+    background: transparent;
+    color: var(--warn);
+    border: 1px solid currentColor;
+    padding: 2px 6px; /* the border adds 1px each side; keeps the tag the same size as Live */
+  }
+  .line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+  .welcome .line { flex: 1 1 200px; }
+  .welcome .note { flex-basis: 100%; margin: 0; }
+  .note { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+  .note.bad { color: var(--stop); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  [hidden] { display: none !important; }
+  .mini:disabled { cursor: wait; opacity: .6; }
+  .ev-toolbar { margin: 0 0 12px; }
+  .wrap > *, .card { min-width: 0; }
+  .card, .ev-head .tag { overflow-wrap: anywhere; }
+  .welcome input[type="password"] { width: 100%; max-width: 100%; }
+  .grid { grid-template-columns: repeat(auto-fit, minmax(min(268px, 100%), 1fr)); }
 </style>
 </head>
 <body>
@@ -226,19 +324,45 @@
     </div>
   </header>
 
+
+  <section class="welcome" id="welcome" aria-label="Sign in">
+    <div class="line" id="connectLine">
+      <label class="sr" for="wKey">Torn API key</label>
+      <input type="password" id="wKey" autocomplete="off" spellcheck="false"
+        placeholder="Paste your Torn key to sign in" aria-describedby="wNote">
+      <button type="button" class="mini primary" id="wConnect">Sign in</button>
+    </div>
+    <div class="line" id="wActions" hidden>
+      <span id="helloLine">Signed in.</span>
+      <button type="button" class="mini link" id="wForget">Sign out</button>
+    </div>
+    <p class="note" id="wNote" role="status" hidden></p>
+  </section>
+
+  <section id="eventBoard" aria-labelledby="ebHeading">
+    <h2 id="ebHeading">Faction Events</h2>
+    <p class="note" id="ebMessage" role="status">Sign in above to see the faction events.</p>
+    <p class="note" id="ebStaleNote" role="status" hidden></p>
+    <p class="note" id="ebDegradedNote" role="status" hidden></p>
+    <div class="line ev-toolbar" id="ebToolbar" hidden>
+      <button type="button" class="mini" id="ebRefreshBtn" data-action="refresh">Refresh</button>
+    </div>
+    <div class="ev-list" id="ebListHost"></div>
+  </section>
+
   <section>
     <div class="grid">
       <a class="card" href="leader.html">
         <span class="tag">Leader &amp; Co-Leader</span>
         <span class="name">Leader Tools</span>
         <span class="what">Faction Events, Member Activity, War Payout, Armory Audit, OC Roster,
-          Key Check, War History, Ask KS Leslie and Recruit Intelligence. Sign in there with your
-          Torn key.</span>
+          Key Check, War History and Recruit Intelligence. Sign in there with your Torn key.
+          Faction Events are created and changed there.</span>
         <span class="go">Open</span>
       </a>
 
       <a class="card" href="warroom.html">
-        <span class="tag">Beta</span>
+        <span class="tag beta">Beta</span>
         <span class="name">War Room</span>
         <span class="what">The other faction's roster during a Ranked War, with one shared board for
           who has called which target. Needs the faction's War Room password from Kingshade.</span>
@@ -248,17 +372,439 @@
       <a class="card" href="scripts.html">
         <span class="tag">Live</span>
         <span class="name">Kingshade Scripts</span>
-        <span class="what">Every Kingshade userscript in one place, for the computer and for Torn
-          PDA. Each one says what it does, what it talks to and whether it needs a key.</span>
+        <span class="what">Every Kingshade userscript in one place, for Torn PC and for Torn PDA. Each one says what it does, what it talks to and whether it needs a key.</span>
+        <span class="go">Open</span>
+      </a>
+
+      <a class="card" href="knowledge.html">
+        <span class="tag">Live</span>
+        <span class="name">Ask KS Leslie</span>
+        <span class="what">What Leslie can stand behind about Torn — crimes, combat, war, training, money and progression, and what nobody has actually established. Every answer carries its source.</span>
         <span class="go">Open</span>
       </a>
     </div>
   </section>
 
   <footer>
-    <p>These pages read through Torn's official API and never act on your behalf in Torn. Your key
-      stays in your own browser.</p>
+    <p>These pages read through Torn's official API and never act on your behalf in Torn.
+      Your key is saved in your own browser. Every tool here sends it only to Torn, with one
+      exception: Faction Events sends it to Kingshade's own event server to sign you in.
+      That server asks Torn who the key belongs to and then throws it away — it never stores it.</p>
   </footer>
 </div>
+
+<script>
+(function () {
+  'use strict';
+  var EVENT_API = 'https://ks-event-board.hans-viklund.workers.dev';
+  var KEY_STORE = 'ks-leader-board-key';
+  var ME_STORE = 'ks-leader-me';
+  var el = {};
+  ['connectLine', 'wKey', 'wConnect', 'wActions', 'wForget', 'wNote',
+   'ebMessage', 'ebStaleNote', 'ebDegradedNote', 'ebToolbar', 'ebRefreshBtn', 'ebListHost']
+    .forEach(function (id) { el[id] = document.getElementById(id); });
+  var activeKey = '', authSeq = 0, signingIn = false, suspended = false;
+  var board = {
+    signedIn: false, token: null, tokenExpiresAt: 0,
+    lastGoodEvents: null, lastGoodAt: null, lastDegraded: false,
+    errorDetail: null, listSeq: 0, appliedSeq: 0,
+    request: null, tickerId: null, tickTargets: []
+  };
+  function read(store) {
+    try { return localStorage.getItem(store) || ''; } catch (err) { return ''; }
+  }
+  function write(store, value) {
+    try {
+      if (value) localStorage.setItem(store, value);
+      else localStorage.removeItem(store);
+      return true;
+    } catch (err) { return false; }
+  }
+  function note(message, bad) {
+    el.wNote.textContent = message;
+    el.wNote.className = 'note' + (bad ? ' bad' : '');
+    el.wNote.hidden = !message;
+  }
+  async function checkFactionAccess(key) {
+    try {
+      var r = await fetch('https://api.torn.com/v2/key/info?comment=KSLeaderAccessCheck',
+        { headers: { Authorization: 'ApiKey ' + key } });
+      var data = await r.json();
+      if (data.error) {
+        console.warn('[KS access check] Torn error', data.error, 'key length', key.length);
+        return false;
+      }
+      var infoUser = data.info && data.info.user;
+      var ok = !!(infoUser && infoUser.faction_id === 48039);
+      if (!ok) console.warn('[KS access check] unexpected user object', infoUser, 'key length', key.length);
+      return ok;
+    } catch (e) {
+      console.warn('[KS access check] request failed', e, 'key length', key.length);
+      return false;
+    }
+  }
+
+  function ebStopTicker() {
+    if (board.tickerId !== null) clearInterval(board.tickerId);
+    board.tickerId = null;
+  }
+  function ebClearSession() {
+    board.token = null;
+    board.tokenExpiresAt = 0;
+  }
+  function resetVisit() {
+    ++authSeq;
+    ++board.listSeq;
+    if (board.request) board.request.controller.abort();
+    board.request = null;
+    signingIn = false;
+    activeKey = '';
+    board.signedIn = false;
+    ebClearSession();
+    board.lastGoodEvents = null;
+    board.lastGoodAt = null;
+    board.lastDegraded = false;
+    board.errorDetail = null;
+    ebStopTicker();
+    board.tickTargets = [];
+    el.wKey.value = '';
+    el.wKey.disabled = false;
+    el.wConnect.disabled = false;
+    el.connectLine.hidden = false;
+    el.wActions.hidden = true;
+    el.ebToolbar.hidden = true;
+    el.ebRefreshBtn.disabled = false;
+    el.ebListHost.textContent = '';
+    el.ebMessage.textContent = 'Sign in above to see the faction events.';
+    el.ebMessage.hidden = false;
+    el.ebStaleNote.textContent = '';
+    el.ebStaleNote.hidden = true;
+    el.ebDegradedNote.textContent = '';
+    el.ebDegradedNote.hidden = true;
+  }
+  async function signIn(key) {
+    if (signingIn || board.signedIn || suspended) return;
+    if (!key) { note('Paste your key first.', true); return; }
+    var seq = ++authSeq;
+    signingIn = true;
+    el.wKey.value = '';
+    el.wKey.disabled = true;
+    el.wConnect.disabled = true;
+    note('Checking faction access…', false);
+    var allowed = await checkFactionAccess(key);
+    if (seq !== authSeq || suspended) return;
+    signingIn = false;
+    el.wKey.disabled = false;
+    el.wConnect.disabled = false;
+    if (!allowed) {
+      write(KEY_STORE, '');
+      resetVisit();
+      note('This key does not belong to a current member of faction 48039. Access denied.', true);
+      return;
+    }
+    var saved = write(KEY_STORE, key);
+    activeKey = key;
+    board.signedIn = true;
+    el.connectLine.hidden = true;
+    el.wActions.hidden = false;
+    note(saved ? '' : 'Signed in for this visit. Browser storage is unavailable.', !saved);
+    void ebFetchList();
+  }
+  function ebCurrent(request) {
+    return !suspended && board.signedIn && board.request === request &&
+      request.seq === board.listSeq && !request.controller.signal.aborted;
+  }
+  async function ebPost(path, body, request) {
+    try {
+      var res = await fetch(EVENT_API + path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: request.controller.signal
+      });
+      var data = null;
+      try { data = await res.json(); } catch (err) { /* Report invalid JSON as an error. */ }
+      return { ok: res.ok && !!data && data.ok === true, status: res.status, data: data };
+    } catch (err) { return { ok: false, status: 0, data: null }; }
+  }
+  async function ebEnsureSession(request) {
+    if (board.token !== null && Date.now() < board.tokenExpiresAt) return { ok: true };
+    ebClearSession();
+    var outcome = await ebPost('/session', { key: activeKey }, request);
+    if (!ebCurrent(request) || !outcome.ok) return outcome;
+    var data = outcome.data;
+    if (typeof data.session !== 'string' || !data.session.trim() ||
+        typeof data.sessionTtlSeconds !== 'number' || !Number.isFinite(data.sessionTtlSeconds) ||
+        data.sessionTtlSeconds <= 30 ||
+        !Number.isFinite(Date.now() + data.sessionTtlSeconds * 1000)) {
+      return { ok: false, status: 200, data: { detail: 'The event board returned an invalid session.' } };
+    }
+    board.token = data.session;
+    board.tokenExpiresAt = Date.now() + data.sessionTtlSeconds * 1000 - 30000;
+    return { ok: true };
+  }
+  async function ebReadList(request) {
+    for (var attempt = 0; attempt < 2; attempt++) {
+      var session = await ebEnsureSession(request);
+      if (!ebCurrent(request) || !session.ok) return session;
+      var outcome = await ebPost('/events/list', { session: board.token }, request);
+      if (!ebCurrent(request)) return outcome;
+      if (outcome.status === 401) {
+        ebClearSession();
+        if (attempt === 0) continue;
+      }
+      return outcome;
+    }
+  }
+  function ebDescribeError(outcome) {
+    var data = outcome.data;
+    if (outcome.status === 429) {
+      var wait = data && data.retryAfterSeconds;
+      return typeof wait === 'number' && Number.isFinite(wait) && wait >= 0
+        ? 'The event board is temporarily rate limited. Wait ' + wait + ' seconds before trying again.'
+        : 'The event board is temporarily rate limited. Wait a while before trying again.';
+    }
+    if (data && typeof data.detail === 'string' && data.detail) return data.detail;
+    if (outcome.status === 0) return 'Could not reach the event board.';
+    if (outcome.status === 401) return 'The event session was rejected. Press Refresh to try again.';
+    if (outcome.status === 403) return 'This key does not belong to faction 48039.';
+    return 'The event board answered with an error.';
+  }
+  function ebValidTime(value) {
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/.test(value)) return false;
+    var ms = Date.parse(value);
+    return Number.isFinite(ms) &&
+      new Date(ms).toISOString() === (value.length === 20 ? value.replace('Z', '.000Z') : value);
+  }
+  function ebValidEvents(events) {
+    return Array.isArray(events) && events.every(function (event) {
+      if (!event || typeof event !== 'object') return false;
+      if (!['title', 'type', 'status'].every(function (field) {
+        return typeof event[field] === 'string' && event[field].trim().length > 0;
+      })) return false;
+      if (event.note !== undefined && typeof event.note !== 'string') return false;
+      var hasEnd = Object.prototype.hasOwnProperty.call(event, 'endUtc');
+      var hasDeadline = Object.prototype.hasOwnProperty.call(event, 'deadlineUtc');
+      var finish = hasEnd ? event.endUtc : event.deadlineUtc;
+      return hasEnd !== hasDeadline && ebValidTime(event.startUtc) && ebValidTime(finish) &&
+        Date.parse(finish) > Date.parse(event.startUtc);
+    });
+  }
+  async function ebFetchList() {
+    if (!board.signedIn || suspended || board.request) return;
+    var request = { seq: ++board.listSeq, controller: new AbortController() };
+    board.request = request;
+    el.ebToolbar.hidden = false;
+    el.ebRefreshBtn.disabled = true;
+    if (board.lastGoodEvents === null) {
+      el.ebMessage.textContent = 'Loading…';
+      el.ebMessage.hidden = false;
+    }
+    var outcome = await ebReadList(request);
+    if (!ebCurrent(request)) return;
+    board.request = null;
+    el.ebRefreshBtn.disabled = false;
+    if (request.seq < board.appliedSeq) return;
+    board.appliedSeq = request.seq;
+    if (outcome.ok && (!ebValidEvents(outcome.data.events) ||
+        (outcome.data.degraded !== undefined && typeof outcome.data.degraded !== 'boolean'))) {
+      outcome = { ok: false, status: 200, data: { detail: 'The event board returned an invalid event list.' } };
+    }
+    if (outcome.ok) {
+      board.lastGoodEvents = outcome.data.events;
+      board.lastGoodAt = Date.now();
+      board.lastDegraded = outcome.data.degraded === true;
+      board.errorDetail = null;
+    } else {
+      board.errorDetail = ebDescribeError(outcome);
+    }
+    ebRenderBoard();
+  }
+  function ebRenderBoard() {
+    ebStopTicker();
+    board.tickTargets = [];
+    el.ebListHost.textContent = '';
+    el.ebMessage.textContent = board.errorDetail || '';
+    el.ebMessage.hidden = !board.errorDetail;
+    el.ebStaleNote.hidden = true;
+    el.ebDegradedNote.hidden = true;
+    var events = board.lastGoodEvents;
+    if (events === null) return;
+    var isStale = board.errorDetail !== null;
+    if (isStale) {
+      el.ebStaleNote.textContent = 'This is the list as of ' + ebFormatClockTime(board.lastGoodAt) + ', not now.';
+      el.ebStaleNote.hidden = false;
+    }
+    if (board.lastDegraded) {
+      el.ebDegradedNote.textContent = 'Some rows could not be read. This list is incomplete.';
+      el.ebDegradedNote.hidden = false;
+    }
+    if (events.length === 0) {
+      var empty = document.createElement('p');
+      empty.className = 'note';
+      empty.textContent = 'No events on the board yet.';
+      el.ebListHost.appendChild(empty);
+      return;
+    }
+    events.forEach(function (event) {
+      var built = ebBuildEventCard(event, isStale);
+      el.ebListHost.appendChild(built.card);
+      board.tickTargets.push(built);
+    });
+    ebStartTicker();
+  }
+  function ebStatusClass(status) {
+    if (status === 'Scheduled') return 'ev-status-scheduled';
+    if (status === 'Cancelled') return 'ev-status-cancelled';
+    if (status === 'Completed') return 'ev-status-completed';
+    return 'ev-phase';
+  }
+  function ebFormatDual(iso) {
+    var tct = iso.slice(0, 10) + ' ' + iso.slice(11, 16) + ' TCT';
+    var local;
+    try {
+      local = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(iso));
+    } catch (err) {
+      local = '?';
+    }
+    return tct + '  (' + local + ' your time)';
+  }
+  function ebFormatClockTime(ms) {
+    try {
+      return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date(ms));
+    } catch (err) {
+      return '?';
+    }
+  }
+
+  function ebFormatDuration(ms) {
+    var totalSeconds = Math.max(0, Math.floor(ms / 1000));
+    var days = Math.floor(totalSeconds / 86400);
+    var hours = Math.floor((totalSeconds % 86400) / 3600);
+    var minutes = Math.floor((totalSeconds % 3600) / 60);
+    var seconds = totalSeconds % 60;
+    var parts = [];
+    if (days > 0) parts.push(days + 'd');
+    if (days > 0 || hours > 0) parts.push(hours + 'h');
+    if (days > 0 || hours > 0 || minutes > 0) parts.push(minutes + 'm');
+    parts.push(seconds + 's');
+    return parts.join(' ');
+  }
+  function ebBuildEventCard(event, isStale) {
+    var finishField = Object.prototype.hasOwnProperty.call(event, 'endUtc') ? 'endUtc' : 'deadlineUtc';
+    var startMs = Date.parse(event.startUtc);
+    var finishMs = Date.parse(event[finishField]);
+
+    var card = document.createElement('div');
+    card.className = 'card ev-card' + (isStale ? ' ev-stale' : '');
+
+    var head = document.createElement('div');
+    head.className = 'ev-head';
+
+    var typeTag = document.createElement('span');
+    typeTag.className = 'tag';
+    typeTag.textContent = event.type;
+    head.appendChild(typeTag);
+
+    var statusTag = document.createElement('span');
+    statusTag.className = 'tag ' + ebStatusClass(event.status);
+    statusTag.textContent = event.status;
+    head.appendChild(statusTag);
+
+    var phaseTag = document.createElement('span');
+    phaseTag.className = 'tag ev-phase';
+    head.appendChild(phaseTag);
+
+    card.appendChild(head);
+
+    var title = document.createElement('div');
+    title.className = 'ev-title';
+    title.textContent = event.title;
+    card.appendChild(title);
+
+    var countdown = document.createElement('div');
+    countdown.className = 'ev-countdown';
+    card.appendChild(countdown);
+
+    var startRow = document.createElement('div');
+    startRow.className = 'ev-time';
+    startRow.textContent = 'Start ' + ebFormatDual(event.startUtc);
+    card.appendChild(startRow);
+
+    var finishRow = document.createElement('div');
+    finishRow.className = 'ev-time';
+    var finishLabel = finishField === 'endUtc' ? 'Ends' : 'Deadline';
+    finishRow.textContent = finishLabel + ' ' + ebFormatDual(event[finishField]);
+    card.appendChild(finishRow);
+
+    if (event.note && event.note.length > 0) {
+      var noteEl = document.createElement('div');
+      noteEl.className = 'ev-note';
+      noteEl.textContent = event.note;
+      card.appendChild(noteEl);
+    }
+
+    return { card: card, phaseTag: phaseTag, countdown: countdown, startMs: startMs, finishMs: finishMs };
+  }
+
+  function ebTickOnce() {
+    var now = Date.now();
+    board.tickTargets.forEach(function (t) {
+      var phase, targetMs, label;
+      if (now < t.startMs) { phase = 'Upcoming'; targetMs = t.startMs; label = 'Starts in '; }
+      else if (now < t.finishMs) { phase = 'Active'; targetMs = t.finishMs; label = 'Ends in '; }
+      else { phase = 'Passed'; targetMs = null; label = null; }
+
+      t.phaseTag.textContent = phase;
+      if (targetMs !== null) {
+        t.countdown.hidden = false;
+        t.countdown.textContent = label + ebFormatDuration(targetMs - now);
+      } else {
+        t.countdown.hidden = true;
+        t.countdown.textContent = '';
+      }
+    });
+  }
+  function ebStartTicker() {
+    if (document.hidden || suspended || !board.signedIn || !board.tickTargets.length) return;
+    ebTickOnce();
+    if (board.tickerId === null) board.tickerId = setInterval(ebTickOnce, 1000);
+  }
+  el.wConnect.addEventListener('click', function () { void signIn(el.wKey.value.trim()); });
+  el.wKey.addEventListener('keydown', function (event) {
+    if (event.key === 'Enter') { event.preventDefault(); el.wConnect.click(); }
+  });
+  el.wForget.addEventListener('click', function () {
+    var keyRemoved = write(KEY_STORE, '');
+    var meRemoved = write(ME_STORE, '');
+    resetVisit();
+    note(keyRemoved && meRemoved ? 'Signed out. Your key was removed from this browser.'
+      : 'Signed out for this visit. Browser storage could not be cleared.', !(keyRemoved && meRemoved));
+  });
+  el.ebRefreshBtn.addEventListener('click', function () { void ebFetchList(); });
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) { ebStopTicker(); return; }
+    ebStartTicker();
+    if (board.signedIn && board.lastGoodAt !== null && Date.now() - board.lastGoodAt > 60000) {
+      void ebFetchList();
+    }
+  });
+  window.addEventListener('pagehide', function () { suspended = true; resetVisit(); });
+  window.addEventListener('pageshow', function (event) {
+    if (!event.persisted) return;
+    suspended = false;
+    var key = read(KEY_STORE);
+    if (key) void signIn(key);
+  });
+  window.addEventListener('storage', function (event) {
+    if (event.key !== KEY_STORE && event.key !== null) return;
+    resetVisit();
+    note('Sign-in changed in another tab. Sign in again to see the faction events.', false);
+  });
+  resetVisit();
+  var stored = read(KEY_STORE);
+  if (stored) void signIn(stored);
+})();
+</script>
 </body>
 </html>
