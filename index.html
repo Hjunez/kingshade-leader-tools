@@ -585,9 +585,10 @@
       if (event.note !== undefined && typeof event.note !== 'string') return false;
       var hasEnd = Object.prototype.hasOwnProperty.call(event, 'endUtc');
       var hasDeadline = Object.prototype.hasOwnProperty.call(event, 'deadlineUtc');
+      if ((hasEnd && hasDeadline) || !ebValidTime(event.startUtc)) return false;
+      if (!hasEnd && !hasDeadline) return true;
       var finish = hasEnd ? event.endUtc : event.deadlineUtc;
-      return hasEnd !== hasDeadline && ebValidTime(event.startUtc) && ebValidTime(finish) &&
-        Date.parse(finish) > Date.parse(event.startUtc);
+      return ebValidTime(finish) && Date.parse(finish) > Date.parse(event.startUtc);
     });
   }
   async function ebFetchList() {
@@ -691,9 +692,10 @@
     return parts.join(' ');
   }
   function ebBuildEventCard(event, isStale) {
-    var finishField = Object.prototype.hasOwnProperty.call(event, 'endUtc') ? 'endUtc' : 'deadlineUtc';
+    var finishField = Object.prototype.hasOwnProperty.call(event, 'endUtc') ? 'endUtc'
+      : Object.prototype.hasOwnProperty.call(event, 'deadlineUtc') ? 'deadlineUtc' : null;
     var startMs = Date.parse(event.startUtc);
-    var finishMs = Date.parse(event[finishField]);
+    var finishMs = finishField === null ? null : Date.parse(event[finishField]);
 
     var card = document.createElement('div');
     card.className = 'card ev-card' + (isStale ? ' ev-stale' : '');
@@ -734,7 +736,8 @@
     var finishRow = document.createElement('div');
     finishRow.className = 'ev-time';
     var finishLabel = finishField === 'endUtc' ? 'Ends' : 'Deadline';
-    finishRow.textContent = finishLabel + ' ' + ebFormatDual(event[finishField]);
+    finishRow.textContent = finishField === null ? 'No set end'
+      : finishLabel + ' ' + ebFormatDual(event[finishField]);
     card.appendChild(finishRow);
 
     if (event.note && event.note.length > 0) {
@@ -744,21 +747,30 @@
       card.appendChild(noteEl);
     }
 
-    return { card: card, phaseTag: phaseTag, countdown: countdown, startMs: startMs, finishMs: finishMs };
+    return { card: card, phaseTag: phaseTag, countdown: countdown, startMs: startMs, finishMs: finishMs, status: event.status };
   }
 
   function ebTickOnce() {
     var now = Date.now();
     board.tickTargets.forEach(function (t) {
       var phase, targetMs, label;
-      if (now < t.startMs) { phase = 'Upcoming'; targetMs = t.startMs; label = 'Starts in '; }
+      var elapsed = false;
+      // Only events without a finish use their status to close the countdown.
+      if (t.finishMs === null && (t.status === 'Completed' || t.status === 'Cancelled')) {
+        phase = 'Passed'; targetMs = null; label = null;
+      }
+      else if (now < t.startMs) { phase = 'Upcoming'; targetMs = t.startMs; label = 'Starts in '; }
+      else if (t.finishMs === null && t.status === 'Scheduled') {
+        phase = 'Active'; targetMs = t.startMs; label = 'Started '; elapsed = true;
+      }
       else if (now < t.finishMs) { phase = 'Active'; targetMs = t.finishMs; label = 'Ends in '; }
       else { phase = 'Passed'; targetMs = null; label = null; }
 
       t.phaseTag.textContent = phase;
       if (targetMs !== null) {
         t.countdown.hidden = false;
-        t.countdown.textContent = label + ebFormatDuration(targetMs - now);
+        t.countdown.textContent = label + ebFormatDuration(elapsed ? now - targetMs : targetMs - now) +
+          (elapsed ? ' ago' : '');
       } else {
         t.countdown.hidden = true;
         t.countdown.textContent = '';

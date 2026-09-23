@@ -1296,9 +1296,10 @@
   /** XSS: title/note/type/status är fri text från servern - textContent
    *  överallt här, aldrig innerHTML, ingen strängbyggd markup med serverdata. */
   function ebBuildEventCard(event, isStale) {
-    var finishField = Object.prototype.hasOwnProperty.call(event, 'endUtc') ? 'endUtc' : 'deadlineUtc';
+    var finishField = Object.prototype.hasOwnProperty.call(event, 'endUtc') ? 'endUtc'
+      : Object.prototype.hasOwnProperty.call(event, 'deadlineUtc') ? 'deadlineUtc' : null;
     var startMs = Date.parse(event.startUtc);
-    var finishMs = Date.parse(event[finishField]);
+    var finishMs = finishField === null ? null : Date.parse(event[finishField]);
 
     var card = document.createElement('div');
     card.className = 'card ev-card' + (isStale ? ' ev-stale' : '');
@@ -1339,7 +1340,8 @@
     var finishRow = document.createElement('div');
     finishRow.className = 'ev-time';
     var finishLabel = finishField === 'endUtc' ? 'Ends' : 'Deadline';
-    finishRow.textContent = finishLabel + ' ' + ebFormatDual(event[finishField]);
+    finishRow.textContent = finishField === null ? 'No set end'
+      : finishLabel + ' ' + ebFormatDual(event[finishField]);
     card.appendChild(finishRow);
 
     if (event.note && event.note.length > 0) {
@@ -1383,7 +1385,7 @@
       card.appendChild(actions);
     }
 
-    return { card: card, phaseTag: phaseTag, countdown: countdown, startMs: startMs, finishMs: finishMs };
+    return { card: card, phaseTag: phaseTag, countdown: countdown, startMs: startMs, finishMs: finishMs, status: event.status };
   }
 
   // ------------------------------------------------------------ tickare
@@ -1393,14 +1395,23 @@
     var now = Date.now();
     board.tickTargets.forEach(function (t) {
       var phase, targetMs, label;
-      if (now < t.startMs) { phase = 'Upcoming'; targetMs = t.startMs; label = 'Starts in '; }
+      var elapsed = false;
+      // Only events without a finish use their status to close the countdown.
+      if (t.finishMs === null && (t.status === 'Completed' || t.status === 'Cancelled')) {
+        phase = 'Passed'; targetMs = null; label = null;
+      }
+      else if (now < t.startMs) { phase = 'Upcoming'; targetMs = t.startMs; label = 'Starts in '; }
+      else if (t.finishMs === null && t.status === 'Scheduled') {
+        phase = 'Active'; targetMs = t.startMs; label = 'Started '; elapsed = true;
+      }
       else if (now < t.finishMs) { phase = 'Active'; targetMs = t.finishMs; label = 'Ends in '; }
       else { phase = 'Passed'; targetMs = null; label = null; }
 
       t.phaseTag.textContent = phase;
       if (targetMs !== null) {
         t.countdown.hidden = false;
-        t.countdown.textContent = label + ebFormatDuration(targetMs - now);
+        t.countdown.textContent = label + ebFormatDuration(elapsed ? now - targetMs : targetMs - now) +
+          (elapsed ? ' ago' : '');
       } else {
         t.countdown.hidden = true;
         t.countdown.textContent = '';
@@ -1518,13 +1529,18 @@
     legend.className = 'ev-legend'; legend.textContent = 'Finish';
     finishWrap.appendChild(legend);
 
+    var finishChoices = document.createElement('div');
+    finishChoices.setAttribute('role', 'radiogroup');
+    finishChoices.setAttribute('aria-label', 'Finish');
+    finishWrap.appendChild(finishChoices);
+
     var finishEndLabel = document.createElement('label');
     finishEndLabel.className = 'ev-radio';
     var finishEnd = document.createElement('input');
     finishEnd.type = 'radio'; finishEnd.name = 'ebFinishKind'; finishEnd.id = 'ebFinishEnd'; finishEnd.checked = true;
     finishEndLabel.appendChild(finishEnd);
     finishEndLabel.appendChild(document.createTextNode(' End time'));
-    finishWrap.appendChild(finishEndLabel);
+    finishChoices.appendChild(finishEndLabel);
 
     var finishDeadlineLabel = document.createElement('label');
     finishDeadlineLabel.className = 'ev-radio';
@@ -1532,7 +1548,15 @@
     finishDeadline.type = 'radio'; finishDeadline.name = 'ebFinishKind'; finishDeadline.id = 'ebFinishDeadline';
     finishDeadlineLabel.appendChild(finishDeadline);
     finishDeadlineLabel.appendChild(document.createTextNode(' Deadline'));
-    finishWrap.appendChild(finishDeadlineLabel);
+    finishChoices.appendChild(finishDeadlineLabel);
+
+    var finishNoneLabel = document.createElement('label');
+    finishNoneLabel.className = 'ev-radio';
+    var finishNone = document.createElement('input');
+    finishNone.type = 'radio'; finishNone.name = 'ebFinishKind'; finishNone.id = 'ebFinishNone';
+    finishNoneLabel.appendChild(finishNone);
+    finishNoneLabel.appendChild(document.createTextNode(' No end time'));
+    finishChoices.appendChild(finishNoneLabel);
 
     var finish = document.createElement('input');
     finish.type = 'datetime-local'; finish.id = 'ebFinish'; finish.step = '60';
@@ -1541,6 +1565,16 @@
     var finishHint = document.createElement('span');
     finishHint.className = 'ev-hint'; finishHint.textContent = 'TCT';
     finishWrap.appendChild(finishHint);
+
+    function syncFinish() {
+      finish.hidden = finishNone.checked;
+      finish.disabled = finishNone.checked;
+      finishHint.hidden = finishNone.checked;
+    }
+    [finishEnd, finishDeadline, finishNone].forEach(function (choice) {
+      choice.addEventListener('change', syncFinish);
+    });
+    syncFinish();
 
     form.appendChild(finishWrap);
 
@@ -1571,8 +1605,8 @@
 
     return {
       form: form, title: title, type: type, status: status, start: start,
-      finishEnd: finishEnd, finishDeadline: finishDeadline, finish: finish,
-      note: noteInput, error: formError, save: save
+      finishEnd: finishEnd, finishDeadline: finishDeadline, finishNone: finishNone, finish: finish,
+      syncFinish: syncFinish, note: noteInput, error: formError, save: save
     };
   }
 
@@ -1591,24 +1625,29 @@
       ebFormRefs.start.value = '';
       ebFormRefs.finishEnd.checked = true;
       ebFormRefs.finishDeadline.checked = false;
+      ebFormRefs.finishNone.checked = false;
       ebFormRefs.finish.value = '';
       ebFormRefs.note.value = '';
     } else {
       var ev = ebFindEvent(id);
       if (!ev) { board.formOpen = false; return; }
+      var hasEnd = Object.prototype.hasOwnProperty.call(ev, 'endUtc');
       var isDeadline = Object.prototype.hasOwnProperty.call(ev, 'deadlineUtc');
+      var noFinish = !hasEnd && !isDeadline;
       ebFormRefs.title.value = ev.title;
       ebFormRefs.type.value = ev.type;
       ebFormRefs.status.value = ev.status;
       // Åt andra hållet: de första 16 tecknen ur ISO-strängen rakt in i
       // fältet, aldrig via en lokal tidszon - se uppdraget avsnitt 7.
       ebFormRefs.start.value = ev.startUtc.slice(0, 16);
-      ebFormRefs.finishEnd.checked = !isDeadline;
+      ebFormRefs.finishEnd.checked = hasEnd;
       ebFormRefs.finishDeadline.checked = isDeadline;
-      ebFormRefs.finish.value = (isDeadline ? ev.deadlineUtc : ev.endUtc).slice(0, 16);
+      ebFormRefs.finishNone.checked = noFinish;
+      ebFormRefs.finish.value = noFinish ? '' : (isDeadline ? ev.deadlineUtc : ev.endUtc).slice(0, 16);
       ebFormRefs.note.value = ev.note;
     }
 
+    ebFormRefs.syncFinish();
     ebFormRefs.form.hidden = false;
     ebFormRefs.form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
@@ -1630,22 +1669,25 @@
     var title = ebFormRefs.title.value;
     var startLocal = ebFormRefs.start.value;   // "YYYY-MM-DDTHH:MM", TCT i detta formulär
     var finishLocal = ebFormRefs.finish.value;
-    var finishKind = ebFormRefs.finishEnd.checked ? 'endUtc' : 'deadlineUtc';
+    var finishKind = ebFormRefs.finishNone.checked ? null
+      : ebFormRefs.finishEnd.checked ? 'endUtc' : 'deadlineUtc';
 
     // Tyst kontroll är gratis - noll nätverksanrop om något brister.
     if (title.trim().length === 0) { ebFormError('Title cannot be blank.'); return; }
     if (!startLocal || startLocal.length < 16) { ebFormError('Start time is required.'); return; }
-    if (!finishLocal || finishLocal.length < 16) { ebFormError('Finish/deadline time is required.'); return; }
+    if (finishKind !== null && (!finishLocal || finishLocal.length < 16)) {
+      ebFormError('Finish/deadline time is required.'); return;
+    }
 
     // STRÄNGHOPFOGNING, ALDRIG new Date()/Date.parse() på det råa
     // formulärvärdet - det skulle tolkas som lokal tid. Se uppdraget avsnitt 7.
     var startUtc = startLocal.slice(0, 16) + ':00.000Z';
-    var finishUtc = finishLocal.slice(0, 16) + ':00.000Z';
+    var finishUtc = finishKind === null ? null : finishLocal.slice(0, 16) + ':00.000Z';
 
     // Formen är fast bredd (samma antal tecken i bägge strängarna), så en
     // strängjämförelse räcker för "strikt efter" - ingen Date-tolkning
     // behövs för kontrollen heller.
-    if (!(finishUtc > startUtc)) {
+    if (finishKind !== null && !(finishUtc > startUtc)) {
       ebFormError('The finish time must be strictly after the start time.');
       return;
     }
@@ -1657,7 +1699,7 @@
       startUtc: startUtc,
       note: ebFormRefs.note.value
     };
-    eventBody[finishKind] = finishUtc;
+    if (finishKind !== null) eventBody[finishKind] = finishUtc;
 
     ebFormRefs.save.disabled = true;
     var outcome = board.formEventId === null
