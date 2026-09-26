@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PDA
 // @namespace    kingshade.torn
-// @version      1.5.175
+// @version      1.5.176
 // @description  Roster-local PDA presentation with v1.5.145 authority and shared-claim safety.
 // @author       Kingshade
 // @match        https://www.torn.com/factions.php*
@@ -163,6 +163,13 @@
  * actually drifts, and cuts that per-sample growth by ten. No function
  * changes: recordTornWholeSecondMs reads the same CONFIG.tornClockDriftPpm
  * it always has, just a smaller value.
+ * 1.5.176: hotfix, key fields. A member reported 2026-09-26 (Torn PDA,
+ * iPhone) that the keyboard would not come up in the key field. Since
+ * 1.5.173 updatePanel() re-inserted the key button and editor into the
+ * panel on every run, about once a second, and re-inserting a focused
+ * input drops its focus. The relocate block in updatePanel() now only
+ * moves a node that is not already in place. Nothing else changes: same
+ * positions, same locks, same storage, same network calls, DIBS untouched.
  */
 
 (() => {
@@ -170,8 +177,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs",
-    version: "1.5.175",
-    instanceKey: "__ksTornWarDibsPdaV15175Test",
+    version: "1.5.176",
+    instanceKey: "__ksTornWarDibsPdaV15176Test",
     layerId: "ks-twd-pda-layer",
     rowHostPrefix: "ks-twd-pda-row-",
     panelId: "ks-twd-pda-panel",
@@ -5219,22 +5226,47 @@
     const noteAnchor = $("note");
     const ffKeyMissing = !sharedApiKey;
     const tornKeyMissing = !effectiveTornApiKey();
+    //
+    // 1.5.176: this block only moves a node when it is not already where it
+    // belongs. updatePanel() runs about once a second (rowRefreshTimer ->
+    // renderRegisteredRows), and the old code re-inserted the key button and
+    // editor on every run. Re-inserting a focused <input> takes its focus
+    // away, and on a phone that closes the keyboard, so a member without a
+    // key could not type one in. The final positions are exactly the ones
+    // the old code produced: in the breakout slot FF pair then Torn pair; in
+    // Settings FF button, Torn button, Create custom API key, and FF editor,
+    // Torn editor, LIVE note. The "OK" checks below accept that order, so no
+    // state moves anything once it has settled -- including both keys set,
+    // where the two pairs share one anchor.
+    const ksPairInBreakout = (button, editor) =>
+      button.parentNode === keyBreakout && button.nextElementSibling === editor;
+    const ksNodeBeforeAnchor = (node, anchor, sibling) =>
+      anchor.previousElementSibling === node ||
+      (anchor.previousElementSibling === sibling && sibling.previousElementSibling === node);
     if (keyBreakout && keyButton && keyEditor && createKeyAnchor && noteAnchor) {
       if (ffKeyMissing) {
-        keyBreakout.appendChild(keyButton);
-        keyBreakout.appendChild(keyEditor);
+        if (!ksPairInBreakout(keyButton, keyEditor) ||
+            (tornKeyMissing && tornKeyButton && tornKeyButton.parentNode === keyBreakout &&
+              keyEditor.nextElementSibling !== tornKeyButton)) {
+          keyBreakout.appendChild(keyButton);
+          keyBreakout.appendChild(keyEditor);
+        }
       } else {
-        createKeyAnchor.before(keyButton);
-        noteAnchor.before(keyEditor);
+        if (!ksNodeBeforeAnchor(keyButton, createKeyAnchor, tornKeyButton)) createKeyAnchor.before(keyButton);
+        if (!ksNodeBeforeAnchor(keyEditor, noteAnchor, tornKeyEditor)) noteAnchor.before(keyEditor);
       }
     }
     if (keyBreakout && tornKeyButton && tornKeyEditor && createKeyAnchor && noteAnchor) {
       if (tornKeyMissing) {
-        keyBreakout.appendChild(tornKeyButton);
-        keyBreakout.appendChild(tornKeyEditor);
+        if (!ksPairInBreakout(tornKeyButton, tornKeyEditor) ||
+            (ffKeyMissing && keyEditor && keyEditor.parentNode === keyBreakout &&
+              tornKeyButton.previousElementSibling !== keyEditor)) {
+          keyBreakout.appendChild(tornKeyButton);
+          keyBreakout.appendChild(tornKeyEditor);
+        }
       } else {
-        createKeyAnchor.before(tornKeyButton);
-        noteAnchor.before(tornKeyEditor);
+        if (createKeyAnchor.previousElementSibling !== tornKeyButton) createKeyAnchor.before(tornKeyButton);
+        if (noteAnchor.previousElementSibling !== tornKeyEditor) noteAnchor.before(tornKeyEditor);
       }
     }
     if (keyBreakout) keyBreakout.hidden = !ffKeyMissing && !tornKeyMissing;
