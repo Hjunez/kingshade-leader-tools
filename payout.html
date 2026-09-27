@@ -460,7 +460,7 @@
 
     var state = {
       pot: 0, fixedRate: 0, cut: 0, minCount: 0,
-      basis: 'hits', mode: 'pool', members: []
+      basis: 'hits', mode: 'pool', members: [], war: null
     };
 
     var wars = [];
@@ -489,6 +489,10 @@
     function money(n) { return '$' + Math.round(n).toLocaleString('en-US'); }
     function plural(n, one, many) { return n === 1 ? one : many; }
     function countWord() { return state.basis === 'hits' ? 'hits' : 'respect'; }
+    function countWordFor(n) {
+      if (state.basis !== 'hits') return 'respect';
+      return n === 1 ? 'hit' : 'hits';
+    }
     function countWordSingular() { return state.basis === 'hits' ? 'hit' : 'respect'; }
 
     function countOf(member) {
@@ -538,6 +542,15 @@
         });
         state.basis = saved.basis === 'respect' ? 'respect' : 'hits';
         state.mode = saved.mode === 'rate' ? 'rate' : 'pool';
+        var war = saved.war;
+        state.war = war && typeof war === 'object' && !Array.isArray(war) &&
+          typeof war.id === 'number' && typeof war.opponent === 'string' &&
+          typeof war.start === 'number' && ['won', 'lost', 'ongoing'].indexOf(war.outcome) !== -1
+          ? {
+            id: war.id, opponent: war.opponent, start: war.start, outcome: war.outcome,
+            ourScore: typeof war.ourScore === 'number' ? war.ourScore : null,
+            theirScore: typeof war.theirScore === 'number' ? war.theirScore : null
+          } : null;
         if (Array.isArray(saved.members)) {
           state.members = saved.members.map(function (m) {
             return {
@@ -670,6 +683,16 @@
           return;
         }
 
+        var us = (war.factions || []).filter(function (f) { return Number(f.id) === FACTION_ID; })[0];
+        var them = (war.factions || []).filter(function (f) { return Number(f.id) !== FACTION_ID; })[0];
+        var loadedWar = {
+          id: Number(war.id), opponent: (them && them.name) || 'unknown', start: war.start,
+          outcome: war.winner === null || war.winner === undefined ? 'ongoing'
+            : Number(war.winner) === FACTION_ID ? 'won' : 'lost',
+          ourScore: us && typeof us.score === 'number' ? us.score : null,
+          theirScore: them && typeof them.score === 'number' ? them.score : null
+        };
+
         state.members = ours.members
           .filter(function (m) { return (m.attacks || 0) > 0 || (m.score || 0) > 0; })
           .map(function (m) {
@@ -699,6 +722,7 @@
         show(el.okBox, 'Loaded ' + state.members.length + ' ' +
           plural(state.members.length, 'member', 'members') + ' from the war report.');
         render();
+        state.war = loadedWar;
         save();
       } catch (err) {
         show(el.errorBox, err.message);
@@ -837,7 +861,17 @@
 
     function summaryText() {
       var result = calculate();
-      var lines = ['RANKED WAR PAYOUT — PoIitically Incorrect', ''];
+      var lines = ['RANKED WAR PAYOUT — PoIitically Incorrect'];
+      if (state.war !== null) {
+        var warDay = new Date(state.war.start * 1000);
+        var warDate = warDay.getUTCDate() + ' ' +
+          ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][warDay.getUTCMonth()] +
+          ' ' + warDay.getUTCFullYear();
+        lines.push('War: vs ' + state.war.opponent + ' — ' + warDate + ' — ' + state.war.outcome +
+          (typeof state.war.ourScore === 'number' && typeof state.war.theirScore === 'number'
+            ? ' (' + state.war.ourScore + '–' + state.war.theirScore + ')' : ''));
+      }
+      lines.push('');
 
       if (state.mode === 'rate') {
         lines.push('Rate set at ' + money(state.fixedRate) + ' per ' + countWordSingular());
@@ -846,8 +880,9 @@
         lines.push('Cash from caches: ' + money(state.pot));
         lines.push('Rate: ' + money(result.rate) + ' per ' + countWordSingular());
       }
+      lines.push('Total counted: ' + prettyCount(result.totalCount) + ' ' + countWordFor(result.totalCount));
       if (state.cut > 0) lines.push('Faction keeps ' + state.cut + '%: ' + money(result.factionCut));
-      if (state.minCount > 0) lines.push('Minimum to qualify: ' + state.minCount + ' ' + countWord());
+      if (state.minCount > 0) lines.push('Minimum to qualify: ' + state.minCount + ' ' + countWordFor(state.minCount));
       lines.push('');
 
       var eligible = result.payouts.filter(function (p) { return p.eligible; })
@@ -855,7 +890,7 @@
 
       eligible.forEach(function (p) {
         lines.push((p.member.name || 'Unnamed') + ' — ' + prettyCount(p.count) + ' ' +
-          countWord() + ' — ' + money(p.amount));
+          countWordFor(p.count) + ' — ' + money(p.amount));
       });
 
       var skipped = result.payouts.filter(function (p) { return !p.eligible; });
@@ -1010,7 +1045,7 @@
     });
 
     el.clearRoster.addEventListener('click', function () {
-      state.members = []; render(); save();
+      state.members = []; state.war = null; render(); save();
     });
 
     function runImport(replace) {
@@ -1021,6 +1056,7 @@
         return;
       }
       state.members = replace ? parsed : state.members.concat(parsed);
+      if (replace) state.war = null;
       el.pasteBox.value = '';
       el.importToast.className = 'msg ok';
       show(el.importToast, 'Added ' + parsed.length + ' ' +
