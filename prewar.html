@@ -239,6 +239,7 @@
   const FF_API_KEY_PATTERN = /^[A-Za-z0-9]{16}$/;
   const TERMINAL_CODES = new Set([2, 10, 13, 18]);
   const RETRY_CODES = new Set([5, 9, 17]);
+  const WARS_DENIED_CODES = new Set([7, 16]);
   const VALUE_CURVE = [
     [1.0,1.00],[1.2,1.20],[1.4,1.41],[1.6,1.61],[1.8,1.82],[2.0,2.02],[2.1,2.12],
     [2.2,2.22],[2.3,2.31],[2.4,2.39],[2.5,2.45],[2.6,2.50],[2.7,2.52],[2.8,2.51],
@@ -346,7 +347,7 @@
   function describeError(code) {
     if (code === 2) return 'Torn rejected the key. Check it was copied whole.';
     if (code === 7) return 'Your faction position is not allowed to see this. That is a faction permission, not a key setting.';
-    if (code === 16) return 'The key is missing a selection this call needs (faction members, or faction wars).';
+    if (code === 16) return 'The key is missing a selection this call needs (faction members).';
     if (code === 13) return 'This key is disabled after seven days of account inactivity.';
     if (code === 10) return 'The key owner is in federal jail, so the key cannot be used.';
     if (code === 18) return 'This key has been paused by its owner.';
@@ -410,7 +411,7 @@
       return { id, name: cleanText(row.name) || ('#' + id), level, position: cleanText(row.position) };
     });
   }
-  function chooseOpponent(payload, typed) {
+  function chooseOpponent(payload, typed, deniedNote = '') {
     if (!payload.wars || typeof payload.wars !== 'object' || Array.isArray(payload.wars)) throw failure('The wars answer did not have the shape this page expects.');
     const ranked = payload.wars.ranked;
     let side = null, endedNote = '';
@@ -428,12 +429,13 @@
       }
     }
     const id = side ? opponentId(side.id) : linkOpponent || typed;
-    if (!id) return endedNote ? { id: null, note: endedNote } : null;
+    if (!id) return deniedNote ? { id: null, note: deniedNote + ' Enter the opponent faction ID below.' } : endedNote ? { id: null, note: endedNote } : null;
     const name = side ? cleanText(side.name) || ('Faction ' + id) : 'Faction ' + id;
     const start = side && Number.isSafeInteger(ranked.start) && ranked.start > 0 && ranked.start * 1000 <= 8640000000000000 ? ranked.start * 1000 : null;
     const source = side ? 'wars' : linkOpponent ? 'link' : 'typed';
     let note = '';
-    if (endedNote) note = endedNote + (source === 'link' ? ' Showing faction ' + id + ' from the link.' : '');
+    if (deniedNote) note = deniedNote + ' Showing faction ' + id + (source === 'link' ? ' from the link.' : ' entered by you.');
+    else if (endedNote) note =endedNote + (source === 'link' ? ' Showing faction ' + id + ' from the link.' : '');
     else if (side && linkOpponent && linkOpponent !== id) note = 'The link named faction ' + linkOpponent + ', but Torn reports the war against ' + name + ' [' + id + ']. Showing Torn\'s.';
     else if (!side) note = 'Torn does not report this war yet. Showing faction ' + id + (source === 'link' ? ' from the link.' : ' entered by you.');
     return { id, name, start, source, note };
@@ -659,7 +661,15 @@
       if (!user || typeof user !== 'object' || !id12(user.id)) throw failure('Torn did not return a readable player identity.');
       if (user.faction_id !== FACTION_ID) throw failure('This key does not belong to a current member of faction ' + FACTION_ID + '. Access denied.', null, true);
       write(KEY_STORE, job.tornKey);
-      const wars = await torn('/faction/wars', job), war = chooseOpponent(wars, job.typed);
+      // A key without the faction wars selection must not stop the page: the link or the field names the opponent.
+      let wars, warsDenied = '';
+      try { wars = await torn('/faction/wars', job); }
+      catch (error) {
+        if (!current(job) || !WARS_DENIED_CODES.has(error.code)) throw error;
+        wars = { wars: {} };
+        warsDenied = 'Your Torn key is not allowed to read faction wars (Torn code ' + error.code + '), so this page cannot check the war itself.';
+      }
+      const war = chooseOpponent(wars, job.typed, warsDenied);
       if (!war || !war.id) {
         snapshot = null; refreshFailure = ''; loading = false;
         placeholders('WAIT'); el.warWho.textContent = 'Opponent: UNKNOWN';
