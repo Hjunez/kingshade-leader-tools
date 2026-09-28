@@ -101,6 +101,7 @@
 
   .field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; }
   .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  #bonusField[hidden], #bonusNoteField[hidden] { display: none; }
 
   .field > label, .legend, label.lbl {
     font-family: var(--display); font-weight: 600; font-size: 12px;
@@ -347,6 +348,18 @@
           <span class="note">Total after selling, before any cut.</span>
         </div>
 
+        <div class="field" id="bonusField">
+          <label for="bonus">Bonus</label>
+          <input type="text" id="bonus" inputmode="numeric" autocomplete="off" placeholder="0">
+          <span class="note">Extra money added to the pot, e.g. a donation. Not cut.</span>
+        </div>
+
+        <div class="field" id="bonusNoteField">
+          <label for="bonusNote">Bonus note</label>
+          <input type="text" id="bonusNote" maxlength="80" autocomplete="off" placeholder="e.g. donated by RabiddogofWar">
+          <span class="note">Optional. Shows in the summary.</span>
+        </div>
+
         <div class="field" id="rateField" hidden>
           <label for="fixedRate">Rate per hit</label>
           <input type="text" id="fixedRate" inputmode="numeric" autocomplete="off" placeholder="0">
@@ -492,7 +505,7 @@
     var STORE_KEY = 'ks-war-payout-v2';
 
     var state = {
-      pot: 0, fixedRate: 0, cut: 0, minCount: 0,
+      pot: 0, bonus: 0, bonusNote: '', fixedRate: 0, cut: 0, minCount: 0,
       basis: 'hits', mode: 'pool', payAssists: false, members: [], war: null
     };
 
@@ -505,6 +518,7 @@
     var el = {};
     ['apiKey','toggleKey','loadWars','forgetKey','warPicker','warSelect','loadReport','errorBox',
      'okBox','cacheBox','pot','fixedRate','cut','minHits','minHitsNote','poolField','rateField',
+     'bonus','bonusNote','bonusField','bonusNoteField',
      'rows','empty','countHead','assistsHead','leadKey','leadValue','leadSub','distributable','cutSub','paidOut',
      'paidSub','remainder','addRow','clearRoster','pasteBox','importAdd','importReplace',
      'importToast','copyBtn','copyToast','loadAllMembers','rosterToast','paidHint','untickPaid']
@@ -579,6 +593,9 @@
         ['pot', 'fixedRate', 'cut', 'minCount'].forEach(function (k) {
           if (typeof saved[k] === 'number') state[k] = saved[k];
         });
+        state.bonus = typeof saved.bonus === 'number' && Number.isFinite(saved.bonus) && saved.bonus >= 0
+          ? saved.bonus : 0;
+        state.bonusNote = typeof saved.bonusNote === 'string' ? saved.bonusNote.trim().slice(0, 80) : '';
         state.basis = saved.basis === 'respect' ? 'respect' : 'hits';
         state.mode = saved.mode === 'rate' ? 'rate' : 'pool';
         state.payAssists = saved.payAssists === true;
@@ -912,7 +929,7 @@
         distributable = rate * totalCount;
         potNeeded = cutFraction < 1 ? distributable / (1 - cutFraction) : 0;
       } else {
-        distributable = state.pot * (1 - cutFraction);
+        distributable = state.pot * (1 - cutFraction) + state.bonus;
         rate = totalCount > 0 ? distributable / totalCount : 0;
         potNeeded = state.pot;
       }
@@ -929,7 +946,7 @@
         qualifiedCount: qualified.length, totalCount: totalCount, rate: rate,
         distributable: distributable, potNeeded: potNeeded,
         factionCut: potNeeded * cutFraction, payouts: payouts, paid: paid,
-        remainder: Math.max(potNeeded - paid, 0)
+        remainder: Math.max(potNeeded + (state.mode === 'pool' ? state.bonus : 0) - paid, 0)
       };
     }
 
@@ -1058,6 +1075,8 @@
       el.rows.parentElement.classList.toggle('with-assists', state.basis === 'hits');
       el.minHitsNote.textContent = 'Less ' + countWord() + ' than this and a member is skipped.';
       el.poolField.hidden = state.mode !== 'pool';
+      el.bonusField.hidden = state.mode !== 'pool';
+      el.bonusNoteField.hidden = state.mode !== 'pool';
       el.rateField.hidden = state.mode !== 'rate';
 
       if (state.mode === 'rate') {
@@ -1078,6 +1097,9 @@
       el.cutSub.textContent = state.cut > 0
         ? money(result.factionCut) + ' held back (' + state.cut + '%)'
         : 'No cut taken';
+      if (state.mode === 'pool' && state.bonus > 0) {
+        el.cutSub.textContent += ' · ' + money(state.bonus) + ' bonus added';
+      }
 
       el.paidOut.textContent = money(result.paid);
       el.paidSub.textContent = result.qualifiedCount + ' of ' + state.members.length + ' ' +
@@ -1118,6 +1140,9 @@
         lines.push('Pot needed: ' + money(result.potNeeded));
       } else {
         lines.push('Cash from caches: ' + money(state.pot));
+        if (state.bonus > 0) {
+          lines.push('Bonus: ' + money(state.bonus) + (state.bonusNote ? ' — ' + state.bonusNote : ''));
+        }
         lines.push('Rate: ' + money(result.rate) + ' per ' + countWordSingular());
       }
       var hasAssists = state.basis === 'hits' && state.members.reduce(function (sum, m) {
@@ -1214,6 +1239,11 @@
     }
 
     bindNumber(el.pot, 'pot');
+    bindNumber(el.bonus, 'bonus');
+    el.bonusNote.addEventListener('input', function () {
+      state.bonusNote = el.bonusNote.value.trim().slice(0, 80);
+      save();
+    });
     bindNumber(el.fixedRate, 'fixedRate');
     bindNumber(el.cut, 'cut');
     bindNumber(el.minHits, 'minCount');
@@ -1387,6 +1417,8 @@
     load();
     el.apiKey.value = readStoredKey();
     el.pot.value = state.pot ? String(state.pot) : '';
+    el.bonus.value = state.bonus ? String(state.bonus) : '';
+    el.bonusNote.value = state.bonusNote;
     el.fixedRate.value = state.fixedRate ? String(state.fixedRate) : '';
     el.cut.value = state.cut ? String(state.cut) : '';
     el.minHits.value = state.minCount ? String(state.minCount) : '';
