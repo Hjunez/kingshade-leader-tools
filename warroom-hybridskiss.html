@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>War Room — hybrid layout (mockup)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Public+Sans:wght@400;500;600;700&family=Saira+Condensed:wght@500;600;700&display=swap">
+<style>
+  :root {
+    color-scheme: dark;
+    --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+    --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+    --line: #26313b; --line-strong: #35434f;
+    --accent: #d8804d; --accent-soft: #2e211a;
+    --good: #46a583; --good-soft: #172a24;
+    --warn: #cc9f3f; --bad: #dd6a61;
+    --display: 'Saira Condensed', 'Arial Narrow', Helvetica, sans-serif;
+    --body: 'Public Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    --cols: 140px 230px 56px 100px 100px 180px 104px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.4; }
+  button { font: inherit; }
+  a { color: var(--accent); }
+  .page { max-width: 1344px; margin: 0 auto; padding: 28px 24px 48px; display: flex; flex-direction: column; gap: 18px; }
+
+  .top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px 24px; flex-wrap: wrap; }
+  .eyebrow { font-family: var(--display); font-weight: 600; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  h1 { margin: 4px 0 0; font-family: var(--display); font-weight: 700; font-size: clamp(28px, 4vw, 40px); line-height: 1; }
+  h1 .vs { color: var(--faint); font-weight: 500; }
+  .live { display: flex; gap: 18px; font-family: var(--mono); font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+  .live span { display: inline-flex; align-items: center; gap: 8px; }
+  .pip { width: 8px; height: 8px; border-radius: 50%; background: var(--good); display: inline-block; }
+
+  .mock { border: 1px dashed var(--line-strong); border-radius: 10px; padding: 10px 14px; font-size: 13px; color: var(--muted); }
+  .mock strong { color: var(--ink); }
+
+  .summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .card .k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  .card .v { font-family: var(--display); font-weight: 700; font-size: 28px; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .s { font-size: 12px; color: var(--muted); }
+  .v small { font-size: 16px; color: var(--muted); font-weight: 500; }
+
+  .chips { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .chips .lead { font-size: 13px; color: var(--muted); margin-right: 4px; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border-radius: 999px; cursor: pointer; font-size: 14px; font-weight: 600; background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); }
+  .chip:hover { border-color: #4a5a68; }
+  .chip .n { font-family: var(--mono); font-size: 12px; padding: 1px 7px; border-radius: 999px; background: var(--line); color: var(--muted); }
+  .chip[aria-pressed="true"] { background: var(--ink); color: var(--ground); border-color: var(--ink); }
+  .chip[aria-pressed="true"] .n { background: var(--ground); color: var(--ink); }
+  .chips .shown { flex-grow: 1; text-align: right; font-size: 13px; color: var(--faint); }
+
+  .layout { display: flex; align-items: flex-start; gap: 24px; }
+  .table { flex-shrink: 0; width: 944px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .head, .row { display: grid; grid-template-columns: var(--cols); align-items: center; padding: 0 16px; }
+  .head { height: 44px; background: var(--surface-2); border-bottom: 1px solid var(--line-strong); }
+  .hbtn, .hcell { font-family: var(--display); font-weight: 600; font-size: 14px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); background: none; border: 0; padding: 0; text-align: left; }
+  .hbtn { cursor: pointer; }
+  .hbtn:hover { color: var(--ink); }
+  .hbtn[aria-sort="ascending"], .hbtn[aria-sort="descending"] { color: var(--accent); }
+  .c-lvl { text-align: right; padding-right: 18px; }
+  .c-mid { text-align: center; }
+  .c-end { text-align: right; }
+
+  .row { min-height: 56px; padding-top: 4px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+  .row:hover { background: var(--surface-2); }
+  .row.claimable { background: var(--good-soft); }
+  .row.mine { background: var(--accent-soft); }
+  .st { display: flex; flex-direction: column; gap: 1px; }
+  .st-l { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+  .st-l.okay { color: var(--good); } .st-l.hosp { color: var(--bad); } .st-l.jail { color: var(--warn); } .st-l.abroad { color: var(--muted); }
+  .st-t { font-family: var(--mono); font-size: 14px; font-weight: 600; }
+  .who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .dot { flex-shrink: 0; width: 10px; height: 10px; border-radius: 50%; background: #4a5a68; }
+  .dot.online { background: var(--good); box-shadow: 0 0 0 3px rgba(70,165,131,.18); }
+  .dot.idle { background: var(--warn); }
+  .names { display: flex; flex-direction: column; min-width: 0; }
+  .nm { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sub { font-size: 12px; color: var(--faint); white-space: nowrap; }
+  .mstat { display: none; font-size: 12px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mstat b { font-weight: 600; }
+  .mstat b.okay { color: var(--good); } .mstat b.hosp { color: var(--bad); } .mstat b.jail { color: var(--warn); } .mstat b.abroad { color: var(--muted); }
+  .lvl { font-family: var(--mono); font-size: 14px; color: var(--muted); text-align: right; padding-right: 18px; }
+  .ff { font-family: var(--mono); font-size: 14px; font-weight: 600; text-align: center; padding: 8px 0; }
+  .ff.out { opacity: .55; }
+  .dibs-w { display: flex; justify-content: center; }
+  .dibs { width: 164px; min-height: 44px; border-radius: 8px; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; letter-spacing: .04em; cursor: pointer; border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--muted); padding: 2px 6px; }
+  .dibs .ds { font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: 0; }
+  .dibs:disabled { cursor: default; }
+  .dibs.open { background: var(--good); border-color: var(--good); color: var(--ground); }
+  .dibs.mine { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+  .dibs.na { background: transparent; border-style: dashed; color: var(--faint); font-weight: 600; }
+  .dibs:not(:disabled):hover { filter: brightness(1.12); }
+  .atk-w { display: flex; justify-content: flex-end; }
+  .atk { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--accent); text-decoration: none; font-weight: 600; font-size: 14px; }
+  .atk:hover { background: var(--accent-soft); }
+
+  aside { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+  .panel h2 { margin: 0; font-family: var(--display); font-weight: 600; font-size: 15px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .ph { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .meta { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .note { font-size: 12px; color: var(--faint); }
+  .chain { display: flex; align-items: baseline; justify-content: space-between; }
+  .chain .big { font-family: var(--display); font-weight: 700; font-size: 40px; line-height: 1; }
+  .chain .left { font-family: var(--mono); font-size: 22px; font-weight: 600; }
+  .chain .left.low { color: var(--bad); }
+  .bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .bar i { display: block; height: 6px; width: 95%; background: var(--good); }
+  .claim { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); }
+  .claim.me { background: var(--accent-soft); }
+  .claim .t { font-size: 15px; font-weight: 600; }
+  .claim .b { font-size: 12px; color: var(--muted); }
+  .claim.me .b { color: var(--accent); font-weight: 600; }
+  .claim .l { font-family: var(--mono); font-size: 15px; font-weight: 600; }
+  .side { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .side div { background: var(--surface-2); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; }
+  .side span { font-size: 12px; color: var(--muted); }
+  .side b { font-family: var(--display); font-weight: 700; font-size: 26px; line-height: 1.1; }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  @media (max-width: 1320px) {
+    .layout { flex-direction: column; align-items: stretch; }
+    .table { width: 100%; }
+    aside { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  @media (max-width: 980px) {
+    .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    aside { grid-template-columns: 1fr; }
+    :root { --cols: minmax(0, 1fr) 54px 96px 44px; }
+    .c-lvl, .lvl, .c-est, .est, .st, .hbtn[data-sort="next"] { display: none; }
+    .hcell.c-end { visibility: hidden; }
+    .mstat { display: block; }
+    .sub { display: none; }
+    .card .v { font-size: 24px; white-space: normal; }
+    .dibs.na .ds { display: none; }
+    .dibs { font-size: 12px; }
+    .page { padding: 16px 12px 40px; }
+    .head, .row { padding-left: 8px; padding-right: 8px; column-gap: 6px; }
+    .dibs { width: 100%; font-size: 12px; }
+    .atk { width: 44px; height: 44px; padding: 0; justify-content: center; }
+    .atk .atk-txt { display: none; }
+    .chips .shown { text-align: left; flex-basis: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="top">
+    <div>
+      <div class="eyebrow">KS War Room · Ranked War</div>
+      <h1>Politically Incorrect <span class="vs">vs</span> Iron Wolves</h1>
+    </div>
+    <div class="live">
+      <span><i class="pip"></i><span id="roster">Roster 0 s ago · next 30 s</span></span>
+      <span><i class="pip"></i>Claims live</span>
+    </div>
+  </div>
+
+  <div class="mock"><strong>Layout mockup.</strong> All names and numbers are made up, and nothing here talks to Torn or to any server. Try it: sort by clicking a column heading, filter with the buttons, and press a green DIBS.</div>
+
+  <div class="summary">
+    <div class="card"><span class="k">Score</span><span class="v"><span style="color:var(--good)">10,597</span> <small>/</small> <span style="color:var(--bad)">14,749</span></span><span class="s">Lead target 4,152 / 7,600</span></div>
+    <div class="card"><span class="k">Okay now</span><span class="v" id="sOkay" style="color:var(--good)">0</span><span class="s">out of hospital, hittable</span></div>
+    <div class="card"><span class="k">Out within 2:00</span><span class="v" id="sSoon" style="color:var(--warn)">0</span><span class="s">DIBS open on these</span></div>
+    <div class="card"><span class="k">Enemies online</span><span class="v"><span id="sOnline">0</span> <small id="sIdle">· 0 idle</small></span><span class="s" id="sAll">of 0 members</span></div>
+    <div class="card"><span class="k">Your DIBS</span><span class="v" id="sMine" style="color:var(--accent)">None</span><span class="s" id="sMineSub">one DIBS per member</span></div>
+  </div>
+
+  <div class="chips" id="chips">
+    <span class="lead">Show only</span>
+    <button type="button" class="chip" data-f="ff" aria-pressed="false">FF 2–5 <span class="n">0</span></button>
+    <button type="button" class="chip" data-f="claim" aria-pressed="false">Claimable now <span class="n">0</span></button>
+    <button type="button" class="chip" data-f="online" aria-pressed="false">Online <span class="n">0</span></button>
+    <button type="button" class="chip" data-f="travel" aria-pressed="false">Hide travelling <span class="n">0</span></button>
+    <span class="shown" id="shown"></span>
+  </div>
+
+  <div class="layout">
+    <div class="table" role="table" aria-label="Enemy members">
+      <div class="head" role="row">
+        <button type="button" class="hbtn" data-sort="next">Status</button>
+        <button type="button" class="hbtn" data-sort="act" data-short="Player">Player · activity</button>
+        <button type="button" class="hbtn c-lvl" data-sort="lvl">Lvl</button>
+        <button type="button" class="hbtn c-mid" data-sort="ff">FF</button>
+        <button type="button" class="hbtn c-mid c-est" data-sort="est">Est</button>
+        <span class="hcell c-mid">DIBS</span>
+        <span class="hcell c-end">Attack</span>
+      </div>
+      <div id="rows"></div>
+    </div>
+
+    <aside aria-label="Board">
+      <section class="panel">
+        <div class="ph"><h2>Our chain</h2><span class="meta">next bonus 100</span></div>
+        <div class="chain"><span class="big">95</span><span class="left" id="chainLeft">4:40</span></div>
+        <div class="bar"><i></i></div>
+        <span class="note">Timer resets on every hit. Turns red under 1:00.</span>
+      </section>
+      <section class="panel">
+        <div class="ph"><h2>Active DIBS</h2><span class="meta" id="claimCount">0 held</span></div>
+        <div id="claims" style="display:flex;flex-direction:column;gap:8px"></div>
+        <span class="note">Released at 5:00, or as soon as Torn shows the target back in hospital.</span>
+      </section>
+      <section class="panel">
+        <h2>Our side</h2>
+        <div class="side">
+          <div><span>Online</span><b style="color:var(--good)">18</b></div>
+          <div><span>Idle</span><b style="color:var(--warn)">7</b></div>
+          <div><span>In hospital</span><b style="color:var(--bad)">9</b></div>
+          <div><span>Travelling</span><b>3</b></div>
+        </div>
+        <span class="note">of 86 members · 49 offline</span>
+      </section>
+    </aside>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var GATE = 120, TTL = 300;
+  var BASE = [
+    { id: 1, name: 'Ashvale', st: 'okay', rem: 0, lvl: 41, ff: 2.62, est: 212e3, act: 'online', ago: 0 },
+    { id: 2, name: 'Brindle_K', st: 'hosp', rem: 74, lvl: 38, ff: 3.14, est: 480e3, act: 'idle', ago: 6 },
+    { id: 3, name: 'Corvax', st: 'hosp', rem: 109, lvl: 52, ff: 4.41, est: 1.21e6, act: 'offline', ago: 190 },
+    { id: 4, name: 'Dunmore', st: 'hosp', rem: 95, lvl: 44, ff: 2.93, est: 350e3, act: 'offline', ago: 21, claimBy: 'Osric', claimLeft: 212 },
+    { id: 5, name: 'Emberly', st: 'hosp', rem: 168, lvl: 29, ff: 2.21, est: 140e3, act: 'online', ago: 0 },
+    { id: 6, name: 'Fenwick', st: 'hosp', rem: 402, lvl: 47, ff: 3.82, est: 690e3, act: 'idle', ago: 12 },
+    { id: 7, name: 'Galen_R', st: 'okay', rem: 0, lvl: 60, ff: 6.31, est: 3.52e6, act: 'online', ago: 0 },
+    { id: 8, name: 'Harrow', st: 'hosp', rem: 1250, lvl: 33, ff: 2.44, est: 205e3, act: 'offline', ago: 2880 },
+    { id: 9, name: 'Isolde', st: 'abroad', rem: 0, lvl: 36, ff: 2.81, est: 300e3, act: 'offline', ago: 240, where: 'Mexico' },
+    { id: 10, name: 'Jaskier_9', st: 'hosp', rem: 3480, lvl: 55, ff: 5.62, est: 2.61e6, act: 'offline', ago: 51 },
+    { id: 11, name: 'Kestrel', st: 'okay', rem: 0, lvl: 23, ff: 1.58, est: 90e3, act: 'idle', ago: 3 },
+    { id: 12, name: 'Lorne', st: 'jail', rem: 900, lvl: 40, ff: 3.33, est: 520e3, act: 'offline', ago: 64 },
+    { id: 13, name: 'Mireth', st: 'hosp', rem: 58, lvl: 31, ff: 2.37, est: 176e3, act: 'online', ago: 0, claimBy: 'Tamsin', claimLeft: 141 },
+    { id: 14, name: 'Nyx_07', st: 'hosp', rem: 812, lvl: 48, ff: 4.12, est: 1.04e6, act: 'online', ago: 0 }
+  ];
+  var state = { t: 0, sort: 'next', dir: 1, f: { ff: false, claim: false, online: false, travel: false }, mine: null };
+  var current = {};
+  var rowEls = {};
+  var rowsHost = document.getElementById('rows');
+  var phone = window.matchMedia('(max-width: 980px)');
+
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function clock(s) {
+    s = Math.max(0, Math.floor(s));
+    var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+    return h > 0 ? h + ':' + pad(m) + ':' + pad(x) : m + ':' + pad(x);
+  }
+  function agoText(min) {
+    if (min < 60) return min + 'm ago';
+    if (min < 1440) return Math.floor(min / 60) + 'h ago';
+    return Math.floor(min / 1440) + 'd ago';
+  }
+  function estText(v) {
+    if (v >= 1e6) return (v / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'm';
+    return Math.round(v / 1e3) + 'k';
+  }
+  function tint(ff) {
+    var hue = Math.max(0, Math.min(240, 240 - (ff - 1) * 60));
+    var c = 'hsl(' + Math.round(hue) + ', 55%, 26%)';
+    return 'linear-gradient(90deg, rgba(23,31,39,0) 0%, ' + c + ' 22%, ' + c + ' 78%, rgba(23,31,39,0) 100%)';
+  }
+
+  function computeList() {
+    var t = state.t, mine = state.mine;
+    return BASE.map(function (b) {
+      var r = Object.assign({}, b);
+      if (r.st === 'hosp' || r.st === 'jail') { r.rem -= t; if (r.rem <= 0) { r.st = 'okay'; r.rem = 0; } }
+      if (r.claimBy) { r.claimLeft -= t; if (r.claimLeft <= 0) r.claimBy = null; }
+      if (mine && mine.id === r.id) { r.claimBy = 'you'; r.claimLeft = TTL - (t - mine.at); if (r.claimLeft <= 0) { r.claimBy = null; state.mine = null; } }
+      r.inFF = r.ff >= 2 && r.ff <= 5;
+      r.open = r.st === 'okay' || (r.st === 'hosp' && r.rem <= GATE);
+      r.claimable = r.open && r.inFF && !r.claimBy;
+      return r;
+    });
+  }
+
+  function makeRow(id) {
+    var el = document.createElement('div');
+    el.className = 'row';
+    el.setAttribute('role', 'row');
+    el.innerHTML =
+      '<div class="st"><span class="st-l"></span><span class="st-t"></span></div>' +
+      '<div class="who"><span class="dot"></span><div class="names"><span class="nm"></span><span class="sub"></span><span class="mstat"><b></b><span class="mrest"></span></span></div></div>' +
+      '<span class="lvl"></span><span class="ff ffv"></span><span class="ff est"></span>' +
+      '<div class="dibs-w"><button type="button" class="dibs"><span class="dl"></span><span class="ds"></span></button></div>' +
+      '<div class="atk-w"><a href="#" class="atk" aria-label="Attack (disabled in mockup)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 2v5M12 17v5M2 12h5M17 12h5"></path></svg><span class="atk-txt">Attack</span></a></div>';
+    var refs = {
+      el: el, stl: el.querySelector('.st-l'), stt: el.querySelector('.st-t'), dot: el.querySelector('.dot'),
+      nm: el.querySelector('.nm'), mb: el.querySelector('.mstat b'), mrest: el.querySelector('.mrest'), sub: el.querySelector('.sub'), lvl: el.querySelector('.lvl'),
+      ff: el.querySelector('.ffv'), est: el.querySelector('.est'), btn: el.querySelector('.dibs'),
+      dl: el.querySelector('.dl'), ds: el.querySelector('.ds'), atk: el.querySelector('.atk')
+    };
+    refs.btn.addEventListener('click', function () { onDibs(id); });
+    refs.atk.addEventListener('click', function (e) { e.preventDefault(); });
+    return refs;
+  }
+
+  function onDibs(id) {
+    var r = current[id];
+    if (!r) return;
+    if (r.claimBy === 'you') { state.mine = null; render(); return; }
+    var holding = Object.keys(current).some(function (k) { return current[k].claimBy === 'you'; });
+    if (r.claimable && !holding) { state.mine = { id: id, at: state.t }; render(); }
+  }
+
+  function setText(node, text) { if (node.textContent !== text) node.textContent = text; }
+  function setClass(node, cls) { if (node.className !== cls) node.className = cls; }
+
+  function updateRow(ref, r, holdingName) {
+    var stClass = { okay: 'okay', hosp: 'hosp', jail: 'jail', abroad: 'abroad' }[r.st];
+    setClass(ref.stl, 'st-l ' + stClass);
+    setText(ref.stl, { okay: 'Okay', hosp: 'Hospital', jail: 'Jail', abroad: 'Abroad' }[r.st]);
+    setText(ref.stt, r.st === 'okay' ? 'now' : r.st === 'abroad' ? r.where : clock(r.rem));
+    setClass(ref.dot, 'dot ' + r.act);
+    ref.dot.setAttribute('aria-label', r.act);
+    setText(ref.nm, r.name);
+    setText(ref.sub, r.act === 'online' ? '' : (r.act === 'idle' ? 'Idle · ' : 'Offline · ') + agoText(r.ago));
+    ref.sub.hidden = r.act === 'online';
+    setClass(ref.mb, stClass);
+    setText(ref.mb, ({ okay: 'Okay', hosp: 'Hosp ', jail: 'Jail ', abroad: 'Abroad' }[r.st]) + (r.st === 'hosp' || r.st === 'jail' ? clock(r.rem) : ''));
+    setText(ref.mrest, r.act === 'online' ? '' : ' · ' + (r.act === 'idle' ? 'idle ' : 'off ') + agoText(r.ago));
+    setText(ref.lvl, String(r.lvl));
+    setText(ref.ff, r.ff.toFixed(2));
+    setText(ref.est, estText(r.est));
+    var bg = tint(r.ff);
+    if (ref.ff.style.background !== bg) { ref.ff.style.background = bg; ref.est.style.background = bg; }
+    setClass(ref.ff, 'ff ffv' + (r.inFF ? '' : ' out'));
+    setClass(ref.est, 'ff est' + (r.inFF ? '' : ' out'));
+
+    var label, sub, cls = 'dibs', disabled = true;
+    if (r.claimBy === 'you') { label = 'YOURS · ' + clock(r.claimLeft); sub = 'tap to release'; cls += ' mine'; disabled = false; }
+    else if (r.claimBy) { label = 'TAKEN'; sub = r.claimBy + ' · ' + clock(r.claimLeft); }
+    else if (!r.inFF) { label = 'FF out of range'; sub = 'window 2.00–5.00'; cls += ' na'; }
+    else if (r.st === 'abroad' || r.st === 'jail') { label = r.st === 'abroad' ? 'Travelling' : 'In jail'; sub = 'not claimable'; cls += ' na'; }
+    else if (r.st === 'hosp' && r.rem > GATE) { label = 'DIBS'; sub = 'opens in ' + clock(r.rem - GATE); }
+    else if (holdingName) { label = 'DIBS'; sub = 'you hold ' + holdingName; }
+    else { label = 'DIBS'; sub = r.st === 'okay' ? 'open now' : 'open'; cls += ' open'; disabled = false; }
+    setClass(ref.btn, cls);
+    if (ref.btn.disabled !== disabled) ref.btn.disabled = disabled;
+    setText(ref.dl, label);
+    setText(ref.ds, sub);
+
+    var rowCls = 'row' + (r.claimBy === 'you' ? ' mine' : (r.claimable && !holdingName ? ' claimable' : ''));
+    setClass(ref.el, rowCls);
+    ref.el.title = r.name + ' · level ' + r.lvl;
+  }
+
+  function render() {
+    var list = computeList();
+    current = {};
+    list.forEach(function (r) { current[r.id] = r; });
+    var mineRow = list.filter(function (r) { return r.claimBy === 'you'; })[0];
+    var f = state.f;
+
+    var counts = {
+      ff: list.filter(function (r) { return r.inFF; }).length,
+      claim: list.filter(function (r) { return r.claimable; }).length,
+      online: list.filter(function (r) { return r.act === 'online'; }).length,
+      travel: list.filter(function (r) { return r.st === 'abroad'; }).length
+    };
+    var rows = list.filter(function (r) {
+      return (!f.ff || r.inFF) && (!f.claim || r.claimable) && (!f.online || r.act === 'online') && (!f.travel || r.st !== 'abroad');
+    });
+    var rank = { okay: 0, hosp: 1, jail: 2, abroad: 3 };
+    var keyFn = {
+      next: function (r) { return rank[r.st] * 1e6 + r.rem; },
+      act: function (r) { return (r.act === 'online' ? 0 : r.act === 'idle' ? 1 : 2) * 1e6 + r.ago; },
+      lvl: function (r) { return r.lvl; }, ff: function (r) { return r.ff; }, est: function (r) { return r.est; }
+    }[state.sort];
+    rows.sort(function (a, b) { return (keyFn(a) - keyFn(b)) * state.dir || a.id - b.id; });
+
+    var wanted = rows.map(function (r) { return r.id; });
+    rows.forEach(function (r) {
+      if (!rowEls[r.id]) rowEls[r.id] = makeRow(r.id);
+      updateRow(rowEls[r.id], r, mineRow ? mineRow.name : '');
+    });
+    // Reorder only when the order actually changed, so rows are not moved under a press.
+    var present = Array.prototype.map.call(rowsHost.children, function (el) { return el; });
+    var sameOrder = present.length === wanted.length && wanted.every(function (id, i) { return present[i] === rowEls[id].el; });
+    if (!sameOrder) {
+      present.forEach(function (el) { if (wanted.every(function (id) { return rowEls[id].el !== el; })) el.remove(); });
+      wanted.forEach(function (id) { rowsHost.appendChild(rowEls[id].el); });
+    }
+
+    document.querySelectorAll('.hbtn').forEach(function (b) {
+      var active = b.getAttribute('data-sort') === state.sort;
+      if (active) b.setAttribute('aria-sort', state.dir === 1 ? 'ascending' : 'descending'); else b.removeAttribute('aria-sort');
+      var full = b.getAttribute('data-label') || b.textContent.replace(/ [▲▼]$/, '');
+      b.setAttribute('data-label', full);
+      var base = (phone.matches && b.getAttribute('data-short')) || full;
+      setText(b, base + (active ? (state.dir === 1 ? ' ▲' : ' ▼') : ''));
+    });
+    document.querySelectorAll('.chip').forEach(function (c) {
+      var k = c.getAttribute('data-f');
+      c.setAttribute('aria-pressed', f[k] ? 'true' : 'false');
+      setText(c.querySelector('.n'), String(counts[k]));
+    });
+    setText(document.getElementById('shown'), 'Showing ' + rows.length + ' of ' + list.length + ' · click a column heading to sort');
+
+    setText(document.getElementById('sOkay'), String(list.filter(function (r) { return r.st === 'okay'; }).length));
+    setText(document.getElementById('sSoon'), String(list.filter(function (r) { return r.st === 'hosp' && r.rem <= GATE; }).length));
+    setText(document.getElementById('sOnline'), String(counts.online));
+    setText(document.getElementById('sIdle'), '· ' + list.filter(function (r) { return r.act === 'idle'; }).length + ' idle');
+    setText(document.getElementById('sAll'), 'of ' + list.length + ' members');
+    setText(document.getElementById('sMine'), mineRow ? mineRow.name : 'None');
+    setText(document.getElementById('sMineSub'), mineRow ? 'releases in ' + clock(mineRow.claimLeft) + ' or when re-hospitalised' : 'one DIBS per member');
+
+    var held = list.filter(function (r) { return r.claimBy; }).sort(function (a, b) { return a.claimLeft - b.claimLeft; });
+    setText(document.getElementById('claimCount'), held.length + ' held');
+    var host = document.getElementById('claims');
+    var html = held.length ? held.map(function (r) {
+      var me = r.claimBy === 'you';
+      return '<div class="claim' + (me ? ' me' : '') + '"><div><div class="t"></div><div class="b"></div></div><span class="l"></span></div>';
+    }).join('') : '<span class="note">No active DIBS right now.</span>';
+    if (host.getAttribute('data-shape') !== String(held.length) + held.map(function (r) { return r.id + (r.claimBy === 'you' ? 'y' : ''); }).join(',')) {
+      host.innerHTML = html;
+      host.setAttribute('data-shape', String(held.length) + held.map(function (r) { return r.id + (r.claimBy === 'you' ? 'y' : ''); }).join(','));
+    }
+    Array.prototype.forEach.call(host.querySelectorAll('.claim'), function (el, i) {
+      var r = held[i];
+      setText(el.querySelector('.t'), r.name);
+      setText(el.querySelector('.b'), r.claimBy === 'you' ? 'You' : 'held by ' + r.claimBy);
+      setText(el.querySelector('.l'), clock(r.claimLeft));
+    });
+
+    var chainLeft = 280 - (state.t % 280);
+    var cl = document.getElementById('chainLeft');
+    setText(cl, clock(chainLeft));
+    setClass(cl, 'left' + (chainLeft < 60 ? ' low' : ''));
+    var age = state.t % 30;
+    setText(document.getElementById('roster'), 'Roster ' + age + ' s ago · next ' + (30 - age) + ' s');
+  }
+
+  document.querySelectorAll('.hbtn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var k = b.getAttribute('data-sort');
+      if (state.sort === k) state.dir = -state.dir;
+      else { state.sort = k; state.dir = (k === 'ff' || k === 'est' || k === 'lvl') ? -1 : 1; }
+      render();
+    });
+  });
+  document.querySelectorAll('.chip').forEach(function (c) {
+    c.addEventListener('click', function () {
+      var k = c.getAttribute('data-f');
+      state.f[k] = !state.f[k];
+      render();
+    });
+  });
+
+  render();
+  setInterval(function () { state.t += 1; render(); }, 1000);
+})();
+</script>
+</body>
+</html>
