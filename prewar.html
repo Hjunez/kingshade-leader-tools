@@ -1,0 +1,780 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Pre-war Matchup</title>
+<style>
+  :root {
+    color-scheme: light;
+    --ground: #eaedf1; --surface: #ffffff; --surface-2: #f4f6f9;
+    --ink: #14202b; --muted: #5c6d7e; --faint: #8b9aa8;
+    --line: #d3dae1; --line-strong: #b8c3cd;
+    --accent: #a3512a; --accent-ink: #ffffff; --accent-soft: #f2ded4;
+    --good: #1c7355; --good-soft: #dfeee8;
+    --warn: #8c6210; --warn-soft: #f6ecd6;
+    --bad: #a12f2a; --bad-soft: #f6dedc;
+    --display: 'Saira Condensed', 'Arial Narrow', Helvetica, sans-serif;
+    --body: 'Public Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+      --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+      --line: #26313b; --line-strong: #35434f;
+      --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+      --good: #46a583; --good-soft: #172a24;
+      --warn: #cc9f3f; --warn-soft: #2a2417;
+      --bad: #dd6a61; --bad-soft: #2c1b1a;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+    --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+    --line: #26313b; --line-strong: #35434f;
+    --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+    --good: #46a583; --good-soft: #172a24;
+    --warn: #cc9f3f; --warn-soft: #2a2417;
+    --bad: #dd6a61; --bad-soft: #2c1b1a;
+  }
+  * { box-sizing: border-box; letter-spacing: 0; }
+  body { margin: 0; background: var(--ground); color: var(--ink); font: 15px/1.5 var(--body); }
+  .wrap { max-width: 1180px; margin: auto; padding: 24px 20px 56px; }
+  .wrap > *, .columns > *, .key-grid > * { min-width: 0; }
+  a { color: var(--accent); text-underline-offset: 3px; overflow-wrap: anywhere; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  h1, h2, h3 { font-family: var(--display); line-height: 1.2; margin: 0; }
+  h1 { font-size: 34px; } h2 { font-size: 24px; } h3 { font-size: 20px; }
+  p { margin: 8px 0; overflow-wrap: anywhere; }
+  .backbar { margin-bottom: 18px; }
+  .masthead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 18px; border-bottom: 2px solid var(--line-strong); }
+  .stamp { color: var(--accent); font-size: 13px; }
+  section { padding: 24px 0; border-bottom: 1px solid var(--line-strong); }
+  .key-grid, .columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
+  label { display: block; font-weight: 600; margin-bottom: 7px; }
+  input { min-width: 0; width: 100%; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 3px; background: var(--surface); color: var(--ink); font: 15px var(--mono); }
+  .key-entry { display: flex; gap: 8px; }
+  .key-entry input { flex: 1; }
+  .key-entry button { flex-shrink: 0; }
+  button { min-height: 42px; padding: 8px 14px; border: 1px solid var(--line-strong); border-radius: 3px; background: var(--surface); color: var(--ink); font: 600 14px var(--body); cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: .6; cursor: default; }
+  .primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); min-width: 148px; }
+  .quiet { background: transparent; margin-top: 6px; padding: 4px 0; border-color: transparent; color: var(--muted); }
+  .note { color: var(--muted); font-size: 13px; }
+  .field-error { color: var(--bad); font-size: 13px; }
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; }
+  .msg { padding: 12px 14px; border-left: 3px solid var(--bad); background: var(--bad-soft); color: var(--bad); }
+  #staleBar { border-color: var(--warn); background: var(--warn-soft); color: var(--warn); margin-top: 20px; }
+  #warWho { font-size: 26px; }
+  #countdown { font: 15px var(--mono); color: var(--accent); }
+  #opponentForm { max-width: 420px; margin-top: 12px; }
+  .section-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: baseline; margin-bottom: 14px; }
+  .metrics { margin: 12px 0 18px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; }
+  dt { color: var(--muted); } dd { margin: 0; overflow-wrap: anywhere; }
+  .metrics dd { font-family: var(--mono); text-align: right; }
+  .class-list { list-style: none; padding: 0; margin: 10px 0 20px; }
+  .class-list li { position: relative; isolation: isolate; display: flex; justify-content: space-between; gap: 10px; padding: 5px 8px; margin-bottom: 3px; font-size: 13px; }
+  .class-list .bar { position: absolute; z-index: -1; inset: 0 auto 0 0; background: var(--accent-soft); }
+  .columns > div:last-child .bar { background: var(--warn-soft); }
+  .table-scroll { max-width: 100%; overflow-x: auto; border: 1px solid var(--line); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; }
+  th { background: var(--surface-2); color: var(--muted); font-size: 12px; text-align: left; }
+  th, td { padding: 11px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: 0; }
+  .target-table { min-width: 680px; }
+  .top-table { min-width: 340px; }
+  .danger-table { min-width: 600px; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .name-cell { min-width: 210px; max-width: 360px; overflow-wrap: anywhere; }
+  .name-cell a { font-weight: 600; color: var(--ink); }
+  .sub { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; }
+  .pill { display: inline-block; padding: 3px 7px; border-radius: 2px; font-size: 12px; white-space: nowrap; }
+  .pill.good { color: var(--good); background: var(--good-soft); }
+  .pill.warn { color: var(--warn); background: var(--warn-soft); }
+  .pill.bad { color: var(--bad); background: var(--bad-soft); }
+  .pill.faint { color: var(--faint); background: var(--surface-2); }
+  .empty { padding: 16px 0; color: var(--muted); }
+  details { padding: 14px 0; border-bottom: 1px solid var(--line); }
+  summary { cursor: pointer; font-weight: 600; }
+  details dl { display: grid; grid-template-columns: minmax(150px, .4fr) minmax(0, 1fr); gap: 8px 20px; font-size: 14px; }
+  code { font-family: var(--mono); overflow-wrap: anywhere; }
+  footer { padding-top: 18px; }
+  [hidden] { display: none !important; }
+  @media (max-width: 700px) {
+    .wrap { padding: 18px 14px 40px; }
+    .key-grid, .columns { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+    h1 { font-size: 30px; }
+    details dl { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+    details dd { margin-bottom: 9px; }
+    .target-table, .danger-table { min-width: 480px; table-layout: fixed; }
+    .target-table th, .target-table td, .danger-table th, .danger-table td { padding: 9px 8px; }
+    .target-table .name-cell, .danger-table .name-cell { min-width: 0; max-width: none; }
+    .target-table [data-column="name"], .danger-table [data-column="name"] { width: 140px; }
+    .target-table [data-column="ff"] { width: 80px; }
+    .target-table [data-column="class"] { width: 108px; }
+    .target-table [data-column="level"], .danger-table [data-column="level"] { width: 60px; }
+    .danger-table [data-column="reach"] { width: 192px; white-space: normal; overflow-wrap: anywhere; }
+  }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <nav class="backbar"><a href="./">&larr; All tools</a></nav>
+  <header class="masthead"><h1>Pre-war Matchup</h1><span class="stamp" id="factionStamp"></span></header>
+  <section aria-label="Your keys">
+    <div class="key-grid">
+      <div>
+        <label for="apiKey">Your Torn API key</label>
+        <div class="key-entry">
+          <input id="apiKey" type="password" autocomplete="off" spellcheck="false" aria-describedby="keyError">
+          <button id="toggleKey" type="button" aria-pressed="false" aria-label="Show Torn key">Show</button>
+        </div>
+        <p id="keyError" class="field-error" role="status" hidden></p>
+        <button id="forgetKey" class="quiet" type="button">Forget key</button>
+        <p class="note">Also removes it from the other PoIitically Incorrect pages in this browser.</p>
+      </div>
+      <div>
+        <label for="ffKey">Your FFScouter API key</label>
+        <div class="key-entry">
+          <input id="ffKey" type="password" autocomplete="off" spellcheck="false" aria-describedby="ffError">
+          <button id="toggleFfKey" type="button" aria-pressed="false" aria-label="Show FFScouter key">Show</button>
+        </div>
+        <p id="ffError" class="field-error" role="status" hidden></p>
+        <button id="forgetFfKey" class="quiet" type="button">Forget key</button>
+        <p class="note">Also removes it from the other PoIitically Incorrect pages in this browser.</p>
+      </div>
+    </div>
+    <div class="toolbar"><button id="loadBtn" class="primary" type="button">Load</button><span id="readAt" class="note">Read time: UNKNOWN</span></div>
+    <p id="errorBox" class="msg" role="alert" hidden></p>
+    <p id="storageNote" class="note" role="status" hidden></p>
+  </section>
+  <details>
+    <summary>What this page does, calls and stores</summary>
+    <dl>
+      <dt>Data Storage</dt><dd>Only in this browser. Nothing is kept on any server; the figures live in the open tab only.</dd>
+      <dt>Data Sharing</dt><dd>Nobody.</dd>
+      <dt>Purpose of Use</dt><dd>Competitive advantage.</dd>
+      <dt>Key Storage &amp; Sharing</dt><dd>Stored in this browser only. Not shared.</dd>
+      <dt>Key Access Level</dt><dd>Public.</dd>
+    </dl>
+    <p class="note">The four Torn reads are <code>/v2/key/info</code>, <code>/v2/faction/wars</code>,
+      <code>/v2/faction/members?striptags=true</code> and <code>/v2/faction/{opponent}/members?striptags=true</code>.
+      Every Torn request carries <code id="commentTag"></code>. A missing opponent or an error can stop the sequence early.</p>
+    <p class="note">FFScouter receives the IDs from both rosters at <code>https://ffscouter.com/api/v1/get-stats</code>.
+      Its API requires your FFScouter key in the request address. Your Torn key goes only to
+      <code>api.torn.com</code>, in the Authorization header, never in the address. The Torn key never goes
+      to FFScouter and the FFScouter key never goes to Torn. Use keys that belong to you in both fields.</p>
+    <p class="note">Only the two keys are kept in localStorage: <code id="tornStoreName"></code> and
+      <code id="ffStoreName"></code>. Figures are kept in memory in this tab. Nothing is written in Torn.
+      There is no background monitoring, scraping, automatic action, claim server or event server.
+      Saved keys load once when this page opens; subsequent reads require Refresh.</p>
+  </details>
+  <p id="staleBar" class="msg" role="status" hidden></p>
+  <section id="warSection" aria-label="War">
+    <h2 id="warWho">Opponent: UNKNOWN</h2><p id="warTime">Start time: UNKNOWN</p>
+    <p id="countdown" hidden></p><p id="warNote" class="note" hidden></p>
+    <div id="opponentForm" hidden>
+      <label for="opponentId">Opponent faction ID</label>
+      <div class="key-entry"><input id="opponentId" type="text" inputmode="numeric" autocomplete="off" aria-describedby="opponentError"><button id="opponentLoad" type="button">Load</button></div>
+      <p id="opponentError" class="field-error" hidden></p>
+    </div>
+    <p class="note">Before the war: open <a href="scripts.html">Kingshade Scripts</a> and check that the KS scripts you use are the versions listed there.</p>
+  </section>
+  <section id="strengthSection" aria-labelledby="strengthTitle">
+    <div class="section-heading"><h2 id="strengthTitle">Strength comparison</h2></div>
+    <p class="note">Estimates come from FFScouter and are estimates, not Torn's figures.</p>
+    <div class="columns"><div><h3>Us</h3><div id="strengthUs" class="empty">WAIT</div></div><div><h3>Them</h3><div id="strengthThem" class="empty">WAIT</div></div></div>
+  </section>
+  <section aria-labelledby="targetsTitle">
+    <div class="section-heading"><h2 id="targetsTitle">Your targets</h2><span class="note" id="rangeLabel"></span></div>
+    <p id="rangeNote" class="note" role="status" hidden></p>
+    <p id="targetsMessage" class="note" role="status">WAIT</p><div id="yourTargetsHost"></div>
+  </section>
+  <section aria-labelledby="enemyTitle"><div class="section-heading"><h2 id="enemyTitle">Full enemy list</h2></div><div id="enemyHost" class="empty">WAIT</div></section>
+  <section aria-labelledby="dangerTitle">
+    <div class="section-heading"><h2 id="dangerTitle">Most dangerous</h2></div>
+    <p class="note">For everyone but you this is estimated from FFScouter's estimates.</p><div id="dangerHost" class="empty">WAIT</div>
+  </section>
+  <details id="advanced">
+    <summary>Advanced</summary>
+    <dl>
+      <dt>Opponent / source</dt><dd id="advOpponent">UNKNOWN</dd><dt>Your Torn ID</dt><dd id="advMe">UNKNOWN</dd>
+      <dt>Torn rows: us / them</dt><dd id="advRows">UNKNOWN</dd><dt>FFScouter rows</dt><dd id="advFfRows">UNKNOWN</dd>
+      <dt>Our estimates</dt><dd id="advEstimates">UNKNOWN</dd><dt>FFScouter mode</dt><dd id="advFf">UNKNOWN</dd><dt>Last error</dt><dd id="advError">None</dd>
+    </dl>
+    <p id="advFfMax" class="note"></p>
+    <p class="note">Other members' reach assumes evenly distributed battle stats. Priority uses the supplied value curve and level-based respect estimate; it is not a prediction of a win.</p>
+  </details>
+  <footer><p class="note">Manual refresh only. These are estimates for planning; profile links open only when you select them.</p></footer>
+</main>
+<script>
+(function () {
+  'use strict';
+  const FACTION_ID = 48039;
+  const FF_WINDOW_MIN = 2.00;
+  const FF_WINDOW_MAX = 3.40;
+  const FF_MAX_LINK_LIMIT = 5.00;
+  const FF_MAX_PARAM = 'ffmax';
+  const VALUE_EDGE = 3.40;
+  const SPREAD_EXPONENT = 0.5;
+  const TOP_COUNT = 5;
+  const DANGEROUS_COUNT = 10;
+  const FF_CHUNK = 200;
+  const STALE_AFTER_MS = 1800000;
+  const MIN_RELOAD_MS = 30000;
+  const TORN_COMMENT = 'KSPrewar';
+  const KEY_STORE = 'ks-leader-board-key';
+  const FF_STORE = 'ks-war-room-ff-key';
+  const TORN_CALLS_PER_MINUTE = 100;
+  const MINUTE_MS = 60000;
+  const REQUEST_TIMEOUT_MS = 20000;
+  const SCHEMA_VERSION = 1;
+  const STRENGTH_TOP_COUNT = 10;
+  const TORN_API_KEY_PATTERN = /^[A-Za-z0-9]{8,64}$/;
+  const FF_API_KEY_PATTERN = /^[A-Za-z0-9]{16}$/;
+  const TERMINAL_CODES = new Set([2, 10, 13, 18]);
+  const RETRY_CODES = new Set([5, 9, 17]);
+  const VALUE_CURVE = [
+    [1.0,1.00],[1.2,1.20],[1.4,1.41],[1.6,1.61],[1.8,1.82],[2.0,2.02],[2.1,2.12],
+    [2.2,2.22],[2.3,2.31],[2.4,2.39],[2.5,2.45],[2.6,2.50],[2.7,2.52],[2.8,2.51],
+    [2.9,2.47],[3.0,2.40],[3.1,2.31],[3.2,2.19],[3.3,2.06],[3.4,1.92],[3.5,1.77],
+    [3.6,1.61],[3.7,1.46],[3.8,1.32],[3.9,1.18],[4.0,1.04],[4.2,0.81],[4.4,0.62],
+    [4.6,0.47],[4.8,0.35],[5.0,0.26]
+  ];
+  const CLASS_EDGES = [1e7, 1e8, 5e8, 1e9, 5e9];
+  const CLASS_NAMES = ['under 10m', '10m\u2013100m', '100m\u2013500m', '500m\u20131b', '1b\u20135b', '5b and over', 'no estimate'];
+  const el = {};
+  document.querySelectorAll('[id]').forEach(element => { el[element.id] = element; });
+  let sequence = 0, request = null, pending = Promise.resolve();
+  let suspended = false, loading = false, snapshot = null, refreshFailure = '';
+  let lastAttempt = null, cooldownUntil = 0, minuteTimer = null, cooldownTimer = null;
+  let lastError = '', lastCode = null, tornCalls = [];
+  const linkParams = new URLSearchParams(location.search);
+  const linkOpponent = opponentId(linkParams.get('vs'));
+  const linkFfMax = linkParams.get(FF_MAX_PARAM);
+  const linkFfMatch = linkFfMax === null ? null : linkFfMax.match(/^[0-9](\.[0-9]{1,2})?$/);
+  // Require the whole value: JavaScript's $ may match before a final newline.
+  const validLinkFfMax = linkFfMatch !== null && linkFfMatch[0] === linkFfMax && Number(linkFfMax) > FF_WINDOW_MIN && Number(linkFfMax) <= FF_MAX_LINK_LIMIT;
+  const effectiveFfMax = validLinkFfMax ? Number(linkFfMax) : FF_WINDOW_MAX;
+
+  function node(tag, text, className) {
+    const out = document.createElement(tag);
+    if (text !== undefined) out.textContent = text;
+    if (className) out.className = className;
+    return out;
+  }
+  function say(target, message) { target.textContent = message; target.hidden = !message; }
+  function read(store) { try { return localStorage.getItem(store) || ''; } catch (_) { return ''; } }
+  function write(store, value) {
+    try {
+      if (value) localStorage.setItem(store, value); else localStorage.removeItem(store);
+      return true;
+    } catch (_) {
+      say(el.storageNote, 'Browser storage is unavailable. Keys can only be used for this visit; stored keys could not be changed.');
+      return false;
+    }
+  }
+  function cleanText(value) { return typeof value === 'string' && value.trim() ? value.trim() : null; }
+  function id12(value) {
+    if (typeof value !== 'number' && typeof value !== 'string') return null;
+    const text = String(value);
+    return /^[0-9]{1,12}$/.test(text) && Number(text) > 0 ? String(Number(text)) : null;
+  }
+  function opponentId(value) { const id = id12(value); return id && Number(id) !== FACTION_ID ? id : null; }
+  function finite(value) { return typeof value === 'number' && Number.isFinite(value); }
+  function positive(value) { return finite(value) && value > 0 ? value : null; }
+  function roundedFF(ff) { return finite(ff) && ff >= 0 ? Number(ff.toFixed(2)) : null; }
+  function inside(ff) { return ff !== null && ff >= FF_WINDOW_MIN && ff <= effectiveFfMax; }
+  function rangeText(max = effectiveFfMax) { return FF_WINDOW_MIN.toFixed(2) + '\u2013' + max.toFixed(2); }
+  function valueAt(ff) {
+    if (!finite(ff)) return null;
+    if (ff < VALUE_CURVE[0][0]) return ff;
+    if (ff > VALUE_CURVE[VALUE_CURVE.length - 1][0]) return 0;
+    for (let i = 1; i < VALUE_CURVE.length; i++) {
+      const [x, y] = VALUE_CURVE[i], [a, b] = VALUE_CURVE[i - 1];
+      if (ff <= x) return b + (y - b) * (ff - a) / (x - a);
+    }
+    return VALUE_CURVE[VALUE_CURVE.length - 1][1];
+  }
+  function ffClass(ff) {
+    if (ff === null) return { word: 'UNKNOWN', tone: '' };
+    if (ff < FF_WINDOW_MIN) return { word: 'Too weak', tone: 'faint' };
+    if (ff > effectiveFfMax) return { word: 'Too strong', tone: 'bad' };
+    return ff <= VALUE_EDGE ? { word: 'Good', tone: 'good' } : { word: 'Risky', tone: 'warn' };
+  }
+  function estimatedFF(attacker, target) {
+    if (positive(attacker) === null || !finite(target) || target < 0) return null;
+    const result = 1 + 8 / 3 * Math.sqrt(target / attacker);
+    return finite(result) ? result : null;
+  }
+  function priorityOrder(a, b) { return b.prio - a.prio || b.score - a.score || b.level - a.level || Number(a.id) - Number(b.id); }
+  function buildTargets(own, enemies, stats, me) {
+    return enemies.map(member => {
+      const stat = stats.get(member.id) || {};
+      const ff = roundedFF(stat.ff);
+      const competitors = stat.est == null ? 0 : own.filter(k => k.id !== me && inside(estimatedFF((stats.get(k.id) || {}).est, stat.est))).length;
+      const score = ff === null ? null : valueAt(ff) * (member.level / 200 + 1);
+      return { ...member, ...stat, ff, competitors, score, prio: score === null ? null : score / Math.pow(1 + competitors, SPREAD_EXPONENT) };
+    });
+  }
+  function average(values) { return values.length ? values.reduce((sum, x) => sum + x / values.length, 0) : null; }
+  function median(values) {
+    if (!values.length) return null;
+    const sorted = values.slice().sort((a, b) => a - b), mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : sorted[mid - 1] / 2 + sorted[mid] / 2;
+  }
+  function compact(value) {
+    if (!finite(value)) return 'UNKNOWN';
+    const units = [[1e12, 't'], [1e9, 'b'], [1e6, 'm'], [1e3, 'k']];
+    for (const [size, suffix] of units) if (value >= size) return (value / size).toFixed(2) + suffix;
+    return value.toFixed(2);
+  }
+  function clock(ms, seconds = false, utc = false) {
+    const options = { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' };
+    if (seconds) options.second = '2-digit';
+    if (utc) options.timeZone = 'UTC';
+    return new Intl.DateTimeFormat('en-GB', options).format(new Date(ms));
+  }
+  function failure(message, code = null, terminal = false) {
+    const error = new Error(message); error.code = code; error.terminal = terminal; return error;
+  }
+  function describeError(code) {
+    if (code === 2) return 'Torn rejected the key. Check it was copied whole.';
+    if (code === 7) return 'Your faction position is not allowed to see this. That is a faction permission, not a key setting.';
+    if (code === 16) return 'The key is missing a selection this call needs (faction members, or faction wars).';
+    if (code === 13) return 'This key is disabled after seven days of account inactivity.';
+    if (code === 10) return 'The key owner is in federal jail, so the key cannot be used.';
+    if (code === 18) return 'This key has been paused by its owner.';
+    if (code === 5) return 'Too many calls in the last minute. Wait a moment and try again.';
+    if (code === 9) return 'Torn\u2019s API is temporarily unavailable. Try again shortly.';
+    if (code === 17) return 'Torn is in a backend update. Try again in a minute.';
+    return 'Torn returned error ' + (Number.isInteger(code) ? code : 'UNKNOWN') + '.';
+  }
+  function current(job) { return request === job && sequence === job.seq && !suspended && !job.controller.signal.aborted; }
+  function assertCurrent(job) { if (!current(job)) throw new DOMException('Cancelled', 'AbortError'); }
+  async function jsonRequest(url, options, job, service) {
+    assertCurrent(job);
+    let timeout = false;
+    const transport = new AbortController();
+    const cancel = () => transport.abort();
+    job.controller.signal.addEventListener('abort', cancel, { once: true });
+    job.timeout = setTimeout(() => { timeout = true; transport.abort(); }, REQUEST_TIMEOUT_MS);
+    try {
+      const response = await fetch(url, { ...options, signal: transport.signal, credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error' });
+      let payload;
+      try { payload = await response.json(); } catch (_) { throw failure(service + ' answered something this page cannot read.'); }
+      assertCurrent(job);
+      return { response, payload };
+    } catch (error) {
+      if (timeout) throw failure(service + ' did not answer in time. Try again later.');
+      if (!current(job)) throw new DOMException('Cancelled', 'AbortError');
+      if (error.code === null) throw error;
+      throw failure(service + ' could not be reached. Check your connection and try again.');
+    } finally {
+      clearTimeout(job.timeout); job.timeout = null;
+      job.controller.signal.removeEventListener('abort', cancel);
+    }
+  }
+  async function torn(path, job) {
+    const now = Date.now();
+    tornCalls = tornCalls.filter(time => now - time < MINUTE_MS);
+    if (tornCalls.length >= TORN_CALLS_PER_MINUTE) throw failure('Too many calls in the last minute. Wait a moment and try again.');
+    tornCalls.push(now);
+    const url = new URL('https://api.torn.com/v2' + path);
+    url.searchParams.set('comment', TORN_COMMENT);
+    const { response, payload } = await jsonRequest(url.href, { headers: { Authorization: 'ApiKey ' + job.tornKey } }, job, 'Torn');
+    if (payload && payload.error) {
+      const code = Number.isInteger(payload.error.code) ? payload.error.code : null;
+      throw failure(describeError(code), code, TERMINAL_CODES.has(code));
+    }
+    if (!response.ok) throw failure('Torn answered HTTP ' + response.status + '. Try again later.');
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw failure('Torn returned an invalid response.');
+    return payload;
+  }
+  function roster(payload) {
+    const raw = payload.members;
+    const rows = Array.isArray(raw) ? raw : raw && typeof raw === 'object' ? Object.values(raw) : null;
+    if (!rows) throw failure('Torn answered, but not with a member list. The endpoint may have changed.');
+    const seen = new Set();
+    return rows.map(row => {
+      const id = row && id12(row.id === undefined ? row.player_id : row.id);
+      if (!id || seen.has(id)) throw failure('Torn returned a member list with invalid or duplicate IDs.');
+      seen.add(id);
+      const level = Number.isInteger(row.level) && row.level > 0 ? row.level : null;
+      if (level === null) throw failure('Torn returned a member with an unreadable level.');
+      return { id, name: cleanText(row.name) || ('#' + id), level, position: cleanText(row.position) };
+    });
+  }
+  function chooseOpponent(payload, typed) {
+    if (!payload.wars || typeof payload.wars !== 'object' || Array.isArray(payload.wars)) throw failure('The wars answer did not have the shape this page expects.');
+    const ranked = payload.wars.ranked;
+    let side = null, endedNote = '';
+    if (ranked != null) {
+      if (typeof ranked !== 'object' || Array.isArray(ranked)) throw failure('Torn returned an unreadable ranked war.');
+      if (!Array.isArray(ranked.factions)) throw failure('Torn returned an unreadable ranked-war faction list.');
+      const ours = ranked.factions.filter(s => s && id12(s.id) === String(FACTION_ID));
+      const others = ranked.factions.filter(s => s && opponentId(s.id));
+      if (ours.length !== 1 || others.length !== 1 || ranked.factions.length !== 2) throw failure('Torn returned an ambiguous ranked-war opponent.');
+      side = others[0];
+      if (ranked.winner != null || (typeof ranked.end === 'number' && ranked.end > 0 && Date.now() >= ranked.end * 1000)) {
+        const endedId = opponentId(side.id), endedName = cleanText(side.name) || ('Faction ' + endedId);
+        endedNote = "Torn's latest ranked war (vs " + endedName + ' [' + endedId + ']) has ended and Torn does not report the next one yet.';
+        side = null;
+      }
+    }
+    const id = side ? opponentId(side.id) : linkOpponent || typed;
+    if (!id) return endedNote ? { id: null, note: endedNote } : null;
+    const name = side ? cleanText(side.name) || ('Faction ' + id) : 'Faction ' + id;
+    const start = side && Number.isSafeInteger(ranked.start) && ranked.start > 0 && ranked.start * 1000 <= 8640000000000000 ? ranked.start * 1000 : null;
+    const source = side ? 'wars' : linkOpponent ? 'link' : 'typed';
+    let note = '';
+    if (endedNote) note = endedNote + (source === 'link' ? ' Showing faction ' + id + ' from the link.' : '');
+    else if (side && linkOpponent && linkOpponent !== id) note = 'The link named faction ' + linkOpponent + ', but Torn reports the war against ' + name + ' [' + id + ']. Showing Torn\'s.';
+    else if (!side) note = 'Torn does not report this war yet. Showing faction ' + id + (source === 'link' ? ' from the link.' : ' entered by you.');
+    return { id, name, start, source, note };
+  }
+  function scrub(message, job) {
+    let result = String(message);
+    for (const key of [job.tornKey, job.ffKey]) if (key) result = result.split(key).join('[key]');
+    return result.slice(0, 160).replace(/[.\s]+$/, '');
+  }
+  async function readStats(ids, job) {
+    const stats = new Map(); let count = 0;
+    for (let offset = 0; offset < ids.length; offset += FF_CHUNK) {
+      const chunk = ids.slice(offset, offset + FF_CHUNK), allowed = new Set(chunk);
+      const url = new URL('https://ffscouter.com/api/v1/get-stats');
+      url.searchParams.set('key', job.ffKey); url.searchParams.set('targets', chunk.join(','));
+      const { response, payload } = await jsonRequest(url.href, {}, job, 'FFScouter');
+      if (payload && !Array.isArray(payload) && typeof payload === 'object' && ('error' in payload || 'code' in payload)) {
+        const retry = payload.code === 21 && positive(payload.retry_after_seconds) !== null ? ' Try again after ' + Math.ceil(payload.retry_after_seconds) + ' seconds.' : '';
+        throw failure('FFScouter refused the request' + (typeof payload.error === 'string' ? ': ' + scrub(payload.error, job) : '') + '.' + retry);
+      }
+      if (!response.ok) throw failure('FFScouter answered HTTP ' + response.status + '.');
+      if (!Array.isArray(payload)) throw failure('FFScouter answered something this page cannot read.');
+      for (const row of payload) {
+        const id = row && id12(row.player_id);
+        if (!id || !allowed.has(id) || stats.has(id)) throw failure('FFScouter returned invalid or duplicate player IDs.');
+        const ff = finite(row.fair_fight) && row.fair_fight >= 0 ? row.fair_fight : null;
+        const est = finite(row.bs_estimate) && row.bs_estimate >= 0 ? row.bs_estimate : null;
+        const updated = Number.isSafeInteger(row.last_updated) && row.last_updated > 0 && row.last_updated <= Math.floor(Date.now() / 1000) ? row.last_updated : null;
+        stats.set(id, { ff, est, estText: est === null ? null : cleanText(row.bs_estimate_human), updated,
+          source: ['bss', 'premium', 'spies'].includes(row.source) ? row.source : null });
+        count++;
+      }
+    }
+    return { stats, count };
+  }
+  function table(headers, className, columns = []) {
+    const scroll = node('div', undefined, 'table-scroll');
+    scroll.tabIndex = 0; scroll.setAttribute('role', 'region'); scroll.setAttribute('aria-label', headers.join(', '));
+    const t = node('table', undefined, className), head = node('thead'), tr = node('tr'), body = node('tbody');
+    headers.forEach((text, i) => { const th = node('th', text); th.scope = 'col'; if (columns[i]) th.dataset.column = columns[i]; tr.append(th); });
+    head.append(tr); t.append(head, body); scroll.append(t);
+    return { scroll, body };
+  }
+  function profile(member) {
+    const link = node('a', member.name);
+    link.href = 'https://www.torn.com/profiles.php?XID=' + member.id;
+    link.target = '_blank'; link.rel = 'noopener noreferrer';
+    return link;
+  }
+  function estimateText(stat) { return stat && stat.est != null ? stat.estText || 'UNKNOWN' : 'UNKNOWN'; }
+  function renderStrength(host, members, data) {
+    host.replaceChildren(); host.className = '';
+    const estimates = data.ffOk ? members.map(m => (data.stats.get(m.id) || {}).est).filter(v => v != null) : [];
+    const levels = members.map(m => m.level), metrics = node('dl', undefined, 'metrics');
+    const levelFormat = value => value === null ? 'UNKNOWN' : value.toFixed(1);
+    const values = [
+      ['Members', String(members.length)],
+      ['With an estimate', data.ffOk ? estimates.length + ' of ' + members.length : 'UNKNOWN'],
+      ['Average estimate', data.ffOk ? compact(average(estimates)) : 'UNKNOWN'],
+      ['Median estimate', data.ffOk ? compact(median(estimates)) : 'UNKNOWN'],
+      ['Average level', levelFormat(average(levels))], ['Median level', levelFormat(median(levels))]
+    ];
+    values.forEach(([label, value]) => { metrics.append(node('dt', label), node('dd', value)); });
+    host.append(metrics, node('h3', 'Estimate classes'));
+    const list = node('ul', undefined, 'class-list'), counts = Array(CLASS_NAMES.length).fill(0);
+    if (data.ffOk) members.forEach(member => {
+      const value = (data.stats.get(member.id) || {}).est;
+      const index = value == null ? CLASS_NAMES.length - 1 : CLASS_EDGES.findIndex(edge => value < edge);
+      counts[index < 0 ? CLASS_EDGES.length : index]++;
+    });
+    CLASS_NAMES.forEach((label, i) => {
+      const li = node('li'); li.append(node('span', label), node('span', data.ffOk ? String(counts[i]) : 'UNKNOWN', 'num'));
+      if (data.ffOk && members.length) {
+        const bar = node('span', undefined, 'bar'); bar.style.width = counts[i] / members.length * 100 + '%';
+        bar.setAttribute('aria-hidden', 'true'); li.append(bar);
+      }
+      list.append(li);
+    });
+    host.append(list, node('h3', 'Top ' + STRENGTH_TOP_COUNT + ' by estimate'));
+    if (!data.ffOk) { host.append(node('p', 'UNKNOWN', 'empty')); return; }
+    const top = members.filter(m => (data.stats.get(m.id) || {}).est != null)
+      .sort((a, b) => data.stats.get(b.id).est - data.stats.get(a.id).est || Number(a.id) - Number(b.id)).slice(0, STRENGTH_TOP_COUNT);
+    if (!top.length) { host.append(node('p', 'UNKNOWN \u2014 no estimates available.', 'empty')); return; }
+    const built = table(['Member', 'Level', 'EST'], 'top-table');
+    top.forEach(member => {
+      const row = node('tr'), name = node('td', undefined, 'name-cell'); name.append(profile(member));
+      row.append(name, node('td', member.level, 'num'), node('td', estimateText(data.stats.get(member.id)), 'num')); built.body.append(row);
+    });
+    host.append(built.scroll);
+  }
+  function renderTargetTable(host, rows) {
+    host.replaceChildren(); host.className = '';
+    if (!rows.length) { host.append(node('p', 'No targets to show.', 'empty')); return; }
+    const built = table(['Member / Torn ID', 'FF', 'Class', 'Level', 'EST'], 'target-table', ['name', 'ff', 'class', 'level', 'est']);
+    rows.forEach(member => {
+      const tr = node('tr'); tr.dataset.targetId = member.id;
+      tr.dataset.competitors = member.competitors;
+      if (member.score !== null) { tr.dataset.score = member.score; tr.dataset.priority = member.prio; }
+      const name = node('td', undefined, 'name-cell'); name.dataset.column = 'name';
+      name.append(profile(member), node('span', member.id, 'sub num'));
+      const age = member.updated == null ? 'updated UNKNOWN' : 'updated ' + Math.floor(Math.max(0, Date.now() / 1000 - member.updated) / 86400) + ' d ago';
+      name.append(node('span', (member.source || 'UNKNOWN') + ' \u00b7 ' + age, 'sub'));
+      if (member.competitors > 0) name.append(node('span', member.competitors + (member.competitors === 1 ? ' other' : ' others') + ' can also reach this one', 'sub'));
+      const level = node('td', member.level, 'num'); level.dataset.column = 'level';
+      const ff = node('td', member.ff === null ? 'UNKNOWN' : member.ff.toFixed(2), 'num'); ff.dataset.column = 'ff';
+      const est = node('td', estimateText(member), 'num'); est.dataset.column = 'est';
+      const category = ffClass(member.ff), cls = node('td'); cls.dataset.column = 'class';
+      cls.append(node('span', category.word, 'pill' + (category.tone ? ' ' + category.tone : '')));
+      tr.append(name, ff, cls, level, est); built.body.append(tr);
+    });
+    host.append(built.scroll);
+  }
+  function renderDanger(data, targets) {
+    el.dangerHost.replaceChildren(); el.dangerHost.className = '';
+    if (!data.ffOk) { el.dangerHost.append(node('p', 'UNKNOWN \u2014 ' + data.ffReason, 'empty')); return; }
+    const rows = targets.filter(t => t.est != null).sort((a, b) => b.est - a.est || Number(a.id) - Number(b.id)).slice(0, DANGEROUS_COUNT);
+    if (!rows.length) { el.dangerHost.append(node('p', 'UNKNOWN \u2014 no estimates available.', 'empty')); return; }
+    const built = table(['Member', 'Who of us can take them', 'Level', 'EST'], 'danger-table', ['name', 'reach', 'level', 'est']);
+    rows.forEach(target => {
+      const tr = node('tr'); tr.dataset.targetId = target.id;
+      const name = node('td', undefined, 'name-cell'); name.append(profile(target));
+      const names = data.own.slice().sort((a, b) => a.id === data.me ? -1 : b.id === data.me ? 1 : Number(a.id) - Number(b.id))
+        .filter(k => inside(k.id === data.me ? target.ff : estimatedFF((data.stats.get(k.id) || {}).est, target.est)))
+        .map(k => k.id === data.me ? 'you' : k.name);
+      const text = names.length ? names.slice(0, 8).join(', ') + (names.length > 8 ? ', +' + (names.length - 8) + ' more' : '') : 'Nobody inside the range';
+      const who = node('td', text); who.dataset.column = 'reach';
+      tr.append(name, who, node('td', target.level, 'num'), node('td', estimateText(target), 'num')); built.body.append(tr);
+    });
+    el.dangerHost.append(built.scroll);
+  }
+  function renderWar(data) {
+    el.warWho.textContent = 'vs ' + data.war.name + ' [' + data.war.id + ']';
+    say(el.warNote, data.war.note);
+    const start = data.war.start;
+    if (start === null) { el.warTime.textContent = 'Start time: UNKNOWN \u2014 Torn has not reported it yet.'; say(el.countdown, ''); return; }
+    const local = new Intl.DateTimeFormat('en-GB', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }).format(new Date(start));
+    const future = start > Date.now();
+    el.warTime.textContent = (future ? 'War starts ' : 'War started ') + local + ' ' + clock(start) + ' your time (' + clock(start, false, true) + ' TCT)';
+    const minutes = Math.max(0, Math.ceil((start - Date.now()) / MINUTE_MS));
+    say(el.countdown, future ? 'in ' + Math.floor(minutes / 1440) + 'd ' + Math.floor(minutes % 1440 / 60) + 'h ' + minutes % 60 + 'm' : '');
+  }
+  function renderTimes() {
+    if (!snapshot || loading) return;
+    renderWar(snapshot);
+    el.readAt.textContent = 'Read ' + clock(snapshot.readAt, true) + ' your time';
+    if (refreshFailure) say(el.staleBar, 'STALE \u2014 Refresh failed: ' + refreshFailure + ' The figures below are from ' + clock(snapshot.readAt) + ' your time.');
+    else if (Date.now() - snapshot.readAt >= STALE_AFTER_MS) say(el.staleBar, 'STALE \u2014 Read ' + Math.floor((Date.now() - snapshot.readAt) / MINUTE_MS) + ' minutes ago. Press Refresh.');
+    else say(el.staleBar, '');
+  }
+  function renderAdvanced() {
+    const data = snapshot;
+    el.advOpponent.textContent = data ? data.war.id + ' / ' + data.war.source : 'UNKNOWN';
+    el.advMe.textContent = data ? data.me : 'UNKNOWN';
+    el.advRows.textContent = data ? data.own.length + ' / ' + data.enemies.length : 'UNKNOWN';
+    el.advFfRows.textContent = data && data.ffOk ? String(data.ffCount) : 'UNKNOWN';
+    el.advEstimates.textContent = data && data.ffOk ? data.own.filter(m => (data.stats.get(m.id) || {}).est != null).length + ' of ' + data.own.length : 'UNKNOWN';
+    el.advFf.textContent = loading ? 'CHECKING' : data ? data.ffOk ? 'Read' : 'UNKNOWN \u2014 ' + data.ffReason : 'UNKNOWN';
+    el.advError.textContent = lastError ? lastError + (lastCode === null ? '' : ' (Torn code ' + lastCode + (RETRY_CODES.has(lastCode) ? ', try later' : '') + ')') : 'None';
+  }
+  function render(data) {
+    renderStrength(el.strengthUs, data.own, data); renderStrength(el.strengthThem, data.enemies, data);
+    const targets = buildTargets(data.own, data.enemies, data.stats, data.me);
+    const ranked = targets.filter(t => t.ff !== null).sort(priorityOrder), inRange = ranked.filter(t => inside(t.ff));
+    let selected = inRange.slice(0, TOP_COUNT);
+    if (!data.ffOk) say(el.targetsMessage, 'UNKNOWN \u2014 ' + data.ffReason);
+    else if (!ranked.length) say(el.targetsMessage, 'UNKNOWN \u2014 no Fair Fight data available.');
+    else if (!inRange.length) {
+      const distance = t => Number((t.ff < FF_WINDOW_MIN ? FF_WINDOW_MIN - t.ff : t.ff - effectiveFfMax).toFixed(2));
+      selected = ranked.slice().sort((a, b) => distance(a) - distance(b) || priorityOrder(a, b)).slice(0, TOP_COUNT);
+      say(el.targetsMessage, 'Nothing inside the faction FF range (' + rangeText() + ') for you. Closest outside it:');
+    } else say(el.targetsMessage, '');
+    if (selected.length) renderTargetTable(el.yourTargetsHost, selected); else el.yourTargetsHost.replaceChildren();
+    renderTargetTable(el.enemyHost, [...inRange, ...ranked.filter(t => !inside(t.ff)), ...targets.filter(t => t.ff === null).sort((a, b) => Number(a.id) - Number(b.id))]);
+    renderDanger(data, targets); renderTimes(); renderAdvanced();
+  }
+  function placeholders(word) {
+    for (const id of ['strengthUs', 'strengthThem', 'enemyHost', 'dangerHost']) el[id].replaceChildren(node('p', word, 'empty'));
+    el.yourTargetsHost.replaceChildren(); say(el.targetsMessage, word);
+    el.warWho.textContent = word; el.warTime.textContent = word; say(el.warNote, ''); say(el.countdown, '');
+  }
+  function invalidateFigures(reason) {
+    if (!snapshot) return;
+    snapshot = { ...snapshot, ffOk: false, stats: new Map(), ffCount: null, ffReason: reason };
+  }
+  function stopRequest() {
+    ++sequence;
+    if (request) { clearTimeout(request.timeout); request.controller.abort(); request = null; }
+    loading = false;
+  }
+  function fieldValidation() {
+    const tk = el.apiKey.value.trim(), fk = el.ffKey.value.trim();
+    const tornValid = TORN_API_KEY_PATTERN.test(tk), ffValid = !fk || FF_API_KEY_PATTERN.test(fk);
+    say(el.keyError, tornValid ? '' : 'That does not look like a Torn API key. Use 8 to 64 letters and digits. Nothing was sent.');
+    say(el.ffError, ffValid ? '' : 'That does not look like an FFScouter key (16 letters and digits). Nothing was sent.');
+    const sameKey = fk !== '' && tk === fk;
+    if (sameKey) say(el.ffError, 'Use your separate FFScouter key, not your Torn key. Nothing was sent.');
+    return { tk, fk, valid: tornValid && ffValid && !sameKey };
+  }
+  function controls() {
+    const seconds = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
+    el.loadBtn.disabled = suspended || seconds > 0;
+    el.loadBtn.textContent = seconds > 0 ? 'Refresh in ' + seconds + 's' : lastAttempt === null ? 'Load' : 'Refresh';
+    el.opponentLoad.disabled = suspended || seconds > 0;
+    el.opponentLoad.textContent = seconds > 0 ? 'Load in ' + seconds + 's' : 'Load';
+    if (!seconds && cooldownTimer !== null) { clearInterval(cooldownTimer); cooldownTimer = null; }
+  }
+  function stopTimers() {
+    if (minuteTimer !== null) clearInterval(minuteTimer);
+    if (cooldownTimer !== null) clearInterval(cooldownTimer);
+    minuteTimer = null; cooldownTimer = null;
+  }
+  function startTimers() {
+    if (suspended || document.hidden) return;
+    if (minuteTimer === null) minuteTimer = setInterval(renderTimes, MINUTE_MS);
+    controls();
+    if (cooldownUntil > Date.now() && cooldownTimer === null) cooldownTimer = setInterval(controls, 1000);
+  }
+  async function runLoad(job, previous) {
+    await previous;
+    if (!current(job)) return;
+    try {
+      const identity = await torn('/key/info', job), user = identity.info && identity.info.user;
+      if (!user || typeof user !== 'object' || !id12(user.id)) throw failure('Torn did not return a readable player identity.');
+      if (user.faction_id !== FACTION_ID) throw failure('This key does not belong to a current member of faction ' + FACTION_ID + '. Access denied.', null, true);
+      write(KEY_STORE, job.tornKey);
+      const wars = await torn('/faction/wars', job), war = chooseOpponent(wars, job.typed);
+      if (!war || !war.id) {
+        snapshot = null; refreshFailure = ''; loading = false;
+        placeholders('WAIT'); el.warWho.textContent = 'Opponent: UNKNOWN';
+        el.warTime.textContent = 'Start time: UNKNOWN \u2014 Torn has not reported it yet.';
+        say(el.warNote, war ? war.note : 'Torn does not report a ranked war yet.'); el.opponentForm.hidden = false;
+        el.readAt.textContent = 'Read ' + clock(Date.now(), true) + ' your time'; renderAdvanced(); return;
+      }
+      el.opponentForm.hidden = true;
+      const own = roster(await torn('/faction/members?striptags=true', job));
+      const enemies = roster(await torn('/faction/' + war.id + '/members?striptags=true', job));
+      const ids = [...new Set([...own, ...enemies].map(m => m.id))];
+      let stats = new Map(), ffCount = null, ffOk = false, ffReason = 'No FFScouter key on this page.';
+      if (job.ffKey) {
+        try { const result = await readStats(ids, job); stats = result.stats; ffCount = result.count; ffOk = true; ffReason = ''; }
+        catch (error) { if (!current(job)) throw error; ffReason = error.message; }
+      }
+      assertCurrent(job);
+      loading = false;
+      if (!ffOk && snapshot) { refreshFailure = ffReason; invalidateFigures(ffReason); }
+      else {
+        snapshot = { me: id12(user.id), war, own, enemies, stats, ffCount, ffOk, ffReason,
+          readAt: Date.now(), source: 'Torn + FFScouter', schemaVersion: SCHEMA_VERSION };
+        refreshFailure = '';
+      }
+      lastError = ffOk ? '' : ffReason; lastCode = null; say(el.errorBox, ffOk ? '' : ffReason);
+      render(snapshot);
+    } catch (error) {
+      // A timeout aborts the transport but still belongs to this generation.
+      if (request !== job || job.seq !== sequence || suspended) return;
+      loading = false;
+      let message = error.message;
+      if (error.terminal) {
+        const removed = write(KEY_STORE, ''); el.apiKey.value = '';
+        message += removed ? ' The key has been cleared from this browser.' : ' The key field has been cleared; browser storage could not be cleared.';
+        snapshot = null;
+      }
+      lastError = message; lastCode = error.code === undefined ? null : error.code;
+      say(el.errorBox, message);
+      if (snapshot) { refreshFailure = message; invalidateFigures(message); render(snapshot); }
+      else { placeholders('UNKNOWN'); say(el.targetsMessage, 'UNKNOWN \u2014 ' + message); say(el.staleBar, ''); el.readAt.textContent = 'Read time: UNKNOWN'; renderAdvanced(); }
+    } finally {
+      if (request === job) { request = null; loading = false; controls(); renderAdvanced(); }
+    }
+  }
+  function load(typed = el.opponentId.value.trim() || null) {
+    if (suspended || Date.now() < cooldownUntil) return;
+    const keys = fieldValidation();
+    if (!keys.valid) { stopRequest(); invalidateFigures('A key has an invalid format.'); if (snapshot) render(snapshot); return; }
+    if (typed !== null && !opponentId(typed)) { say(el.opponentError, 'Enter a different faction ID: 1 to 12 digits, greater than zero.'); return; }
+    say(el.opponentError, ''); say(el.errorBox, ''); say(el.staleBar, '');
+    stopRequest();
+    const previous = pending;
+    const job = { seq: sequence, controller: new AbortController(), timeout: null, tornKey: keys.tk, ffKey: keys.fk, typed: opponentId(typed) };
+    request = job; loading = true; lastAttempt = Date.now(); cooldownUntil = lastAttempt + MIN_RELOAD_MS;
+    placeholders('CHECKING'); renderAdvanced(); controls(); startTimers();
+    pending = runLoad(job, previous);
+  }
+  function keyEdited(kind) {
+    stopRequest();
+    if (kind === 'torn') {
+      snapshot = null; refreshFailure = ''; placeholders('WAIT'); say(el.staleBar, ''); el.readAt.textContent = 'Read time: UNKNOWN';
+    } else { invalidateFigures('FFScouter key changed. Press Refresh.'); if (snapshot) render(snapshot); else placeholders('WAIT'); }
+    renderAdvanced(); controls();
+  }
+  function saveFf() {
+    const value = el.ffKey.value.trim();
+    if (value && value === el.apiKey.value.trim()) { say(el.ffError, 'Use your separate FFScouter key, not your Torn key. Nothing was sent.'); return; }
+    if (!value || FF_API_KEY_PATTERN.test(value)) { write(FF_STORE, value); say(el.ffError, ''); }
+    else say(el.ffError, 'That does not look like an FFScouter key (16 letters and digits). Nothing was sent.');
+  }
+  function toggle(field, button, label) {
+    const showing = field.type === 'text'; field.type = showing ? 'password' : 'text';
+    button.textContent = showing ? 'Show' : 'Hide'; button.setAttribute('aria-pressed', String(!showing));
+    button.setAttribute('aria-label', (showing ? 'Show ' : 'Hide ') + label);
+  }
+  el.loadBtn.addEventListener('click', () => load());
+  el.opponentLoad.addEventListener('click', () => load(el.opponentId.value.trim()));
+  el.opponentId.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); load(el.opponentId.value.trim()); } });
+  el.apiKey.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); load(); } });
+  el.ffKey.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); saveFf(); } });
+  el.ffKey.addEventListener('blur', saveFf);
+  el.apiKey.addEventListener('input', () => keyEdited('torn'));
+  el.ffKey.addEventListener('input', () => keyEdited('ff'));
+  el.toggleKey.addEventListener('click', () => toggle(el.apiKey, el.toggleKey, 'Torn key'));
+  el.toggleFfKey.addEventListener('click', () => toggle(el.ffKey, el.toggleFfKey, 'FFScouter key'));
+  el.forgetKey.addEventListener('click', () => { write(KEY_STORE, ''); el.apiKey.value = ''; keyEdited('torn'); say(el.keyError, 'Torn key removed from this page.'); });
+  el.forgetFfKey.addEventListener('click', () => { write(FF_STORE, ''); el.ffKey.value = ''; keyEdited('ff'); say(el.ffError, 'FFScouter key removed from this page.'); });
+  window.addEventListener('storage', event => {
+    if (event.key === KEY_STORE || event.key === null) { el.apiKey.value = read(KEY_STORE); keyEdited('torn'); }
+    if (event.key === FF_STORE || event.key === null) { el.ffKey.value = read(FF_STORE); keyEdited('ff'); }
+  });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) stopTimers(); else { renderTimes(); startTimers(); } });
+  window.addEventListener('pagehide', () => { suspended = true; stopTimers(); stopRequest(); });
+  window.addEventListener('pageshow', event => {
+    if (!event.persisted) return;
+    suspended = false;
+    if (el.apiKey.value !== read(KEY_STORE)) { el.apiKey.value = read(KEY_STORE); keyEdited('torn'); }
+    if (el.ffKey.value !== read(FF_STORE)) { el.ffKey.value = read(FF_STORE); keyEdited('ff'); }
+    if (snapshot) render(snapshot); else placeholders('WAIT');
+    renderTimes(); startTimers();
+  });
+  el.factionStamp.textContent = 'PoIitically Incorrect \u00b7 ' + FACTION_ID;
+  const factionRange = rangeText(FF_WINDOW_MAX);
+  el.rangeLabel.textContent = validLinkFfMax && effectiveFfMax !== FF_WINDOW_MAX
+    ? 'FF range ' + rangeText() + ' (set by the link; faction default ' + factionRange + ')'
+    : 'Faction FF range ' + factionRange;
+  say(el.rangeNote, linkFfMax !== null && !validLinkFfMax
+    ? 'The link asked for FF max ' + linkFfMax.slice(0, 12) + ', which is not allowed. Using the faction range ' + factionRange + '.' : '');
+  el.advFfMax.textContent = 'FF max: ' + effectiveFfMax.toFixed(2) + (validLinkFfMax ? ' (link)' : ' (default)');
+  el.commentTag.textContent = 'comment=' + TORN_COMMENT;
+  el.tornStoreName.textContent = KEY_STORE; el.ffStoreName.textContent = FF_STORE;
+  el.apiKey.value = read(KEY_STORE); el.ffKey.value = read(FF_STORE);
+  startTimers();
+  if (el.apiKey.value) load();
+})();
+</script>
+</body>
+</html>
