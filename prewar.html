@@ -198,7 +198,7 @@
   <section aria-labelledby="enemyTitle"><div class="section-heading"><h2 id="enemyTitle">Full enemy list</h2></div><div id="enemyHost" class="empty">WAIT</div></section>
   <section aria-labelledby="dangerTitle">
     <div class="section-heading"><h2 id="dangerTitle">Most dangerous</h2></div>
-    <p class="note">For everyone but you this is estimated from FFScouter's estimates.</p><div id="dangerHost" class="empty">WAIT</div>
+    <p class="note">Lists everyone of us who sees this target at FF <span id="beatMax"></span> or lower, including below 2.00. For everyone but you this is estimated from FFScouter's estimates.</p><div id="dangerHost" class="empty">WAIT</div>
   </section>
   <details id="advanced">
     <summary>Advanced</summary>
@@ -290,6 +290,8 @@
   function finite(value) { return typeof value === 'number' && Number.isFinite(value); }
   function positive(value) { return finite(value) && value > 0 ? value : null; }
   function roundedFF(ff) { return finite(ff) && ff >= 0 ? Number(ff.toFixed(2)) : null; }
+  // A member can beat a target they see at or below the effective FF max, also below FF_WINDOW_MIN.
+  function canBeat(ff) { return ff !== null && ff >= 0 && ff <= effectiveFfMax; }
   function inside(ff) { return ff !== null && ff >= FF_WINDOW_MIN && ff <= effectiveFfMax; }
   function rangeText(max = effectiveFfMax) { return FF_WINDOW_MIN.toFixed(2) + '\u2013' + max.toFixed(2); }
   function valueAt(ff) {
@@ -304,9 +306,9 @@
   }
   function ffClass(ff) {
     if (ff === null) return { word: 'UNKNOWN', tone: '' };
-    if (ff < FF_WINDOW_MIN) return { word: 'Too weak', tone: 'faint' };
-    if (ff > effectiveFfMax) return { word: 'Too strong', tone: 'bad' };
-    return ff <= VALUE_EDGE ? { word: 'Good', tone: 'good' } : { word: 'Risky', tone: 'warn' };
+    if (ff < FF_WINDOW_MIN) return { word: 'Below FF range', tone: 'faint' };
+    if (ff > effectiveFfMax) return { word: 'Above FF range', tone: 'bad' };
+    return ff <= VALUE_EDGE ? { word: 'Good', tone: 'good' } : { word: 'Lower value', tone: 'warn' };
   }
   function estimatedFF(attacker, target) {
     if (positive(attacker) === null || !finite(target) || target < 0) return null;
@@ -347,6 +349,7 @@
   function describeError(code) {
     if (code === 2) return 'Torn rejected the key. Check it was copied whole.';
     if (code === 7) return 'Your faction position is not allowed to see this. That is a faction permission, not a key setting.';
+    if (code === 6) return 'Torn has no faction with that ID (Torn code 6). Check the opponent faction ID.';
     if (code === 16) return 'The key is missing a selection this call needs (faction members).';
     if (code === 13) return 'This key is disabled after seven days of account inactivity.';
     if (code === 10) return 'The key owner is in federal jail, so the key cannot be used.';
@@ -553,14 +556,14 @@
     if (!data.ffOk) { el.dangerHost.append(node('p', 'UNKNOWN \u2014 ' + data.ffReason, 'empty')); return; }
     const rows = targets.filter(t => t.est != null).sort((a, b) => b.est - a.est || Number(a.id) - Number(b.id)).slice(0, DANGEROUS_COUNT);
     if (!rows.length) { el.dangerHost.append(node('p', 'UNKNOWN \u2014 no estimates available.', 'empty')); return; }
-    const built = table(['Member', 'Who of us can take them', 'Level', 'EST'], 'danger-table', ['name', 'reach', 'level', 'est']);
+    const built = table(['Member', 'Who of us can beat them', 'Level', 'EST'], 'danger-table', ['name', 'reach', 'level', 'est']);
     rows.forEach(target => {
       const tr = node('tr'); tr.dataset.targetId = target.id;
       const name = node('td', undefined, 'name-cell'); name.append(profile(target));
       const names = data.own.slice().sort((a, b) => a.id === data.me ? -1 : b.id === data.me ? 1 : Number(a.id) - Number(b.id))
-        .filter(k => inside(k.id === data.me ? target.ff : estimatedFF((data.stats.get(k.id) || {}).est, target.est)))
+        .filter(k => canBeat(k.id === data.me ? target.ff : estimatedFF((data.stats.get(k.id) || {}).est, target.est)))
         .map(k => k.id === data.me ? 'you' : k.name);
-      const text = names.length ? names.slice(0, 8).join(', ') + (names.length > 8 ? ', +' + (names.length - 8) + ' more' : '') : 'Nobody inside the range';
+      const text = names.length ? names.slice(0, 8).join(', ') + (names.length > 8 ? ', +' + (names.length - 8) + ' more' : '') : 'None of us';
       const who = node('td', text); who.dataset.column = 'reach';
       tr.append(name, who, node('td', target.level, 'num'), node('td', estimateText(target), 'num')); built.body.append(tr);
     });
@@ -778,6 +781,7 @@
     : 'Faction FF range ' + factionRange;
   say(el.rangeNote, linkFfMax !== null && !validLinkFfMax
     ? 'The link asked for FF max ' + linkFfMax.slice(0, 12) + ', which is not allowed. Using the faction range ' + factionRange + '.' : '');
+  el.beatMax.textContent = effectiveFfMax.toFixed(2);
   el.advFfMax.textContent = 'FF max: ' + effectiveFfMax.toFixed(2) + (validLinkFfMax ? ' (link)' : ' (default)');
   el.commentTag.textContent = 'comment=' + TORN_COMMENT;
   el.tornStoreName.textContent = KEY_STORE; el.ffStoreName.textContent = FF_STORE;
