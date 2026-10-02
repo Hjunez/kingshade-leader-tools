@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- warroom-3d build B2: click fix + no page jump + disabled-press fix -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -142,6 +143,11 @@
   .msg.ok { background: var(--good-soft); color: var(--good); }
   .msg.note { background: var(--surface-2); color: var(--muted); }
   .msg[hidden] { display: none; }
+  #actionMessage {
+    position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%);
+    width: calc(100% - 32px); max-width: 560px; z-index: 1000;
+    pointer-events: none;
+  }
 
   /* The password panel is a normal state of this page, not a fault. A member who has
      not been given the word yet must meet a calm request, never a red error. */
@@ -241,6 +247,16 @@
     background: var(--warn-soft); color: var(--warn); font-size: 13px;
   }
   .simreset .tid { color: var(--warn); }
+  /* Reserve both reset labels in this bar only; target rows keep their height. */
+  #simResetBar { display: grid; grid-template-columns: max-content minmax(0, 1fr); }
+  #simResetBtn, #simResetButtonSize { grid-area: 1 / 1; }
+  #simResetNote, #simResetIdleSize, #simResetArmedSize { grid-area: 1 / 2; }
+  .simreset-size { visibility: hidden; pointer-events: none; }
+  .simreset-size.btn { line-height: normal; }
+  @media (max-width: 600px) {
+    #simResetBar { grid-template-columns: minmax(0, 1fr); }
+    #simResetNote, #simResetIdleSize, #simResetArmedSize { grid-area: 2 / 1; }
+  }
 
   .stale {
     display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
@@ -455,8 +471,11 @@
     </div>
     <div class="simreset" id="simResetBar" hidden>
       <button type="button" class="btn danger small" id="simResetBtn">Reset test war</button>
+      <span class="btn danger small simreset-size" id="simResetButtonSize" aria-hidden="true"></span>
       <span class="tid" id="simResetNote">Empties the test war's board so the whole run can be
         started over. The real war is not touched.</span>
+      <span class="tid simreset-size" id="simResetIdleSize" aria-hidden="true"></span>
+      <span class="tid simreset-size" id="simResetArmedSize" aria-hidden="true"></span>
     </div>
     <div class="stale" id="staleBar" hidden></div>
     <div class="stale" id="ffBar" hidden></div>
@@ -499,6 +518,8 @@
       your own. It never acts on your behalf.</p>
   </footer>
 </div>
+
+<p class="msg ok" id="actionMessage" role="status" hidden></p>
 
 <script>
 (function () {
@@ -590,6 +611,7 @@
    'warPanel','warWho','warMeta','warScore',
    'targetPanel','targetHint','staleBar','targetHost',
    'simBanner','simRealWar','simWireWar','simResetBar','simResetBtn','simResetNote',
+   'actionMessage','simResetButtonSize','simResetIdleSize','simResetArmedSize',
    'advServer','advWar','advMe','advClaims','advRoster','advFf','advError','advRaw']
     .forEach(function (id) { el[id] = document.getElementById(id); });
 
@@ -601,6 +623,21 @@
 
   function show(box, message) { box.textContent = message; box.hidden = false; }
   function hide(box) { box.textContent = ''; box.hidden = true; }
+
+  var actionMessageTimer = null;
+  function hideActionMessage() {
+    clearTimeout(actionMessageTimer);
+    actionMessageTimer = null;
+    hide(el.actionMessage);
+  }
+  function showActionMessage(kind, message) {
+    hideActionMessage();
+    el.actionMessage.className = 'msg ' + kind;
+    el.actionMessage.setAttribute('role', kind === 'err' ? 'alert' : 'status');
+    show(el.actionMessage, message);
+    actionMessageTimer = setTimeout(hideActionMessage, 8000);
+  }
+  window.addEventListener('pagehide', hideActionMessage);
 
   // =========================================================================
   // ROSTER SOURCE - the only place that talks to Torn.
@@ -1437,13 +1474,20 @@
     return '~' + Math.floor(seconds / 60) + 'm ' + (seconds % 60) + 's left';
   }
 
+  function statusText(target) {
+    var state = target.state || 'Unknown';
+    var left = target.until ? target.until - Math.floor(Date.now() / 1000) : 0;
+    if (state === 'Okay') return 'Okay';
+    return state + (left > 0 ? ' ' + (left < 60 ? left + 's' : Math.ceil(left / 60) + 'm') : '');
+  }
+
   function statusPill(target) {
     var span = document.createElement('span');
     var state = target.state || 'Unknown';
-    var left = target.until ? target.until - Math.floor(Date.now() / 1000) : 0;
-    if (state === 'Okay') { span.className = 'pill good'; span.textContent = 'Okay'; return span; }
-    span.className = state === 'Hospital' ? 'pill bad' : (state === 'Jail' ? 'pill warn' : 'pill');
-    span.textContent = state + (left > 0 ? ' ' + (left < 60 ? left + 's' : Math.ceil(left / 60) + 'm') : '');
+    span.className = state === 'Okay' ? 'pill good'
+      : (state === 'Hospital' ? 'pill bad' : (state === 'Jail' ? 'pill warn' : 'pill'));
+    span.setAttribute('data-status-id', target.id);
+    span.textContent = statusText(target);
     return span;
   }
 
@@ -1744,10 +1788,100 @@
     if (status === 'taken') return 'Someone else got there first';
     if (status === 'not_owner') return 'That claim is not yours';
     if (status === 'unreadable') return 'The server cannot read this row';
-    return 'Refused - see the message at the top';
+    return 'Refused - see the message at the bottom';
   }
 
+  // The second hand changes text only. Torn IDs keep updates tied to a player
+  // even when the table has been sorted or a full redraw is waiting for a click.
+  function updateTargetTimes() {
+    var board = Claims.board();
+    var targets = Roster.targets();
+    if (!board || !targets) return;
+    var byId = Object.create(null);
+    targets.forEach(function (target) { byId[target.id] = target; });
+    el.targetHost.querySelectorAll('[data-status-id]').forEach(function (cell) {
+      var target = byId[cell.getAttribute('data-status-id')];
+      if (target) cell.textContent = statusText(target);
+    });
+    el.targetHost.querySelectorAll('[data-claim-id]').forEach(function (cell) {
+      var claim = board.claims[cell.getAttribute('data-claim-id')];
+      if (claim) cell.textContent = leftText(estimateLeft(claim, board));
+    });
+  }
+
+  var targetFocusKey = '';
+  var targetPresses = new Set();
+  var targetPressLocked = false;
+  var targetRenderPending = false;
+  var targetPressTimer = null;
+  var targetFlushTimer = null;
+
+  function targetButtonKey(node) {
+    var button = node && node.closest ? node.closest('button[data-focus-key]') : null;
+    return button && el.targetHost.contains(button) ? button.getAttribute('data-focus-key') : '';
+  }
+
+  // Remember focus through the disabled pending button, but never take it back
+  // after the member has focused or pressed something else.
+  document.addEventListener('focusin', function (event) {
+    targetFocusKey = targetButtonKey(event.target);
+  });
+  document.addEventListener('pointerdown', function (event) {
+    if (targetButtonKey(event.target) !== targetFocusKey) targetFocusKey = '';
+  }, true);
+
+  function finishTargetPress(repaint) {
+    clearTimeout(targetPressTimer);
+    clearTimeout(targetFlushTimer);
+    targetPressTimer = null;
+    targetFlushTimer = null;
+    targetPresses.clear();
+    targetPressLocked = false;
+    var pending = targetRenderPending;
+    targetRenderPending = false;
+    if (pending && repaint !== false) renderTargets();
+  }
+
+  el.targetHost.addEventListener('pointerdown', function (event) {
+    // Only a press that can end in a click holds the table still. A disabled
+    // button gets pointerdown but never click, so locking on it would hold
+    // every redraw for the full three seconds.
+    var hit = event.target && event.target.closest ? event.target.closest('button, a[href]') : null;
+    if (!hit || !el.targetHost.contains(hit) || hit.disabled) return;
+    clearTimeout(targetFlushTimer);
+    targetFlushTimer = null;
+    if (!targetPressLocked) targetPressTimer = setTimeout(finishTargetPress, 3000);
+    targetPressLocked = true;
+    targetPresses.add(event.pointerId);
+  }, true);
+
+  function releaseTargetPress(event) {
+    if (!targetPresses.has(event.pointerId)) return;
+    // Touch captures its pointer implicitly. Hit testing detects a release
+    // outside even when pointerup is still addressed to the original button.
+    if (event.type === 'pointerup' && el.targetHost.contains(
+        document.elementFromPoint(event.clientX, event.clientY))) return;
+    targetPresses.delete(event.pointerId);
+    // A click's handler runs before this timer: replacing a button during
+    // pointerup, or in click capture, would discard the activation itself.
+    if (!targetPresses.size && targetFlushTimer === null) {
+      targetFlushTimer = setTimeout(finishTargetPress, 0);
+    }
+  }
+  document.addEventListener('pointerup', releaseTargetPress, true);
+  document.addEventListener('pointercancel', releaseTargetPress, true);
+  document.addEventListener('click', releaseTargetPress, true);
+
   function renderTargets() {
+    if (targetPressLocked) {
+      targetRenderPending = true;
+      var pendingButton = pendingTarget && el.targetHost.querySelector(
+        '[data-focus-key="action:' + pendingTarget + '"]');
+      if (pendingButton) { pendingButton.disabled = true; pendingButton.textContent = '…'; }
+      return;
+    }
+    var focusedKey = targetButtonKey(document.activeElement);
+    if (focusedKey) targetFocusKey = focusedKey;
     var war = Roster.war();
     var targets = Roster.targets();
     var board = Claims.board();
@@ -1797,6 +1931,7 @@
       th.scope = 'col';
       var trigger = document.createElement('button');
       trigger.type = 'button';
+      trigger.setAttribute('data-focus-key', 'sort:' + column.id);
       var label = document.createElement('span');
       label.textContent = column.label;
       var mark = document.createElement('span');
@@ -1864,6 +1999,7 @@
 
       var button = document.createElement('button');
       button.type = 'button';
+      button.setAttribute('data-focus-key', 'action:' + target.id);
       button.className = 'btn small';
       button.textContent = 'Take DIBS';
       button.disabled = true;
@@ -1894,6 +2030,7 @@
           who.textContent = 'Taken by ' + holder;
           var left = document.createElement('div');
           left.className = 'left';
+          left.setAttribute('data-claim-id', target.id);
           left.textContent = leftText(estimateLeft(claim, board));
           dibsState.appendChild(who);
           dibsState.appendChild(left);
@@ -1970,6 +2107,8 @@
     table.appendChild(tbody);
     el.targetHost.textContent = '';
     el.targetHost.appendChild(table);
+    var focusButton = targetFocusKey && table.querySelector('[data-focus-key="' + targetFocusKey + '"]');
+    if (focusButton && !focusButton.disabled) focusButton.focus({ preventScroll: true });
 
     var readAt = Roster.stamps().targets;
     if (readAt && Date.now() - readAt > ROSTER_POLL_MS * 3) {
@@ -2041,10 +2180,20 @@
     // against a real war for everybody regardless of what any page shows.
   }
 
+  // Invisible copies share the reset cells, so arming it changes no geometry.
+  // Read the already-rendered simulation ID; this helper makes no requests.
+  function sizeResetLayout() {
+    el.simResetButtonSize.textContent = 'Confirm: reset ' + el.simWireWar.textContent;
+    el.simResetIdleSize.textContent = SIM_RESET_NOTE;
+    el.simResetArmedSize.textContent = 'This frees every target on the test board, including the ones ' +
+      'the test member holds. Click again within six seconds to do it.';
+  }
+
   function render() {
     sessionRender();
     ffKeyRender();
     renderWar();
+    sizeResetLayout();
     renderTargets();
     renderAdvanced();
   }
@@ -2058,7 +2207,7 @@
     var war = Roster.war();
     var identity = Roster.identity();
     if (!war || !identity) return;
-    hide(el.errorBox); hide(el.okBox);
+    hideActionMessage();
     // A new click clears the old refusal before anything is sent. Two messages
     // on screen at once is worse than none, and the member is asking about
     // this row now, not the one before it.
@@ -2083,37 +2232,37 @@
 
       if (result.http === 200 && body.ok === true) {
         if (body.status === 'claimed') {
-          show(el.okBox, 'You hold ' + targetId + '.');
+          showActionMessage('ok', 'You hold ' + targetId + '.');
         } else if (body.status === 'already_claimed') {
           // The server no longer pushes the clock forward on a repeat. Saying
           // "you hold it" again would look like it had.
-          show(el.okBox, targetId + ' was already yours. The time on it is unchanged.');
+          showActionMessage('ok', targetId + ' was already yours. The time on it is unchanged.');
         } else {
-          show(el.okBox, targetId + ' is free again.');
+          showActionMessage('ok', targetId + ' is free again.');
         }
       } else if (result.http === 409 && body.status === 'already_holding') {
         // The target the member is already on comes back in the answer, so the
         // box can name it instead of repeating the server's word at him.
         var held = (body.claim && body.claim.targetId) || 'another target';
-        show(el.errorBox, 'You already hold ' + held + '. Release it before calling another target.');
+        showActionMessage('err', 'You already hold ' + held + '. Release it before calling another target.');
       } else if (result.http === 409 && body.status === 'taken') {
         // Who holds it. Not who was quicker - the server cannot know that.
         var holder = body.claim && body.claim.memberId;
-        show(el.errorBox, targetId + ' is held by ' +
+        showActionMessage('err', targetId + ' is held by ' +
           (holder === identity.playerId ? 'you' : (Roster.nameOf(holder) || ('Torn ' + holder))) + '.');
       } else if (result.http === 409 && body.status === 'not_owner') {
         var other = body.claim && body.claim.memberId;
-        show(el.errorBox, targetId + ' is held by ' +
+        showActionMessage('err', targetId + ' is held by ' +
           (Roster.nameOf(other) || ('Torn ' + other)) + ' and was not released.');
       } else if (result.http === 409 && body.status === 'unreadable') {
-        show(el.errorBox, 'The server cannot read who holds ' + targetId +
+        showActionMessage('err', 'The server cannot read who holds ' + targetId +
           ', so it will not hand it out. Leave that one alone.');
       } else {
-        show(el.errorBox, Says.of(result.http, body));
+        showActionMessage('err', Says.of(result.http, body));
       }
     } catch (error) {
       if (error.unauthorized) sessionRejected();
-      else show(el.errorBox, error.message);
+      else showActionMessage('err', error.message);
     } finally {
       pendingTarget = '';
       await pollClaims();
@@ -2145,6 +2294,7 @@
     var war = Roster.war();
     var identity = Roster.identity();
     if (!SIM || !war || !identity) return;
+    hideActionMessage();
     if (!simResetArmed) {
       simResetArmed = true;
       el.simResetBtn.textContent = 'Confirm: reset ' + Claims.wireWarId(war.warId, 'wipe');
@@ -2160,18 +2310,17 @@
     simResetArmed = false;
     el.simResetBtn.textContent = SIM_RESET_IDLE;
     el.simResetNote.textContent = SIM_RESET_NOTE;
-    hide(el.errorBox); hide(el.okBox);
     try {
       var result = await Claims.wipe(war.warId);
       if (result.http === 200 && result.body.ok === true) {
-        show(el.okBox, 'Test war reset. The server removed ' + result.body.removed +
+        showActionMessage('ok', 'Test war reset. The server removed ' + result.body.removed +
           ' claims from ' + Claims.wireWarId(war.warId, 'wipe') + '. The real war was not touched.');
       } else {
-        show(el.errorBox, Says.of(result.http, result.body));
+        showActionMessage('err', Says.of(result.http, result.body));
       }
     } catch (error) {
       if (error.unauthorized) sessionRejected();
-      else show(el.errorBox, error.message);
+      else showActionMessage('err', error.message);
     }
     await pollClaims();
     render();
@@ -2485,8 +2634,18 @@
 
   setInterval(tick, CLAIM_POLL_MS);
   if (!document.hidden) ffStart();
-  // Only redraws the estimate beside a claim the server has already confirmed.
-  setInterval(function () { if (Claims.board()) renderTargets(); }, 1000);
+  // Only updates the countdown text; the existing polls still own full redraws.
+  var targetClock = null;
+  function startTargetClock() {
+    if (targetClock === null) targetClock = setInterval(updateTargetTimes, 1000);
+  }
+  window.addEventListener('pagehide', function () {
+    clearInterval(targetClock);
+    targetClock = null;
+    finishTargetPress(false);
+  });
+  window.addEventListener('pageshow', startTargetClock);
+  startTargetClock();
 })();
 </script>
 </body>
