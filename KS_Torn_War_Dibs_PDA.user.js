@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PDA
 // @namespace    kingshade.torn
-// @version      1.5.184
+// @version      1.5.185
 // @description  Roster-local PDA presentation with v1.5.145 authority and shared-claim safety.
 // @author       Kingshade
 // @match        https://www.torn.com/factions.php*
@@ -14,6 +14,11 @@
 // ==/UserScript==
 
 /*
+ * 1.5.185: one failed FFScouter read no longer wipes every FF value. Each
+ * value keeps its own 6 min validity (fairFightMaxAgeMs) and is dropped by
+ * scoutStatsForTarget() when it gets older, so a 502/429/network error no
+ * longer turns every claimable row UNKNOWN until the next good read. A key
+ * change or suspend still clears everything, as before.
  * 1.5.184: the hospital countdown changes its digits on Torn's second
  * boundary, every second, instead of whenever a free 1 s interval happened
  * to fire. Ported from PC scheduleDisplayTick (PC 1.0.32). Same work per
@@ -214,8 +219,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs",
-    version: "1.5.184",
-    instanceKey: "__ksTornWarDibsPdaV15184Test",
+    version: "1.5.185",
+    instanceKey: "__ksTornWarDibsPdaV15185Test",
     layerId: "ks-twd-pda-layer",
     rowHostPrefix: "ks-twd-pda-row-",
     panelId: "ks-twd-pda-panel",
@@ -2403,10 +2408,9 @@
       return true;
     } catch {
       if (isCurrentRequest()) {
-        if (!missingOnly) {
-          fairFightStats = new Map();
-          fairFightLastFetchAt = 0;
-        }
+        // Keep the values we have; each one expires on its own after
+        // fairFightMaxAgeMs. Retry on the next timer tick.
+        if (!missingOnly) fairFightLastFetchAt = 0;
         scanWarRows();
       }
       return false;
