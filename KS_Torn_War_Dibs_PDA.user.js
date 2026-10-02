@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PDA
 // @namespace    kingshade.torn
-// @version      1.5.179
+// @version      1.5.180
 // @description  Roster-local PDA presentation with v1.5.145 authority and shared-claim safety.
 // @author       Kingshade
 // @match        https://www.torn.com/factions.php*
@@ -14,6 +14,10 @@
 // ==/UserScript==
 
 /*
+ * 1.5.180: hospital rows no longer fall to UNKNOWN for ~10 s of every
+ * 40 s. The opponent/VIEW member list is refetched once it is older than
+ * tornStatusPollMs (10 s), the same rule PC uses, so it never passes the
+ * 30 s validity limit between two timer ticks. Validity limit unchanged.
  * 1.5.179: optional fresh profile life allows FF up to 4.50 at 20% life
  * or less, within the hospital gate. Serial, bounded reads stop on suspend;
  * claims above the normal FF ceiling require a new low-life confirmation.
@@ -187,8 +191,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs",
-    version: "1.5.179",
-    instanceKey: "__ksTornWarDibsPdaV15179Test",
+    version: "1.5.180",
+    instanceKey: "__ksTornWarDibsPdaV15180Test",
     layerId: "ks-twd-pda-layer",
     rowHostPrefix: "ks-twd-pda-row-",
     panelId: "ks-twd-pda-panel",
@@ -2794,7 +2798,7 @@
     const key = effectiveTornApiKey();
     const factionId = opponentFactionId;
     if (!key || !keyScopeReady || !validTargetId(factionId) || !runtimeActive || !isRuntimeEligible()) return false;
-    if (!force && opponentMembersState.factionId === factionId && nowMs() - opponentMembersState.fetchedAt < CONFIG.opponentMembersMaxAgeMs) return true;
+    if (!force && opponentMembersState.factionId === factionId && nowMs() - opponentMembersState.fetchedAt < CONFIG.tornStatusPollMs) return true;
     const generation = runtimeGeneration;
     const credentialEpoch = tornCredentialEpoch;
     const surface = captureCurrentWarSurface();
@@ -2827,7 +2831,7 @@
       !force &&
       viewMembersState.factionIds.length > 0 &&
       factionIds.every(id => viewMembersState.factionIds.includes(id)) &&
-      nowMs() - viewMembersState.fetchedAt < CONFIG.opponentMembersMaxAgeMs
+      nowMs() - viewMembersState.fetchedAt < CONFIG.tornStatusPollMs
     ) return true;
     const generation = runtimeGeneration;
     const credentialEpoch = tornCredentialEpoch;
