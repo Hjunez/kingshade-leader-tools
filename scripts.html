@@ -263,6 +263,25 @@
 
   .back:hover { text-decoration: underline; }
 
+  /* ---- back to the faction page ---- */
+
+  .backbar { margin: -6px 0 -8px; }
+  .backbar a {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-decoration: none;
+    border: 1px solid var(--line-strong);
+    border-radius: 3px;
+    padding: 7px 12px;
+    display: inline-block;
+  }
+  .backbar a:hover { color: var(--accent); border-color: var(--accent); }
+  .backbar a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
   footer {
     border-top: 1px solid var(--line);
     padding-top: 18px;
@@ -276,6 +295,8 @@
 </head>
 <body>
 <div class="wrap">
+  <nav class="backbar"><a href="./">&larr; PoIitically Incorrect</a></nav>
+
   <header class="masthead">
     <div>
       <p class="eyebrow">Kingshade Development</p>
@@ -300,13 +321,13 @@
   </div>
 
   <section>
-    <h2>For your computer</h2>
+    <h2>For Torn PC</h2>
     <div class="grid">
 
       <div class="card">
         <span class="tag">PC</span>
         <span class="name">KS Torn War Dibs</span>
-        <span class="ver">Version 1.1.6</span>
+        <span class="ver">Version 1.0.40</span>
         <span class="what">Shared DIBS for ranked war, drawn straight into Torn's own Attack column.
           One target, one caller, no double hits. It works together with Call Guard — both talk to
           the same FFScouter hit-calling server.</span>
@@ -314,7 +335,7 @@
           <div class="row"><span class="k">Runs on</span><span class="v">Torn faction pages</span></div>
           <div class="row"><span class="k">Network</span><span class="v"><code>api.torn.com</code> and <code>ffscouter.com</code>. Nothing else.</span></div>
           <div class="row"><span class="k">Stores</span><span class="v">Your key and settings in your own browser only. Never uploaded.</span></div>
-          <div class="row"><span class="k">Torn key</span><span class="v">Yes. Faction members and wars, user basic and profile.</span></div>
+          <div class="row"><span class="k">Torn key</span><span class="v">Yes. Faction <code>members</code> and <code>wars</code>, user <code>basic</code>.</span></div>
         </div>
         <div class="get">
           <a class="btn" href="KS_Torn_War_Dibs_PC.user.js">Install</a>
@@ -351,14 +372,14 @@
       <div class="card">
         <span class="tag">Torn PDA</span>
         <span class="name">KS Torn War Dibs</span>
-        <span class="ver">Version 1.5.179</span>
+        <span class="ver">Version 1.5.175</span>
         <span class="what">The same shared DIBS as the computer version, built for the phone, so
           the whole faction can call targets from wherever they are playing.</span>
         <div class="facts">
           <div class="row"><span class="k">Runs on</span><span class="v">Torn faction pages</span></div>
           <div class="row"><span class="k">Network</span><span class="v"><code>api.torn.com</code> and <code>ffscouter.com</code>. Nothing else.</span></div>
           <div class="row"><span class="k">Stores</span><span class="v">Your key and settings in your own browser only. Never uploaded.</span></div>
-          <div class="row"><span class="k">Torn key</span><span class="v">Yes. Faction members and wars, user basic and profile.</span></div>
+          <div class="row"><span class="k">Torn key</span><span class="v">Yes. Faction <code>members</code> and <code>wars</code>, user <code>basic</code>.</span></div>
           <div class="row"><span class="k">Read this</span><span class="v">If you were given a test build called <strong>KS Torn War Dibs PDA TEST</strong>, turn that one off before you install this. Two copies at once and only one of them draws.</span></div>
         </div>
         <div class="get">
