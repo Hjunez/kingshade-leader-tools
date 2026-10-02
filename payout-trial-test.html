@@ -42,6 +42,7 @@
   }
 
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
 
   body {
     margin: 0; background: var(--ground); color: var(--ink);
@@ -131,7 +132,7 @@
     border-radius: 3px; padding: 10px 11px; width: 100%; min-height: 110px; resize: vertical;
   }
 
-  .segmented { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 3px; overflow: hidden; }
+  .segmented { display: inline-flex; align-self: flex-start; border: 1px solid var(--line-strong); border-radius: 3px; overflow: hidden; }
 
   .segmented button {
     font-family: var(--display); font-weight: 600; font-size: 13px;
@@ -283,8 +284,7 @@
   <header class="masthead">
     <div>
       <h1>War Payout Ledger</h1>
-      <p>Pull the hits straight from the war report, set the pot, and copy the result into faction
-        chat.</p>
+      <p>Load a finished ranked war, set the pot, and copy the result into faction chat.</p>
     </div>
     <span class="stamp">PoIitically Incorrect &middot; 48039</span>
   </header>
@@ -363,7 +363,7 @@
 
         <div class="field" id="bonusNoteField">
           <label for="bonusNote">Bonus note</label>
-          <input type="text" id="bonusNote" maxlength="80" autocomplete="off" placeholder="e.g. donated by a member">
+          <input type="text" id="bonusNote" maxlength="80" autocomplete="off" placeholder="e.g. a donation">
           <span class="note">Optional. Shows in the summary.</span>
         </div>
 
@@ -510,7 +510,7 @@
   (function () {
     'use strict';
 
-    var LICENSE = { factionId: 48039, factionName: "PoIitically Incorrect", trialEndsAt: 1791059730 };
+    var LICENSE = { factionId: 48039, factionName: "PoIitically Incorrect", trialEndsAt: 1791063775 };
     var FACTION_ID = LICENSE.factionId;
     var SELLER_URL = 'https://www.torn.com/profiles.php?XID=2179382';
     var KEY_STORE = 'ks-war-payout-sale-key';
@@ -571,8 +571,10 @@
     function hide(box) { box.textContent = ''; box.hidden = true; }
 
     function dateText(unix) {
-      return new Date(unix * 1000).toLocaleDateString(undefined,
-        { year: 'numeric', month: 'short', day: 'numeric' });
+      var d = new Date(unix * 1000);
+      return d.getUTCDate() + ' ' +
+        ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()] +
+        ' ' + d.getUTCFullYear();
     }
 
     /* ---------- storage ---------- */
@@ -643,7 +645,7 @@
 
     function describeError(code, text) {
       if (code === 2) return 'Torn rejected the key. Check it was copied whole.';
-      if (code === 16) return 'The key is missing a selection. Enable faction → rankedwars, rankedwarreport and attacks on the Custom Key.';
+      if (code === 16) return 'The key is missing a selection. Enable faction → members, rankedwars, rankedwarreport and attacks on the Custom Key.';
       if (code === 13) return 'This key is disabled after seven days of account inactivity.';
       if (code === 10) return 'The key owner is in federal jail, so the key cannot be used.';
       if (code === 18) return 'This key has been paused by its owner.';
@@ -1162,7 +1164,7 @@
           : 'Enter a rate and some ' + countWord();
       } else {
         el.leadKey.textContent = 'Per ' + countWordSingular();
-        el.leadValue.textContent = money(result.rate);
+        el.leadValue.textContent = money(Math.floor(result.rate));
         el.leadSub.textContent = result.totalCount > 0
           ? prettyCount(result.totalCount) + ' ' + countWord() + ' counted'
           : 'Enter the pot and load a war';
@@ -1219,7 +1221,7 @@
         if (state.bonus > 0) {
           lines.push('Bonus: ' + money(state.bonus) + (state.bonusNote ? ' — ' + state.bonusNote : ''));
         }
-        lines.push('Rate: ' + money(result.rate) + ' per ' + countWordSingular());
+        lines.push('Rate: ' + money(Math.floor(result.rate)) + ' per ' + countWordSingular());
       }
       var hasAssists = state.basis === 'hits' && state.members.reduce(function (sum, m) {
         return sum + m.assists;
@@ -1291,7 +1293,7 @@
       text.split(/\r?\n/).forEach(function (line) {
         var trimmed = line.replace(/\[\s*\d+\s*\]/g, ' ').trim();
         if (!trimmed) return;
-        var match = trimmed.match(/^(.*?)[\s\t:|,-]*([0-9][0-9,.\s]*)$/);
+        var match = trimmed.match(/^(.+?)[\s:|-]+([0-9][0-9,]*(?:\.[0-9]+)?)$/);
         if (!match) return;
         var name = match[1].replace(/[\s\t:|,-]+$/, '').trim();
         var count = parseNumber(match[2]);
