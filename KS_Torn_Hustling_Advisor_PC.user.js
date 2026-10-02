@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         KS Torn Hustling Advisor PC
 // @namespace    DieselBladeScripts.ARS.Kingshade
-// @version      0.1.6
-// @downloadURL  https://raw.githubusercontent.com/Hjunez/Kingshade-Torn-Suite/main/KS_Torn_Hustling_Advisor_PC.user.js
-// @updateURL    https://raw.githubusercontent.com/Hjunez/Kingshade-Torn-Suite/main/KS_Torn_Hustling_Advisor_PC.user.js
+// @version      0.1.7
+// @downloadURL  https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_Hustling_Advisor_PC.user.js
+// @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_Hustling_Advisor_PC.user.js
 // @description  Read-only Hustling next-action advisor for Torn on PC. Reads only the Hustling view you have open and shows exactly one recommended manual action, its nerve cost and the warnings that follow from visible data. It never clicks, submits, navigates, stores, exports or sends anything, and it makes no network or API calls.
 // @license      GPL-3.0-or-later
 // @author       Kingshade
@@ -19,10 +19,15 @@
     'use strict';
 
     /*
-     * KS Torn Hustling Advisor PC v0.1.6 — STATUS: CANDIDATE
+     * KS Torn Hustling Advisor PC v0.1.7 — STATUS: CANDIDATE
      *
      * ---------------------------------------------------------------------
      * CHANGELOG
+     *
+     * 0.1.7
+     *
+     *   CHANGED
+     *     - ONE MAIN CHANGE: updates now come from kingshade-leader-tools instead of Kingshade-Torn-Suite (@downloadURL and @updateURL). Nothing else changed.
      *
      * 0.1.6
      *
@@ -417,7 +422,7 @@
      * file — no Hustling capture from PDA exists, so its DOM would be guesswork.
      */
 
-    const VERSION = '0.1.6';
+    const VERSION = '0.1.7';
     const STATUS = 'CANDIDATE';
     const MODE = 'MAX CE + CS';
     const INSTANCE_KEY = '__ksTornHustlingAdvisorV010A1';

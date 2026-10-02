@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PC
 // @namespace    kingshade.torn
-// @version      1.1.7
-// @downloadURL  https://raw.githubusercontent.com/Hjunez/Kingshade-Torn-Suite/main/KS_Torn_War_Dibs_PC.user.js
-// @updateURL    https://raw.githubusercontent.com/Hjunez/Kingshade-Torn-Suite/main/KS_Torn_War_Dibs_PC.user.js
+// @version      1.1.8
+// @downloadURL  https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
+// @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @description  PC TEST: DIBS as a native roster column beside Torn's Attack cell; FF and Est from FFScouter's get-stats API. War Stuff Enhanced is detected and shown read-only; it never blocks.
 // @author       Kingshade
 // @match        https://www.torn.com/factions.php*
@@ -16,6 +16,11 @@
 // ==/UserScript==
 
 /*
+ * KS Torn War Dibs PC v1.1.8 TEST
+ *
+ * ONE MAIN CHANGE: updates now come from kingshade-leader-tools instead of Kingshade-Torn-Suite (@downloadURL and @updateURL). Nothing else changed.
+ *
+ * ---------------------------------------------------------------------------
  * KS Torn War Dibs PC v1.1.7 TEST
  *
  * ONE MAIN CHANGE: one failed FFScouter read no longer wipes every FF value.
@@ -360,8 +365,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs PC",
-    version: "1.1.7",
-    instanceKey: "__ksTornWarDibsPcV117",
+    version: "1.1.8",
+    instanceKey: "__ksTornWarDibsPcV118",
     rowHostPrefix: "ks-twd-wse-row-v010-",
     rosterStyleId: "ks-twd-wse-roster-style-v010",
     panelId: "ks-twd-wse-panel",
