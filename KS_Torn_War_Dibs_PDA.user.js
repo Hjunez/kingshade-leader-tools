@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PDA
 // @namespace    kingshade.torn
-// @version      1.5.181
+// @version      1.5.182
 // @description  Roster-local PDA presentation with v1.5.145 authority and shared-claim safety.
 // @author       Kingshade
 // @match        https://www.torn.com/factions.php*
@@ -14,6 +14,13 @@
 // ==/UserScript==
 
 /*
+ * 1.5.182: the roster order follows Torn's own column headers. KS orders
+ * the rows only while Status is the active sort column: Status down (Torn's
+ * first tap) = Okay, Hospital shortest first, Hospital ?, Traveling/Abroad,
+ * other; Status up = Hospital shortest first, Hospital ?, Okay, Traveling/
+ * Abroad, other. Members, Level and Score sorts are Torn's again (1.5.181
+ * pinned the order and every header tap did nothing). Unknown header shape =
+ * no KS order, so Torn always wins when in doubt. KS never taps a header.
  * 1.5.181: the war roster is drawn in a fixed order: Okay, then Hospital
  * with the shortest time first, then Hospital with an unreadable time, then
  * Traveling/Abroad, then everything else. Rows are never moved in the DOM
@@ -199,8 +206,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs",
-    version: "1.5.181",
-    instanceKey: "__ksTornWarDibsPdaV15181Test",
+    version: "1.5.182",
+    instanceKey: "__ksTornWarDibsPdaV15182Test",
     layerId: "ks-twd-pda-layer",
     rowHostPrefix: "ks-twd-pda-row-",
     panelId: "ks-twd-pda-panel",
@@ -5291,6 +5298,30 @@
   let sortedRosterListPrevious = null;
   const sortedRosterRows = new Set();
   const ROSTER_GROUP = Object.freeze({ OKAY: 0, HOSPITAL: 1, HOSPITAL_UNKNOWN: 2, TRAVEL: 3, OTHER: 4, UNBOUND: 5 });
+  const ROSTER_GROUP_RANK = Object.freeze({
+    desc: [0, 1, 2, 3, 4, 5],
+    // Status up: hospital first. Index = group, value = rank.
+    asc: [2, 0, 1, 3, 4, 5]
+  });
+
+  // Torn's own header for this list: "off" unless Status is the active sort
+  // column. Read only; KS never taps it.
+  function rosterSortMode(list) {
+    if (!(list instanceof HTMLElement)) return "off";
+    let active = null;
+    const header = list.previousElementSibling;
+    if (header instanceof HTMLElement) active = header.querySelector("[class*='activeIcon']");
+    if (!active) {
+      active = [...(list.parentElement?.querySelectorAll("[class*='activeIcon']") || [])]
+        .find(node => !list.contains(node)) || null;
+    }
+    if (!(active instanceof HTMLElement)) return "off";
+    const column = active.closest("[class*='tab___']") || active.parentElement;
+    if (!(column instanceof HTMLElement) || !/(^|\s)status(\s|___|$)/.test(column.className)) return "off";
+    if (/asc___/.test(active.className)) return "asc";
+    if (/desc___/.test(active.className)) return "desc";
+    return "off";
+  }
 
   function rosterSortKey(entry) {
     const resolved = entry.binding ? cachedResolvedBinding(entry.binding) : null;
@@ -5334,6 +5365,13 @@
       restoreRosterOrder();
       return had;
     }
+    const mode = rosterSortMode(list);
+    if (mode === "off") {
+      const had = sortedRosterList !== null || sortedRosterRows.size > 0;
+      restoreRosterOrder();
+      return had;
+    }
+    const rank = ROSTER_GROUP_RANK[mode];
     let changed = false;
     if (sortedRosterList !== list) {
       restoreRosterOrder();
@@ -5355,7 +5393,7 @@
         keyed.push({ row: child, seq: 1e9 + unboundIndex++, group: ROSTER_GROUP.UNBOUND, seconds: 0 });
       }
     }
-    keyed.sort((a, b) => a.group - b.group || a.seconds - b.seconds || a.seq - b.seq);
+    keyed.sort((a, b) => rank[a.group] - rank[b.group] || a.seconds - b.seconds || a.seq - b.seq);
     const seen = new Set();
     keyed.forEach((item, index) => {
       const value = String(index + 1);
