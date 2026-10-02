@@ -483,13 +483,16 @@
   <section class="panel">
     <div class="panel-head">
       <h2>Hand it over</h2>
-      <p class="hint">Plain text for faction chat or a forum post.</p>
+      <p class="hint">Plain text for faction chat, or formatted for the faction newsletter.</p>
     </div>
     <div class="panel-body">
       <div class="toolbar">
         <button type="button" class="btn primary" id="copyBtn">Copy payout summary</button>
+        <button type="button" class="btn primary" id="copyHtmlBtn">Copy for newsletter</button>
         <span class="msg ok" id="copyToast" role="status" hidden></span>
       </div>
+      <p class="hint" style="margin:0;color:var(--faint);font-size:13px">Newsletter: in Torn's newsletter editor click <strong>Source code</strong>
+        (the { } button), paste, then click <strong>Source code</strong> again to see it before sending.</p>
     </div>
   </section>
 
@@ -513,6 +516,9 @@
     var SELLER_URL = 'https://www.torn.com/profiles.php?XID=2179382';
     var KEY_STORE = 'ks-war-payout-sale-key';
     var STORE_KEY = 'ks-war-payout-sale-v1';
+    var SUMMARY_TITLE = 'RANKED WAR PAYOUT — ' + LICENSE.factionName;
+    var SUMMARY_NOTICE = LICENSE.trialEndsAt !== null ? 'TRIAL VERSION — KS War Payout Ledger' : '';
+    function copyBlockedReason() { return trialEnded() ? trialEndedError().message : ''; }
 
     var state = {
       pot: 0, bonus: 0, bonusNote: '', fixedRate: 0, cut: 0, minCount: 0,
@@ -531,7 +537,7 @@
      'bonus','bonusNote','bonusField','bonusNoteField',
      'rows','empty','countHead','assistsHead','leadKey','leadValue','leadSub','distributable','cutSub','paidOut',
      'paidSub','remainder','addRow','clearRoster','pasteBox','importAdd','importReplace',
-     'importToast','copyBtn','copyToast','loadAllMembers','rosterToast','paidHint','untickPaid','trialBanner']
+     'importToast','copyBtn','copyHtmlBtn','copyToast','loadAllMembers','rosterToast','paidHint','untickPaid','trialBanner']
       .forEach(function (id) { el[id] = document.getElementById(id); });
 
     /* ---------- helpers ---------- */
@@ -1198,8 +1204,8 @@
 
     function summaryText() {
       var result = calculate();
-      var lines = ['RANKED WAR PAYOUT — ' + LICENSE.factionName];
-      if (LICENSE.trialEndsAt !== null) lines.unshift('TRIAL VERSION — KS War Payout Ledger');
+      var lines = [SUMMARY_TITLE];
+      if (SUMMARY_NOTICE) lines.unshift(SUMMARY_NOTICE);
       if (state.war !== null) {
         var warDay = new Date(state.war.start * 1000);
         var warDate = warDay.getUTCDate() + ' ' +
@@ -1282,6 +1288,107 @@
         plural(eligible.length, 'member', 'members'));
       lines.push('Stays in bank: ' + money(result.remainder));
       return lines.join('\n');
+    }
+
+    /* ---------- newsletter ---------- */
+
+    function escapeHtml(value) {
+      return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function newsletterHtml() {
+      var result = calculate();
+      var out = [];
+      function p(inner) { out.push('<p>' + inner + '</p>'); }
+      function gap() { out.push('<p>&nbsp;</p>'); }
+      function heading(text) { p('<span style="font-size: 16px;"><strong>' + text + '</strong></span>'); }
+      function b(text) { return '<strong>' + text + '</strong>'; }
+      var dash = ' &ndash; ';
+
+      if (SUMMARY_NOTICE) p(b(escapeHtml(SUMMARY_NOTICE)));
+      p('<span style="font-size: 24px; text-decoration: underline;"><strong>RANKED WAR PAYOUT</strong></span>');
+      if (state.war !== null) {
+        var warDay = new Date(state.war.start * 1000);
+        var warDate = warDay.getUTCDate() + ' ' +
+          ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][warDay.getUTCMonth()] +
+          ' ' + warDay.getUTCFullYear();
+        p(b('vs ' + escapeHtml(state.war.opponent)) + dash + warDate + dash + state.war.outcome +
+          (typeof state.war.ourScore === 'number' && typeof state.war.theirScore === 'number'
+            ? ' (' + state.war.ourScore + '&ndash;' + state.war.theirScore + ')' : ''));
+      }
+
+      gap();
+      heading('THE POT');
+      if (state.mode === 'rate') {
+        p('Rate set at ' + b(money(state.fixedRate)) + ' per ' + countWordSingular());
+        p('Pot needed: ' + b(money(result.potNeeded)));
+      } else {
+        p('Cash from caches: ' + b(money(state.pot)));
+        if (state.bonus > 0) {
+          p('Bonus: ' + b(money(state.bonus)) + (state.bonusNote ? dash + escapeHtml(state.bonusNote) : ''));
+        }
+        p('Rate: ' + b(money(Math.floor(result.rate))) + ' per ' + countWordSingular());
+      }
+      var hasAssists = state.basis === 'hits' && state.members.reduce(function (sum, m) {
+        return sum + m.assists;
+      }, 0) > 0;
+      if (hasAssists && state.payAssists) {
+        var totals = result.payouts.reduce(function (sum, x) {
+          if (x.eligible) { sum.hits += x.member.hits; sum.assists += x.member.assists; }
+          return sum;
+        }, { hits: 0, assists: 0 });
+        p('Total counted: ' + prettyCount(totals.hits) + ' ' + plural(totals.hits, 'hit', 'hits') +
+          ' + ' + prettyCount(totals.assists) + ' ' + plural(totals.assists, 'assist', 'assists') +
+          ' = ' + b(prettyCount(result.totalCount)));
+      } else {
+        p('Total counted: ' + b(prettyCount(result.totalCount)) + ' ' + countWordFor(result.totalCount));
+      }
+      if (hasAssists) p('Assists: ' + (state.payAssists ? 'paid as hits' : 'not paid'));
+      if (state.cut > 0) p('Faction keeps ' + state.cut + '%: ' + b(money(result.factionCut)));
+      if (state.minCount > 0) p('Minimum to qualify: ' + state.minCount + ' ' + countWordFor(state.minCount));
+
+      function describe(x) {
+        if (hasAssists && state.payAssists && x.member.assists > 0) {
+          return prettyCount(x.member.hits) + ' ' + plural(x.member.hits, 'hit', 'hits') +
+            ' + ' + prettyCount(x.member.assists) + ' ' + plural(x.member.assists, 'assist', 'assists');
+        }
+        return prettyCount(x.count) + ' ' + countWordFor(x.count);
+      }
+
+      var eligible = result.payouts.filter(function (x) { return x.eligible; })
+        .slice().sort(function (a, z) { return z.amount - a.amount; });
+      gap();
+      heading('PAYOUTS');
+      eligible.forEach(function (x) {
+        p(b(escapeHtml(x.member.name || 'Unnamed')) + dash + describe(x) + dash + b(money(x.amount)));
+      });
+
+      var held = result.payouts.filter(function (x) { return x.member.hold === true; });
+      if (held.length > 0) {
+        gap();
+        heading('HELD BACK');
+        held.forEach(function (x) {
+          p(b(escapeHtml(x.member.name || 'Unnamed')) + dash + describe(x) +
+            (x.member.holdReason ? dash + escapeHtml(x.member.holdReason) : ''));
+        });
+      }
+
+      var skipped = result.payouts.filter(function (x) {
+        return x.member.hold !== true && x.count > 0 && !x.eligible;
+      });
+      if (skipped.length > 0) {
+        gap();
+        p(b('Below minimum:') + ' ' + skipped.map(function (x) {
+          return escapeHtml(x.member.name || 'Unnamed') + ' (' + prettyCount(x.count) + ')';
+        }).join(', '));
+      }
+
+      gap();
+      p('Paid out: ' + b(money(result.paid)) + ' to ' + eligible.length + ' ' +
+        plural(eligible.length, 'member', 'members'));
+      p('Stays in bank: ' + b(money(result.remainder)));
+      return out.join('\n');
     }
 
     /* ---------- import ---------- */
@@ -1472,14 +1579,14 @@
     el.importAdd.addEventListener('click', function () { runImport(false); });
     el.importReplace.addEventListener('click', function () { runImport(true); });
 
-    el.copyBtn.addEventListener('click', function () {
-      if (trialEnded()) {
-        renderTrial();
+    function copyOut(build) {
+      var blocked = copyBlockedReason();
+      if (blocked) {
         el.copyToast.className = 'msg err';
-        show(el.copyToast, trialEndedError().message);
+        show(el.copyToast, blocked);
         return;
       }
-      var text = summaryText();
+      var text = build();
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(function () {
           el.copyToast.className = 'msg ok';
@@ -1492,7 +1599,10 @@
         el.copyToast.className = 'msg err';
         show(el.copyToast, 'Clipboard unavailable in this browser.');
       }
-    });
+    }
+
+    el.copyBtn.addEventListener('click', function () { copyOut(summaryText); });
+    el.copyHtmlBtn.addEventListener('click', function () { copyOut(newsletterHtml); });
 
     /* ---------- start ---------- */
 
