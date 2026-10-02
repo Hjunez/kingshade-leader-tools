@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PDA
 // @namespace    kingshade.torn
-// @version      1.5.176
+// @version      1.5.179
 // @description  Roster-local PDA presentation with v1.5.145 authority and shared-claim safety.
 // @author       Kingshade
 // @match        https://www.torn.com/factions.php*
@@ -14,6 +14,16 @@
 // ==/UserScript==
 
 /*
+ * 1.5.179: optional fresh profile life allows FF up to 4.50 at 20% life
+ * or less, within the hospital gate. Serial, bounded reads stop on suspend;
+ * claims above the normal FF ceiling require a new low-life confirmation.
+ * Review fix (Claude 2026-09-28): that claim read no longer waits for the
+ * 10 s per-target spacing, so a low-life DIBS is sent without delay.
+ * 1.5.178: fresh Online opponents are free for all within the existing
+ * hospital/FF gate. Idle, Offline and unreadable activity still require DIBS.
+ * Own claims are auto-released once per claim when fresh activity is Online.
+ * 1.5.177: DIBS uses the inclusive FF 2.00-3.40 window chosen by the
+ * faction leader. Locked FF values use two decimals so the reason is clear.
  * KS Torn War Dibs PDA v1.5.150 PRESENTATION/PERFORMANCE TEST
  * FF / Est separator, Hospital countdown, FF 2.00-5.00 gate and shared DIBS retained.
  * Hospital countdown uses v1.5.135 FFScouter-aligned second-boundary semantics.
@@ -177,8 +187,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs",
-    version: "1.5.176",
-    instanceKey: "__ksTornWarDibsPdaV15176Test",
+    version: "1.5.179",
+    instanceKey: "__ksTornWarDibsPdaV15179Test",
     layerId: "ks-twd-pda-layer",
     rowHostPrefix: "ks-twd-pda-row-",
     panelId: "ks-twd-pda-panel",
@@ -199,13 +209,19 @@
     tornApiOrigin: "https://api.torn.com",
     tornKeyInfoPath: "/v2/key/info",
     tornOwnWarsPath: "/v2/faction/wars",
-    tornCustomKeyUrl: "https://www.torn.com/preferences.php#tab=api?step=addNewKey&title=KS%20Torn%20War%20Dibs%20PDA&faction=members,wars&user=basic"
+    tornCustomKeyUrl: "https://www.torn.com/preferences.php#tab=api?step=addNewKey&title=KS%20Torn%20War%20Dibs%20PDA&faction=members,wars&user=basic,profile"
   });
 
   const CONFIG = Object.freeze({
     gateSeconds: 120,
     minFairFight: 2.0,
-    maxFairFight: 5.0,
+    maxFairFight: 3.4,
+    lowHpLifeMaxRatio: 0.20,
+    lowHpMaxFairFight: 4.5,
+    lifeMaxAgeMs: 15000,
+    lifeReadMinIntervalMs: 10000,
+    lifeReadsPerMinuteMax: 30,
+    tornCallsPerMinuteMax: 100,
     fairFightRefreshMs: 60000,
     fairFightMaxAgeMs: 360000,
     fairFightErrorBackoffMs: 60000,
@@ -262,7 +278,8 @@
     UNAVAILABLE: "unavailable",
     UNKNOWN: "unknown",
     LOCKED: "locked",
-    READY: "ready"
+    READY: "ready",
+    FREE: "free"
   });
 
   const RW_PHASE = Object.freeze({
@@ -368,6 +385,19 @@
   let opponentMembersState = { factionId: "", members: new Map(), fetchedAt: 0 };
   // The merged members batch for the factions on a foreign war card. VIEW only.
   let viewMembersState = { factionIds: [], members: new Map(), fetchedAt: 0 };
+  const lifeCache = new Map();
+  const lifeReadAttempts = new Map();
+  let lifeReadTimes = [];
+  let tornRequestTimes = [];
+  let lifeReadPending = null;
+  let lifeReadController = null;
+  let lifeClaimWaitCancel = null;
+  let lifeQueueRunning = false;
+  let lifeContextSerial = 0;
+  let lifeCapabilityKey = "";
+  let lifeProfileMissing = false;
+  let lifeKeyFailureCode = null;
+  let lifeRetryAfter = 0;
   let ownWarsState = {
     phase: RW_PHASE.UNKNOWN,
     live: false,
@@ -493,6 +523,7 @@
   }
 
   function invalidateTornCredentialRequests() {
+    resetLifeState();
     tornCredentialEpoch += 1;
     publicBasicRequestSerial += 1;
     selfIdentityRequestSerial += 1;
@@ -1428,6 +1459,8 @@
   function gmXhr(options) {
     return new Promise(resolve => {
       let settled = false;
+      let request = null;
+      const signal = options?.signal;
       const startedAt = nowMs();
       // Single transport choke point. In VIEW everything is refused except the
       // members batch for a faction on the war card being looked at.
@@ -1438,10 +1471,17 @@
       const finish = result => {
         if (settled) return;
         settled = true;
+        signal?.removeEventListener("abort", abort);
         resolve({ ...result, startedAt, endedAt: nowMs() });
       };
+      const abort = () => {
+        try { request?.abort(); } catch {}
+        finish({ ok: false, status: 0, responseText: "", headers: "", aborted: true });
+      };
+      if (signal?.aborted) { abort(); return; }
+      signal?.addEventListener("abort", abort, { once: true });
       try {
-        GM_xmlhttpRequest({
+        request = GM_xmlhttpRequest({
           method: options.method || "GET",
           url: options.url,
           headers: options.headers || {},
@@ -1548,15 +1588,17 @@
     return true;
   }
 
-  async function tornApiRequest(path, key, { cacheBust = false, trackCredentialState = true } = {}) {
+  async function tornApiRequest(path, key, { cacheBust = false, trackCredentialState = true, signal = null } = {}) {
     const isUserBasic = /^\/v2\/user\/\d+\/basic$/.test(path);
+    const isUserProfile = /^\/v2\/user\/\d+\/profile$/.test(path);
     const isOwnFactionWars = path === SCRIPT.tornOwnWarsPath;
     const isOpponentMembers = /^\/v2\/faction\/\d+\/members$/.test(path);
-    if (path !== SCRIPT.tornKeyInfoPath && !isUserBasic && !isOwnFactionWars && !isOpponentMembers) {
+    if (path !== SCRIPT.tornKeyInfoPath && !isUserBasic && !isUserProfile && !isOwnFactionWars && !isOpponentMembers) {
       throw new Error("Blocked non-allowlisted Torn API endpoint");
     }
     const apiKey = validateTornApiKey(key);
     if (!apiKey) return { ok: false, status: 0, body: { error: { error: "API key required" } } };
+    if (signal?.aborted || !reserveTornRequest()) return { ok: false, status: 0, body: { error: { error: "Torn request limit or context unavailable" } } };
     const observationSerial = trackCredentialState ? ++tornCredentialObservationSerial : 0;
     const credentialEpochAtRequest = tornCredentialEpoch;
     const storedKeyAtRequest = validateTornApiKey(storedTornApiKey);
@@ -1570,11 +1612,11 @@
     const headers = cacheBust
       ? { Accept: "application/json", "Cache-Control": "no-cache", Pragma: "no-cache" }
       : { Accept: "application/json" };
-    const result = await gmXhr({ method: "GET", url: url.toString(), headers });
+    const result = await gmXhr({ method: "GET", url: url.toString(), headers, signal });
     recordTornClockFromHeaders(result);
     const body = parseJsonSafe(result.responseText);
     const rejected = isPdaTornKeyRejectedError(body);
-    const capabilityRejected = isTornCapabilityRejectedError(body);
+    const capabilityRejected = !isUserProfile && isTornCapabilityRejectedError(body);
     const successfulObservation = result.ok && !body?.error;
     const successfulCredentialObservation =
       successfulObservation && path === SCRIPT.tornKeyInfoPath;
@@ -2449,7 +2491,12 @@
         state: normalizeText(status?.state),
         description: normalizeText(status?.description),
         details: normalizeText(status?.details),
-        until
+        until,
+        activity: typeof member.last_action?.status === "string" &&
+          ["online", "idle", "offline"].includes(member.last_action.status.trim().toLowerCase())
+          ? member.last_action.status.trim().toLowerCase() : null,
+        activityTimestamp: Number.isInteger(member.last_action?.timestamp)
+          ? member.last_action.timestamp : null
       });
     }
     return members;
@@ -2570,6 +2617,7 @@
     const selected = operationalWarSurfaceForFaction(selfFactionId);
     if (!selected) {
       if (currentWarSurface || opponentFactionId) {
+        resetLifeState();
         warSurfaceSerial += 1;
         invalidateOwnWarsState();
       }
@@ -2602,6 +2650,7 @@
     opponentFactionId = selected.opponentFactionId;
     if (previousOpponent !== opponentFactionId) opponentMembersState = { factionId: opponentFactionId, members: new Map(), fetchedAt: 0 };
     if (identityChanged) {
+      resetLifeState();
       warSurfaceSerial += 1;
       invalidateOwnWarsState();
       prewarObservation = null;
@@ -2865,8 +2914,10 @@
       tornStatusBackoffUntil = 0;
       tornTransportFailureStreak = 0;
       const memberCount = membersReady && opponentMembersState.factionId === opponentFactionId ? opponentMembersState.members.size : 0;
+      const activityCount = memberCount > 0 ? [...opponentMembersState.members.values()].filter(member => member.activity !== null).length : 0;
       const rwLabel = ownWarsState.live ? "LIVE" : (ownWarsState.phase === RW_PHASE.PREWAR ? "PREWAR" : "not confirmed");
-      setTornStatusState(membersReady ? "ready" : "error", `Torn: own RW ${rwLabel} · ${memberCount} members`, memberCount);
+      setTornStatusState(membersReady ? "ready" : "error", `Torn: own RW ${rwLabel} · ${memberCount} members · activity ${activityCount}/${memberCount}`, memberCount);
+      void runLifeReadQueue();
       scanWarRows();
       return true;
     } catch (error) {
@@ -2898,6 +2949,198 @@
     }
     if (!validTargetId(opponentFactionId) || opponentMembersState.factionId !== opponentFactionId || nowMs() - opponentMembersState.fetchedAt > CONFIG.opponentMembersMaxAgeMs) return null;
     return opponentMembersState.members.get(id) || null;
+  }
+
+  // Rate timestamps survive suspend so blur/focus cannot bypass the limits.
+  // Life values and the active queue are invalidated at every context change.
+  function resetLifeState() {
+    lifeContextSerial += 1;
+    lifeCache.clear();
+    lifeReadController?.abort();
+    if (lifeClaimWaitCancel) lifeClaimWaitCancel();
+  }
+
+  function syncLifeCredential() {
+    const key = effectiveTornApiKey();
+    if (key && key !== lifeCapabilityKey) {
+      lifeCapabilityKey = key;
+      lifeProfileMissing = false;
+      lifeKeyFailureCode = null;
+      lifeRetryAfter = 0;
+      resetLifeState();
+    }
+    return key;
+  }
+
+  function reserveTornRequest() {
+    const now = nowMs();
+    tornRequestTimes = tornRequestTimes.filter(at => now - at < 60000);
+    if (tornRequestTimes.length >= CONFIG.tornCallsPerMinuteMax) return false;
+    tornRequestTimes.push(now);
+    return true;
+  }
+
+  function lifeRuntimeReady() {
+    return runtimeActive && isRuntimeEligible() && !viewOnlyMode() &&
+      !(typeof demoActive === "function" && demoActive()) && keyScopeReady &&
+      validTargetId(selfFactionId) && validTargetId(opponentFactionId) &&
+      currentWarSurface?.opponentFactionId === opponentFactionId &&
+      currentRwPhase().phase === RW_PHASE.LIVE;
+  }
+
+  function lifeHospitalSecondsForTarget(targetId) {
+    const status = tornStatusForTarget(targetId);
+    if (!status || status.activity === "online") return null;
+    if (!isHospitalStatusValue(status.state) && !isHospitalStatusValue(status.description) && !isHospitalStatusValue(status.details)) return null;
+    if (hospitalUntilExpired(status.until)) return null;
+    const seconds = hospitalRemainingSeconds(status.until);
+    return Number.isFinite(seconds) && seconds >= 0 && seconds <= CONFIG.gateSeconds ? seconds : null;
+  }
+
+  function normalizeTargetLife(payload, targetId, fetchedAt) {
+    const profile = payload?.profile;
+    if (!isPlainRecord(profile) || !Number.isSafeInteger(profile.id) || String(profile.id) !== String(targetId)) return null;
+    const current = profile.life?.current;
+    const maximum = profile.life?.maximum;
+    if (!Number.isSafeInteger(current) || current < 0 || !Number.isSafeInteger(maximum) || maximum <= 0 || current > maximum) return null;
+    if (!Number.isFinite(fetchedAt)) return null;
+    return { current, maximum, ratio: current / maximum, fetchedAt, source: "torn-profile", schemaVersion: 1 };
+  }
+
+  function freshLifeForTarget(targetId) {
+    const entry = lifeCache.get(String(targetId));
+    if (!entry || entry.source !== "torn-profile" || entry.schemaVersion !== 1) return null;
+    const age = nowMs() - entry.fetchedAt;
+    return Number.isFinite(age) && age >= 0 && age <= CONFIG.lifeMaxAgeMs ? entry : null;
+  }
+
+  function lowHpForTarget(targetId) {
+    const entry = freshLifeForTarget(targetId);
+    return Boolean(entry && Number.isFinite(entry.ratio) && entry.ratio <= CONFIG.lowHpLifeMaxRatio);
+  }
+
+  async function readTargetLife(targetId, { forClaim = false, isCurrent = () => true } = {}) {
+    const id = String(targetId);
+    const key = syncLifeCredential();
+    if (!key || lifeProfileMissing || lifeKeyFailureCode !== null || nowMs() < lifeRetryAfter || !validTargetId(id) || !lifeRuntimeReady() || !isCurrent() || lifeReadPending) return null;
+    if (sharedWriteBusy && !forClaim) return null;
+    if (lifeHospitalSecondsForTarget(id) === null) return null;
+    const startedAt = nowMs();
+    for (const [previousId, attemptedAt] of lifeReadAttempts) {
+      if (startedAt - attemptedAt >= 60000) lifeReadAttempts.delete(previousId);
+    }
+    // A DIBS click is one deliberate read: it skips the 10 s spacing and the
+    // queue's 30/min cap (it is still counted), so the claim is never delayed.
+    // The 100/min Torn budget in tornApiRequest still applies.
+    const lastAttempt = lifeReadAttempts.get(id);
+    if (!forClaim && Number.isFinite(lastAttempt) && startedAt - lastAttempt < CONFIG.lifeReadMinIntervalMs) return null;
+    lifeReadTimes = lifeReadTimes.filter(at => startedAt - at < 60000);
+    if (!forClaim && lifeReadTimes.length >= CONFIG.lifeReadsPerMinuteMax) return null;
+    const generation = runtimeGeneration;
+    const credentialEpoch = tornCredentialEpoch;
+    const contextSerial = lifeContextSerial;
+    const warId = currentWarSurface?.warId;
+    const surfaceSerial = currentWarSurface?.surfaceSerial;
+    const opponentId = opponentFactionId;
+    const controller = new AbortController();
+    lifeReadController = controller;
+    const current = () => !controller.signal.aborted && isCurrent() &&
+      generation === runtimeGeneration && credentialEpoch === tornCredentialEpoch &&
+      contextSerial === lifeContextSerial && key === effectiveTornApiKey() &&
+      warId === currentWarSurface?.warId && surfaceSerial === currentWarSurface?.surfaceSerial &&
+      opponentId === opponentFactionId && lifeRuntimeReady();
+    lifeReadAttempts.set(id, startedAt);
+    lifeReadTimes.push(startedAt);
+    const operation = (async () => {
+      try {
+        const result = await tornApiRequest("/v2/user/" + id + "/profile", key, { signal: controller.signal });
+        if (!current()) return null;
+        const apiCode = Number(result?.body?.error?.code);
+        if ([2, 10, 13, 18].includes(apiCode)) {
+          lifeKeyFailureCode = apiCode;
+          lifeCache.clear();
+          updatePanel();
+          scanWarRows();
+          return null;
+        }
+        if ([5, 9, 17].includes(apiCode)) {
+          lifeRetryAfter = nowMs() + 60000;
+          return null;
+        }
+        if (apiCode === 16) {
+          lifeProfileMissing = true;
+          lifeCache.clear();
+          updatePanel();
+          scanWarRows();
+          return null;
+        }
+        if (!result?.ok || result.body?.error) return null;
+        // The start time is conservative: a delayed response cannot gain freshness.
+        const entry = normalizeTargetLife(result.body, id, startedAt);
+        if (!entry || (lifeCache.get(id)?.fetchedAt ?? -Infinity) > entry.fetchedAt) return null;
+        lifeCache.set(id, entry);
+        updatePanel();
+        scanWarRows();
+        return freshLifeForTarget(id);
+      } catch {
+        return null;
+      }
+    })();
+    lifeReadPending = operation;
+    try {
+      return await operation;
+    } finally {
+      if (lifeReadPending === operation) lifeReadPending = null;
+      if (lifeReadController === controller) lifeReadController = null;
+    }
+  }
+
+  async function runLifeReadQueue() {
+    syncLifeCredential();
+    if (lifeQueueRunning || lifeProfileMissing || lifeKeyFailureCode !== null || nowMs() < lifeRetryAfter || !lifeRuntimeReady() || sharedWriteBusy) return false;
+    const contextSerial = lifeContextSerial;
+    lifeQueueRunning = true;
+    try {
+      const targets = [...opponentMembersState.members.keys()]
+        .map(id => ({ id, seconds: lifeHospitalSecondsForTarget(id) }))
+        .filter(target => target.seconds !== null)
+        .sort((a, b) => a.seconds - b.seconds || Number(a.id) - Number(b.id));
+      for (const target of targets) {
+        if (contextSerial !== lifeContextSerial || !lifeRuntimeReady() || sharedWriteBusy || lifeProfileMissing || lifeKeyFailureCode !== null || nowMs() < lifeRetryAfter) break;
+        await readTargetLife(target.id);
+      }
+      return true;
+    } finally {
+      lifeQueueRunning = false;
+    }
+  }
+
+  async function waitForLifeClaimReadSlot(targetId, isCurrent = () => true) {
+    syncLifeCredential();
+    const contextSerial = lifeContextSerial;
+    const current = () => contextSerial === lifeContextSerial && isCurrent() && lifeRuntimeReady() && !lifeProfileMissing && lifeKeyFailureCode === null && nowMs() >= lifeRetryAfter;
+    if (!current()) return false;
+    // An existing serial read has its normal request timeout and aborts on suspend.
+    if (lifeReadPending) await lifeReadPending;
+    // No 10 s per-target wait before a claim: the click read is exempt (1.1.6/1.5.179 review fix C1).
+    return current();
+  }
+
+  function lifeStatusMessage() {
+    syncLifeCredential();
+    if (viewOnlyMode()) return "Life: not used in VIEW";
+    if (lifeKeyFailureCode !== null) return "Life: API key rejected · low-life DIBS unavailable";
+    if (lifeProfileMissing) return "Life: key lacks 'profile' · create a new custom key to use low-life DIBS";
+    const newest = Math.max(...[...lifeCache.values()].map(entry => entry.fetchedAt));
+    return Number.isFinite(newest)
+      ? "Life: " + lifeCache.size + " targets read · newest " + Math.max(0, Math.floor((nowMs() - newest) / 1000)) + " s ago"
+      : "Life: 0 targets read · newest unknown";
+  }
+
+  function freshOpponentActivityForTarget(targetId) {
+    if (viewOnlyMode()) return null;
+    const status = tornStatusForTarget(targetId);
+    return ["online", "idle", "offline"].includes(status?.activity) ? status.activity : null;
   }
 
   // ---------------------------------------------------------------------------
@@ -3154,7 +3397,7 @@
   // Pure target decision engine
   // ---------------------------------------------------------------------------
 
-  function classifyLiveTargetState({ playerId, ownTargetId, isHospital, seconds, fairFight, rwPhase }) {
+  function classifyLiveTargetState({ playerId, ownTargetId, isHospital, seconds, fairFight, rwPhase, activity = null, lowHp = false }) {
     const ff = Number.isFinite(fairFight) ? Number(fairFight) : null;
     if (ownTargetId) {
       if (ownTargetId === playerId) return { state: TARGET_STATE.CLAIMED, seconds, fairFight: ff, reason: "active-own-dibs", mode: "live" };
@@ -3176,11 +3419,12 @@
     if (seconds > CONFIG.gateSeconds) return { state: TARGET_STATE.LOCKED, seconds, fairFight: ff, reason: "hospital-too-early", mode: "live" };
     if (ff === null) return { state: TARGET_STATE.UNKNOWN, seconds, fairFight: null, reason: "fair-fight-unverifiable", mode: "live" };
     if (ff < CONFIG.minFairFight) return { state: TARGET_STATE.LOCKED, seconds, fairFight: ff, reason: "fair-fight-too-low", mode: "live" };
-    if (ff > CONFIG.maxFairFight) return { state: TARGET_STATE.LOCKED, seconds, fairFight: ff, reason: "fair-fight-too-high", mode: "live" };
-    return { state: TARGET_STATE.READY, seconds, fairFight: ff, reason: "hospital-window-and-fair-fight-open", mode: "live" };
+    if (ff > (lowHp === true ? CONFIG.lowHpMaxFairFight : CONFIG.maxFairFight)) return { state: TARGET_STATE.LOCKED, seconds, fairFight: ff, reason: "fair-fight-too-high", mode: "live" };
+    if (activity === "online") return { state: TARGET_STATE.FREE, seconds, fairFight: ff, reason: "online-free-for-all", mode: "live" };
+    return { state: TARGET_STATE.READY, seconds, fairFight: ff, reason: lowHp === true ? "hospital-window-low-life-fair-fight-open" : "hospital-window-and-fair-fight-open", mode: "live", ...(lowHp === true ? { lowHp: true } : {}) };
   }
 
-  function classifyTargetState({ playerId, ownClaim, isHospital, seconds, fairFight, rwPhase, ownershipUnresolved = false }) {
+  function classifyTargetState({ playerId, ownClaim, isHospital, seconds, fairFight, rwPhase, activity = null, lowHp = false, ownershipUnresolved = false }) {
     if (ownClaim) {
       if (ownClaim.targetId === playerId) {
         return { state: TARGET_STATE.CLAIMED, seconds, fairFight, reason: "active-own-dibs", mode: "live" };
@@ -3196,7 +3440,9 @@
       isHospital,
       seconds,
       fairFight,
-      rwPhase
+      rwPhase,
+      activity,
+      lowHp
     });
   }
 
@@ -3213,6 +3459,8 @@
       isHospital: hospital.isHospital,
       seconds: hospital.seconds,
       fairFight: fairFightForTarget(row.id),
+      activity: freshOpponentActivityForTarget(row.id),
+      lowHp: lowHpForTarget(row.id),
       rwPhase,
       ownershipUnresolved: Boolean(
         !newClaimStorageAuthorityReady() ||
@@ -3374,7 +3622,12 @@
     const clickedOpponentId = opponentFactionId;
     if (!clickedResolved || !bindingTargetIsUnique(clickedBinding, clickedResolved) || !clickedSurface || clickedSurface.opponentFactionId !== clickedOpponentId) return;
     const eligibility = currentDecisionForTarget(targetId);
-    if (!eligibility || eligibility.state !== TARGET_STATE.READY) { scanWarRows(); return; }
+    if (!eligibility || eligibility.state !== TARGET_STATE.READY) {
+      if (eligibility?.state === TARGET_STATE.FREE) {
+        holdSharedWriteFailure("Shared: claim refused · target is online (free for all)");
+      }
+      scanWarRows(); return;
+    }
 
     const generation = runtimeGeneration;
     const operationSerial = ++sharedWriteOperationSerial;
@@ -3412,6 +3665,12 @@
         currentOwnClaim() || currentClaimQuarantine() || ambiguousOwnServerClaims ||
         sharedClaimForTarget(targetId) || sharedClaimsUnreadable.has(targetId)
       ) throw new Error("target already claimed or ownership unresolved");
+      if (eligibility.fairFight > CONFIG.maxFairFight &&
+          !(await waitForLifeClaimReadSlot(targetId, claimCreationCurrent))) {
+        if (claimCreationCurrent()) holdSharedWriteFailure("Shared: claim refused · low life could not be confirmed");
+        return;
+      }
+      if (!claimCreationCurrent()) return;
       if (!(await fetchOwnWars({ force: true })) || !ownWarsFreshLive(CONFIG.ownWarsWriteMaxAgeMs)) {
         throw new Error("fresh own faction wars did not confirm LIVE");
       }
@@ -3429,15 +3688,46 @@
         !currentWarSurfaceMatchesSnapshot(clickedSurface) ||
         finalSurface.opponentFactionId !== clickedOpponentId
       ) throw new Error("target identity or opponent relation changed");
+      let lowLifeProfileRead = false;
+      if (fairFightForTarget(targetId) > CONFIG.maxFairFight) {
+        if (freshOpponentActivityForTarget(targetId) === "online") {
+          holdSharedWriteFailure("Shared: claim refused · target is online (free for all)");
+          return;
+        }
+        const life = await readTargetLife(targetId, { forClaim: true, isCurrent: claimCreationCurrent });
+        if (!claimCreationCurrent()) return;
+        if (freshOpponentActivityForTarget(targetId) === "online") {
+          holdSharedWriteFailure("Shared: claim refused · target is online (free for all)");
+          return;
+        }
+        if (!life || life.ratio > CONFIG.lowHpLifeMaxRatio) {
+          holdSharedWriteFailure("Shared: claim refused · low life could not be confirmed");
+          return;
+        }
+        lowLifeProfileRead = true;
+      }
       const finalEligibility = classifyTargetState({
         playerId: targetId,
         ownClaim: currentOwnClaim(),
-        isHospital: true,
-        seconds: targetProof.seconds,
+        isHospital: lowLifeProfileRead ? !hospitalUntilExpired(targetProof.status.until) : true,
+        seconds: lowLifeProfileRead ? hospitalRemainingSeconds(targetProof.status.until) : targetProof.seconds,
         fairFight: fairFightForTarget(targetId),
+        activity: freshOpponentActivityForTarget(targetId),
+        lowHp: lowHpForTarget(targetId),
         rwPhase: currentRwPhase()
       });
+      if (finalEligibility?.state === TARGET_STATE.FREE) {
+        holdSharedWriteFailure("Shared: claim refused · target is online (free for all)");
+        return;
+      }
       if (
+        !claimCreationCurrent() ||
+        (lowLifeProfileRead && (
+          xidBindings.get(targetId) !== clickedBinding ||
+          !currentResolvedBinding(clickedBinding) ||
+          !bindingTargetIsUnique(clickedBinding, currentResolvedBinding(clickedBinding)) ||
+          !currentWarSurfaceMatchesSnapshot(clickedSurface)
+        )) ||
         !newClaimStorageAuthorityReady() ||
         currentOwnClaim() || currentClaimQuarantine() || ambiguousOwnServerClaims ||
         sharedClaimForTarget(targetId) || sharedClaimsUnreadable.has(targetId) ||
@@ -3657,6 +3947,12 @@
     return Number.isFinite(seconds) && seconds > CONFIG.autoReleaseHospitalSeconds;
   }
 
+  function ownClaimTargetIsOnline() {
+    if (viewOnlyMode() || !ownWarsFreshLive()) return false;
+    const own = currentOwnClaim();
+    return Boolean(own && freshOpponentActivityForTarget(own.targetId) === "online");
+  }
+
   async function maybeAutoReleaseBeatenTarget() {
     if (
       !runtimeActive || !isRuntimeEligible() || sharedWriteBusy || ffCredentialChangeBusy() ||
@@ -3664,14 +3960,17 @@
     ) return false;
     const own = currentOwnClaim();
     if (!own || autoReleaseAttemptedClaimId === own.claimId) return false;
-    if (!ownClaimTargetIsBeaten()) return false;
+    const online = ownClaimTargetIsOnline();
+    if (!online && !ownClaimTargetIsBeaten()) return false;
     autoReleaseAttemptedClaimId = own.claimId;
     await releaseOwnSharedTarget();
     if (currentOwnClaim()) return false;
     // releaseOwnSharedTarget kicks off a shared poll in its own finally block,
     // and that poll would overwrite the message within about 100 ms. Hold it the
     // same way a write failure is held, so the owner actually sees what happened.
-    setSharedStatus("online", "Shared: auto-released \u00b7 target back in hospital", sharedClaims.size);
+    setSharedStatus("online", online
+      ? "Shared: auto-released · target online (free for all)"
+      : "Shared: auto-released \u00b7 target back in hospital", sharedClaims.size);
     sharedStatusHoldUntil = nowMs() + CONFIG.sharedErrorHoldMs;
     return true;
   }
@@ -3722,12 +4021,12 @@
     return DEMO_STATES[id % DEMO_STATES.length];
   }
 
-  // An FF inside the 2.00-5.00 gate for the rows shown as attackable, outside it
+  // An FF inside the 2.00-3.40 gate for the rows shown as attackable, outside it
   // for the row shown as blocked by FF. Illustrative only.
   function demoFairFightForTarget(targetId) {
     const id = Number(targetId) || 0;
     if (demoStateForTarget(targetId) === "ff-low") return 1.2 + (id % 7) / 10;
-    return 2.1 + (id % 28) / 10;
+    return 2.0 + (id % 15) / 10;
   }
 
   const rowRegistry = new Map();
@@ -4157,6 +4456,8 @@
         button[data-role='dibs'] .label { display:block; font:900 12px/1.15 Arial,sans-serif; white-space:nowrap; }
         button[data-role='dibs'] .sub { display:block; font:700 8px/1.1 Arial,sans-serif; opacity:.85; white-space:nowrap; }
         button[data-role='dibs'].ready { border-color:#38a169; background:#22543d; color:#f0fff4; }
+        button[data-role='dibs'].free { border-color:#38b2ac; background:#234e52; color:#e6fffa; }
+        button[data-role='dibs'].lowhp { border-color:#d53f8c; background:#702459; color:#fff5f7; }
         button[data-role='dibs'].locked,button[data-role='dibs'].prewar { border-color:#975a16; background:#744210; color:#fefcbf; }
         button[data-role='dibs'].unknown { border-color:#9b2c2c; background:#742a2a; color:#fff5f5; }
         button[data-role='dibs'].unavailable,button[data-role='dibs'].blocked { border-color:#4a5568; background:#171923; color:#94a3b8; }
@@ -4224,6 +4525,7 @@
             <div class="status-item" data-role="torn-item"><span class="dot"></span><span class="status" data-role="torn-status">Torn: loading…</span></div>
             <div class="status-item" data-role="rw-item"><span class="dot"></span><span class="status" data-role="rw-status">DIBS: checking RW…</span></div>
             <div class="status-item" data-role="clock-item"><span class="dot"></span><span class="status" data-role="clock-status">Clock: loading…</span></div>
+            <div class="status-item" data-role="life-item"><span class="dot"></span><span class="status" data-role="life-status">Life: 0 targets read · newest unknown</span></div>
           </div>
           <div class="controls" data-role="controls-primary">
             <button type="button" data-role="key">FFScouter key</button>
@@ -4234,11 +4536,11 @@
           </div>
           <div class="editor" data-role="key-editor"><input data-role="key-input" type="text" maxlength="16" autocomplete="off" placeholder="16-character FFScouter key"><button type="button" data-role="key-save">Save</button><button type="button" data-role="key-cancel">Cancel</button></div>
           <div class="editor" data-role="torn-key-editor"><input data-role="torn-key-input" type="text" maxlength="16" autocomplete="off" placeholder="16-character Torn API key"><button type="button" data-role="torn-key-save">Save</button><button type="button" data-role="torn-key-cancel">Cancel</button></div>
-          <div class="note" data-role="note">LIVE: Hospital ≤2:00 + FF 2.00–5.00. First successful DIBS wins; claimant can RELEASE.</div>
+          <div class="note" data-role="note">LIVE: Hospital ≤2:00 + FF 2.00–3.40. Online targets are free for all. Low life (≤20%): FF up to 4.50. First successful DIBS wins; claimant can RELEASE.</div>
           <div class="controls"><button type="button" data-role="about-toggle" aria-expanded="false">About — data &amp; privacy</button></div>
           <div class="about-panel" data-role="about-panel">
             <div class="api-policy">
-              <strong>Torn API key:</strong> stored only locally, encrypted in this browser; sent only to api.torn.com. Torn API data is processed locally and is not sent to FFScouter. Purpose: faction member Hospital/status data and key-owner identity for Ranked War DIBS. Access: Custom key requiring faction → members; key → info is used to identify the key owner.
+              <strong>Torn API key:</strong> stored only locally, encrypted in this browser; sent only to api.torn.com. Torn API data is processed locally and is not sent to FFScouter. Purpose: faction member Hospital/status data, key-owner identity and life of opponents who are about to leave hospital (low-life DIBS). Access: Custom key requiring faction → members, wars and user → basic, profile; key → info is used to identify the key owner.
               <br>
               <strong>FFScouter key/integration:</strong> key stored only locally, encrypted in this browser; sent only to FFScouter. Visible target IDs from the actively viewed war page are sent to FFScouter for FF/Est lookup and Hit Calling. Claim/release data is shared with faction members through FFScouter Hit Calling.
               <a data-role="ff-terms" target="_blank" rel="noopener noreferrer">FFScouter terms/data policy</a> · <a data-role="ff-privacy" target="_blank" rel="noopener noreferrer">Privacy</a>.
@@ -4699,9 +5001,10 @@
   // Covering Torn's Status cell is only justified when KS actually has something
   // to add. Otherwise the cell is left alone and Torn's own Okay / Traveling /
   // Abroad reads exactly as it always did.
-  function dibsControlHasSomethingToSay({ playerId, own, sharedClaim, countdown }) {
+  function dibsControlHasSomethingToSay({ playerId, own, sharedClaim, countdown, decision = null }) {
     return Boolean(
       countdown ||
+      (decision?.state === TARGET_STATE.FREE && Number.isFinite(decision.seconds)) ||
       sharedClaim ||
       sharedClaimsUnreadable.has(playerId) ||
       pendingTargetId === playerId ||
@@ -4734,7 +5037,7 @@
     button.dataset.ready = "false";
     button.removeAttribute("title");
 
-    if (!demoActive() && !dibsControlHasSomethingToSay({ playerId, own, sharedClaim, countdown })) {
+    if (!demoActive() && !dibsControlHasSomethingToSay({ playerId, own, sharedClaim, countdown, decision })) {
       button.style.visibility = "hidden";
       button.disabled = true;
       return;
@@ -4801,6 +5104,10 @@
       button.className = cleanup ? "cleanup" : "claimed"; button.dataset.state = cleanup ? "cleanup" : "claimed"; button.disabled = !sharedApiKey || sharedWriteBusy;
       label.textContent = cleanup ? "QUEUED" : "DIBBED"; sub.textContent = "RELEASE"; return;
     }
+    if (decision.state === TARGET_STATE.FREE) {
+      button.className = "free"; button.dataset.state = TARGET_STATE.FREE; button.disabled = true;
+      label.textContent = countdown || "FREE"; sub.textContent = "ONLINE"; return;
+    }
     if (!sharedClaim && sharedClaimsUnreadable.has(playerId)) {
       button.className = "unavailable"; button.dataset.state = "unreadable"; button.disabled = true;
       label.textContent = "DIBS?"; sub.textContent = "UNKNOWN"; return;
@@ -4824,6 +5131,16 @@
     if (decision.state === TARGET_STATE.READY) {
       button.disabled = !sharedApiKey || sharedWriteBusy;
       button.dataset.ready = button.disabled ? "false" : "true";
+      if (decision.lowHp === true) {
+        const life = freshLifeForTarget(playerId);
+        if (!life) {
+          button.className = "unknown"; button.disabled = true; button.dataset.ready = "false";
+          sub.textContent = "CHECKING"; return;
+        }
+        button.className = "lowhp";
+        sub.textContent = `LOW HP ${Math.round(life.ratio * 100)}% · FF${Number(decision.fairFight).toFixed(1)}`;
+        return;
+      }
       sub.textContent = `DIBS · FF${Number(decision.fairFight).toFixed(1)}`;
       return;
     }
@@ -4831,7 +5148,7 @@
     if (decision.state === TARGET_STATE.BLOCKED) { label.textContent = "BLOCKED"; sub.textContent = own?.claimerName || "ACTIVE"; return; }
     if (decision.reason === "rw-not-started") { sub.textContent = "PREWAR"; return; }
     if (decision.reason === "fair-fight-too-low" || decision.reason === "fair-fight-too-high") {
-      sub.textContent = `FF${Number(decision.fairFight).toFixed(1)}`;
+      sub.textContent = `FF${Number(decision.fairFight).toFixed(2)}`;
       return;
     }
     if (decision.state === TARGET_STATE.UNKNOWN) { sub.textContent = "UNKNOWN"; return; }
@@ -4889,6 +5206,8 @@
       isHospital: hospitalState.isHospital,
       seconds: hospitalState.seconds,
       fairFight: fairFightForTarget(resolved.id),
+      activity: freshOpponentActivityForTarget(resolved.id),
+      lowHp: lowHpForTarget(resolved.id),
       rwPhase,
       ownershipUnresolved: Boolean(
         !newClaimStorageAuthorityReady() ||
@@ -5165,6 +5484,11 @@
       $("clock-status").textContent = clockText;
       $("clock-status").title = clockText;
     }
+    if ($("life-status")) {
+      const lifeText = lifeStatusMessage();
+      $("life-status").textContent = lifeText;
+      $("life-status").title = lifeText;
+    }
     const ffExternalLock = ffCredentialExternalLockActive();
     const ffChangeBusy = ffCredentialChangeBusy();
     if (ffExternalLock) $("key-editor")?.classList.remove("open");
@@ -5208,7 +5532,7 @@
     if ($("torn-key-cancel")) $("torn-key-cancel").disabled = tornChangeBusy;
     const note = $("note");
     if (note) {
-      note.textContent = "LIVE: Hospital ≤2:00 + FF 2.00–5.00. First successful DIBS wins; claimant can RELEASE.";
+      note.textContent = "LIVE: Hospital ≤2:00 + FF 2.00–3.40. Online targets are free for all. Low life (≤20%): FF up to 4.50. First successful DIBS wins; claimant can RELEASE.";
     }
 
     // Relocate the FF/Torn key controls: broken out into the always-visible
