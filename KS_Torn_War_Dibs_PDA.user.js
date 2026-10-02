@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PDA
 // @namespace    kingshade.torn
-// @version      1.5.180
+// @version      1.5.181
 // @description  Roster-local PDA presentation with v1.5.145 authority and shared-claim safety.
 // @author       Kingshade
 // @match        https://www.torn.com/factions.php*
@@ -14,6 +14,14 @@
 // ==/UserScript==
 
 /*
+ * 1.5.181: the war roster is drawn in a fixed order: Okay, then Hospital
+ * with the shortest time first, then Hospital with an unreadable time, then
+ * Traveling/Abroad, then everything else. Rows are never moved in the DOM
+ * (WSE re-sorts ul.members-list on every childList change and would undo it):
+ * the list becomes a flex column and each row gets a CSS order. The order is
+ * a pure function of Torn data plus a stable first-seen sequence, never of
+ * DOM position, so it cannot start a sort loop with another script. Rows are
+ * re-measured in the same frame, so a DIBS button always sits on its own row.
  * 1.5.180: hospital rows no longer fall to UNKNOWN for ~10 s of every
  * 40 s. The opponent/VIEW member list is refetched once it is older than
  * tornStatusPollMs (10 s), the same rule PC uses, so it never passes the
@@ -191,8 +199,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs",
-    version: "1.5.180",
-    instanceKey: "__ksTornWarDibsPdaV15180Test",
+    version: "1.5.181",
+    instanceKey: "__ksTornWarDibsPdaV15181Test",
     layerId: "ks-twd-pda-layer",
     rowHostPrefix: "ks-twd-pda-row-",
     panelId: "ks-twd-pda-panel",
@@ -4683,6 +4691,9 @@
     presentationFrameRenderAll = false;
     lastPresentationDataSignature = "";
     lastPresentationFairFightAt = 0;
+    restoreRosterOrder();
+    rosterFirstSeen.clear();
+    rosterFirstSeenNext = 0;
     retireAllBindings();
     for (const entry of rowRegistry.values()) {
       presentationIntersectionObserver?.unobserve(entry.row);
@@ -5273,9 +5284,100 @@
     }
   }
 
+  // 1.5.181 roster order. See the header note. Restored on every dispose.
+  const rosterFirstSeen = new Map();
+  let rosterFirstSeenNext = 0;
+  let sortedRosterList = null;
+  let sortedRosterListPrevious = null;
+  const sortedRosterRows = new Set();
+  const ROSTER_GROUP = Object.freeze({ OKAY: 0, HOSPITAL: 1, HOSPITAL_UNKNOWN: 2, TRAVEL: 3, OTHER: 4, UNBOUND: 5 });
+
+  function rosterSortKey(entry) {
+    const resolved = entry.binding ? cachedResolvedBinding(entry.binding) : null;
+    const statusDiv = resolved?.statusDiv instanceof HTMLElement
+      ? resolved.statusDiv
+      : (entry.anchors?.status instanceof HTMLElement ? entry.anchors.status : entry.row);
+    const rowView = resolved || { row: entry.row, li: entry.row, statusDiv, id: entry.targetId };
+    const hospital = computeHospitalSeconds(rowView);
+    if (hospital?.isHospital === true) {
+      return Number.isFinite(hospital.seconds)
+        ? { group: ROSTER_GROUP.HOSPITAL, seconds: hospital.seconds }
+        : { group: ROSTER_GROUP.HOSPITAL_UNKNOWN, seconds: 0 };
+    }
+    if (hospital?.source === "torn-api-expired") return { group: ROSTER_GROUP.OKAY, seconds: 0 };
+    const apiState = normalizeText(tornStatusForTarget(entry.targetId)?.state);
+    const text = (apiState || normalizeText(statusDiv?.textContent)).toLowerCase();
+    if (text.startsWith("okay")) return { group: ROSTER_GROUP.OKAY, seconds: 0 };
+    if (text.includes("travel") || text.includes("abroad")) return { group: ROSTER_GROUP.TRAVEL, seconds: 0 };
+    return { group: ROSTER_GROUP.OTHER, seconds: 0 };
+  }
+
+  function restoreRosterOrder() {
+    for (const row of sortedRosterRows) {
+      if (row instanceof HTMLElement && row.style.order !== "") row.style.order = "";
+    }
+    sortedRosterRows.clear();
+    if (sortedRosterList instanceof HTMLElement && sortedRosterListPrevious) {
+      sortedRosterList.style.display = sortedRosterListPrevious.display;
+      sortedRosterList.style.flexDirection = sortedRosterListPrevious.flexDirection;
+    }
+    sortedRosterList = null;
+    sortedRosterListPrevious = null;
+  }
+
+  // Returns true when anything visible moved, so the caller re-measures rows.
+  function syncRosterOrder() {
+    const entries = [...rowRegistry.values()].filter(entry => entry.row instanceof HTMLElement && entry.row.isConnected);
+    const list = entries[0]?.row.parentElement || null;
+    if (!(list instanceof HTMLElement) || !entries.every(entry => entry.row.parentElement === list)) {
+      const had = sortedRosterList !== null || sortedRosterRows.size > 0;
+      restoreRosterOrder();
+      return had;
+    }
+    let changed = false;
+    if (sortedRosterList !== list) {
+      restoreRosterOrder();
+      sortedRosterList = list;
+      sortedRosterListPrevious = { display: list.style.display, flexDirection: list.style.flexDirection };
+      list.style.display = "flex";
+      list.style.flexDirection = "column";
+      changed = true;
+    }
+    const seq = targetId => {
+      if (!rosterFirstSeen.has(targetId)) rosterFirstSeen.set(targetId, rosterFirstSeenNext++);
+      return rosterFirstSeen.get(targetId);
+    };
+    const keyed = entries.map(entry => ({ row: entry.row, seq: seq(entry.targetId), ...rosterSortKey(entry) }));
+    const registered = new Set(entries.map(entry => entry.row));
+    let unboundIndex = 0;
+    for (const child of list.children) {
+      if (child instanceof HTMLElement && child.tagName === "LI" && !registered.has(child)) {
+        keyed.push({ row: child, seq: 1e9 + unboundIndex++, group: ROSTER_GROUP.UNBOUND, seconds: 0 });
+      }
+    }
+    keyed.sort((a, b) => a.group - b.group || a.seconds - b.seconds || a.seq - b.seq);
+    const seen = new Set();
+    keyed.forEach((item, index) => {
+      const value = String(index + 1);
+      if (item.row.style.order !== value) {
+        item.row.style.order = value;
+        changed = true;
+      }
+      seen.add(item.row);
+      sortedRosterRows.add(item.row);
+    });
+    for (const row of [...sortedRosterRows]) {
+      if (seen.has(row)) continue;
+      if (row instanceof HTMLElement && row.style.order !== "") row.style.order = "";
+      sortedRosterRows.delete(row);
+      changed = true;
+    }
+    return changed;
+  }
+
   function performPresentationFrame() {
     presentationFrameHandle = null;
-    const needsLayout = presentationFrameNeedsLayout;
+    let needsLayout = presentationFrameNeedsLayout;
     const needsRender = presentationFrameNeedsRender;
     const renderAll = presentationFrameRenderAll;
     presentationFrameNeedsLayout = false;
@@ -5284,6 +5386,9 @@
     if (!runtimeActive || !bridgeMounted || !isRuntimeEligible()) return;
     const layer = presentationLayer();
     if (!layer) return;
+    // Order first, then measure in the same frame: no paint with a button on
+    // the wrong row.
+    if (syncRosterOrder()) needsLayout = true;
     let measurements = [];
     if (needsLayout) {
       const layerRect = layer.getBoundingClientRect();
@@ -5312,6 +5417,7 @@
     if (!runtimeActive || !bridgeMounted || !isRuntimeEligible()) return;
     void maybeAutoReleaseBeatenTarget();
     renderRegisteredRows();
+    schedulePresentationFrame();
   }
 
   function presentationDataSignature() {
