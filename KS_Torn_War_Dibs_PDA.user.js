@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PDA
 // @namespace    kingshade.torn
-// @version      1.5.182
+// @version      1.5.183
 // @description  Roster-local PDA presentation with v1.5.145 authority and shared-claim safety.
 // @author       Kingshade
 // @match        https://www.torn.com/factions.php*
@@ -14,6 +14,10 @@
 // ==/UserScript==
 
 /*
+ * 1.5.183: a row Torn only moves keeps its DIBS button. Torn re-sorts the
+ * roster by moving the same li elements (remove + insert, measured on Torn
+ * 2026-10-02); KS treated every move as a removal, retired the binding and
+ * built a new one that showed "DIBS LOADING" until the next paint.
  * 1.5.182: the roster order follows Torn's own column headers. KS orders
  * the rows only while Status is the active sort column: Status down (Torn's
  * first tap) = Okay, Hospital shortest first, Hospital ?, Traveling/Abroad,
@@ -206,8 +210,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs",
-    version: "1.5.182",
-    instanceKey: "__ksTornWarDibsPdaV15182Test",
+    version: "1.5.183",
+    instanceKey: "__ksTornWarDibsPdaV15183Test",
     layerId: "ks-twd-pda-layer",
     rowHostPrefix: "ks-twd-pda-row-",
     panelId: "ks-twd-pda-panel",
@@ -6259,6 +6263,11 @@
       for (const node of record.removedNodes) {
         for (const row of rowsWithinMutationNode(node)) {
           if (rowRegistry.has(row)) layoutNeeded = true;
+          // Still in the roster: moved, not removed. Keep the binding.
+          if (row.isConnected && presentationRoot instanceof HTMLElement && presentationRoot.contains(row)) {
+            affectedRows.add(row);
+            continue;
+          }
           removeRowRegistryEntry(row);
         }
       }
