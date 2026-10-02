@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PDA
 // @namespace    kingshade.torn
-// @version      1.5.183
+// @version      1.5.184
 // @description  Roster-local PDA presentation with v1.5.145 authority and shared-claim safety.
 // @author       Kingshade
 // @match        https://www.torn.com/factions.php*
@@ -14,6 +14,10 @@
 // ==/UserScript==
 
 /*
+ * 1.5.184: the hospital countdown changes its digits on Torn's second
+ * boundary, every second, instead of whenever a free 1 s interval happened
+ * to fire. Ported from PC scheduleDisplayTick (PC 1.0.32). Same work per
+ * tick, same rate; only the moment inside the second moves.
  * 1.5.183: a row Torn only moves keeps its DIBS button. Torn re-sorts the
  * roster by moving the same li elements (remove + insert, measured on Torn
  * 2026-10-02); KS treated every move as a removal, retired the binding and
@@ -210,8 +214,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs",
-    version: "1.5.183",
-    instanceKey: "__ksTornWarDibsPdaV15183Test",
+    version: "1.5.184",
+    instanceKey: "__ksTornWarDibsPdaV15184Test",
     layerId: "ks-twd-pda-layer",
     rowHostPrefix: "ks-twd-pda-row-",
     panelId: "ks-twd-pda-panel",
@@ -6419,7 +6423,7 @@
   }
 
   function clearTimers() {
-    if (rowRefreshTimer !== null) window.clearInterval(rowRefreshTimer);
+    if (rowRefreshTimer !== null) window.clearTimeout(rowRefreshTimer);
     if (sharedPollTimer !== null) window.clearInterval(sharedPollTimer);
     if (fairFightTimer !== null) window.clearInterval(fairFightTimer);
     if (fairFightRetryTimer !== null) window.clearTimeout(fairFightRetryTimer);
@@ -6480,9 +6484,26 @@
     return reconcileRoute({ structural });
   }
 
+  // Aligned to Torn's second boundary rather than free-running, so the cell
+  // changes its digits in the same instant every second (PC 1.0.32).
+  function scheduleRowRefreshTick() {
+    if (rowRefreshTimer !== null) {
+      window.clearTimeout(rowRefreshTimer);
+      rowRefreshTimer = null;
+    }
+    if (!runtimeActive) return;
+    const sinceBoundary = ((getTornNowMs() % 1000) + 1000) % 1000;
+    const delay = Math.min(CONFIG.rowRefreshMs, Math.max(20, CONFIG.rowRefreshMs - sinceBoundary));
+    rowRefreshTimer = window.setTimeout(() => {
+      rowRefreshTimer = null;
+      if (runtimeActive && isRuntimeEligible()) tickVisibleHospitalCountdowns();
+      if (runtimeActive) scheduleRowRefreshTick();
+    }, delay);
+  }
+
   function startRuntimeTimers() {
     clearTimers();
-    rowRefreshTimer = window.setInterval(() => { if (runtimeActive && isRuntimeEligible()) tickVisibleHospitalCountdowns(); }, CONFIG.rowRefreshMs);
+    scheduleRowRefreshTick();
     sharedPollTimer = window.setInterval(() => { if (sharedApiKey && runtimeActive && isRuntimeEligible()) void fetchSharedClaims(); }, CONFIG.sharedPollMs);
     fairFightTimer = window.setInterval(() => { if (sharedApiKey && runtimeActive && isRuntimeEligible()) void fetchFairFightStats(); }, CONFIG.fairFightRefreshMs);
     tornStatusTimer = window.setInterval(() => {
