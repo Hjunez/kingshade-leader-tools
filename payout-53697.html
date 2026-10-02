@@ -1,0 +1,1521 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KS War Payout Ledger</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground: #eaedf1; --surface: #ffffff; --surface-2: #f4f6f9;
+    --ink: #14202b; --muted: #5c6d7e; --faint: #8b9aa8;
+    --line: #d3dae1; --line-strong: #b8c3cd;
+    --accent: #a3512a; --accent-ink: #ffffff; --accent-soft: #f2ded4;
+    --good: #1c7355; --good-soft: #dfeee8;
+    --bad: #a12f2a; --bad-soft: #f6dedc;
+    --shadow: 0 1px 2px rgba(20,32,43,.06), 0 8px 24px rgba(20,32,43,.06);
+    --display: 'Saira Condensed','Arial Narrow',Helvetica,sans-serif;
+    --body: 'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
+    --mono: 'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+      --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+      --line: #26313b; --line-strong: #35434f;
+      --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+      --good: #46a583; --good-soft: #172a24;
+      --bad: #dd6a61; --bad-soft: #2c1b1a;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+    --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+    --line: #26313b; --line-strong: #35434f;
+    --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+    --good: #46a583; --good-soft: #172a24;
+    --bad: #dd6a61; --bad-soft: #2c1b1a;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--body); font-size: 15px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1040px; margin: 0 auto; padding: 28px 20px 72px;
+    display: flex; flex-direction: column; gap: 22px;
+  }
+
+  .backbar a {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+    text-decoration: none; border: 1px solid var(--line-strong);
+    border-radius: 3px; padding: 7px 12px; display: inline-block;
+  }
+  .backbar a:hover { color: var(--accent); border-color: var(--accent); }
+  .backbar a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .masthead {
+    display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between;
+    gap: 12px 24px; padding-bottom: 18px; border-bottom: 2px solid var(--line-strong);
+  }
+
+  h1 {
+    font-family: var(--display); font-weight: 700;
+    font-size: clamp(30px, 5vw, 42px); line-height: 1.02; margin: 0; text-wrap: balance;
+  }
+
+  .masthead p { margin: 6px 0 0; color: var(--muted); max-width: 58ch; }
+
+  .stamp {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .13em; text-transform: uppercase; color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 2px; padding: 5px 10px; white-space: nowrap;
+  }
+
+  .panel {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 4px; box-shadow: var(--shadow);
+  }
+
+  .panel-head {
+    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+    gap: 8px 16px; padding: 14px 18px; border-bottom: 1px solid var(--line);
+  }
+
+  .panel-head h2 {
+    font-family: var(--display); font-weight: 600; font-size: 19px;
+    letter-spacing: .04em; text-transform: uppercase; margin: 0;
+  }
+
+  .panel-head .hint { color: var(--faint); font-size: 13px; margin: 0; }
+  .panel-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+
+  .field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; }
+  .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  #bonusField[hidden], #bonusNoteField[hidden] { display: none; }
+
+  .field > label, .legend, label.lbl {
+    font-family: var(--display); font-weight: 600; font-size: 12px;
+    letter-spacing: .11em; text-transform: uppercase; color: var(--muted);
+  }
+
+  .field .note { font-size: 12px; color: var(--faint); }
+
+  input[type="text"], input[type="password"], select {
+    font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 15px;
+    color: var(--ink); background: var(--surface-2);
+    border: 1px solid var(--line-strong); border-radius: 3px;
+    padding: 9px 11px; width: 100%; min-width: 0;
+  }
+
+  select { font-family: var(--body); font-size: 14px; }
+  input[type="text"].name-input { font-family: var(--body); font-variant-numeric: normal; }
+
+  input:focus-visible, button:focus-visible, select:focus-visible,
+  summary:focus-visible, textarea:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+
+  textarea {
+    font-family: var(--mono); font-size: 13px; color: var(--ink);
+    background: var(--surface-2); border: 1px solid var(--line-strong);
+    border-radius: 3px; padding: 10px 11px; width: 100%; min-height: 110px; resize: vertical;
+  }
+
+  .segmented { display: inline-flex; align-self: flex-start; border: 1px solid var(--line-strong); border-radius: 3px; overflow: hidden; }
+
+  .segmented button {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .07em; text-transform: uppercase;
+    background: var(--surface-2); color: var(--muted);
+    border: 0; border-right: 1px solid var(--line-strong); padding: 9px 14px; cursor: pointer;
+  }
+
+  .segmented button:last-child { border-right: 0; }
+  .segmented button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+  .btn {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .08em; text-transform: uppercase;
+    background: var(--surface-2); color: var(--ink);
+    border: 1px solid var(--line-strong); border-radius: 3px;
+    padding: 9px 15px; cursor: pointer; white-space: nowrap;
+  }
+
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn.primary:hover { color: var(--accent-ink); filter: brightness(1.06); }
+  .btn.primary[disabled], .btn[disabled] { opacity: .55; cursor: default; filter: none; }
+  .btn.quiet { background: transparent; border-color: transparent; color: var(--faint); }
+  .btn.quiet:hover { color: var(--bad); border-color: var(--line); }
+
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .grow { flex: 1 1 200px; min-width: 0; }
+
+  .msg { font-size: 14px; border-radius: 3px; padding: 11px 13px; margin: 0; }
+  .msg.err { background: var(--bad-soft); color: var(--bad); }
+  .msg.ok { background: var(--good-soft); color: var(--good); }
+  .msg[hidden] { display: none; }
+  .trial { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent);
+    border-radius: 3px; padding: 11px 13px; margin: 0; font-weight: 600; font-size: 14px; }
+  .trial a { color: inherit; }
+  .trial.ended { background: var(--bad-soft); color: var(--bad); border-color: var(--bad); }
+  .trial[hidden] { display: none; }
+
+  .figures {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 1px; background: var(--line); border: 1px solid var(--line);
+    border-radius: 4px; overflow: hidden;
+  }
+
+  .figure { background: var(--surface); padding: 16px 18px; display: flex; flex-direction: column; gap: 4px; }
+  .figure.lead { background: var(--accent-soft); }
+
+  .figure .k {
+    font-family: var(--display); font-weight: 600; font-size: 12px;
+    letter-spacing: .11em; text-transform: uppercase; color: var(--muted);
+  }
+
+  .figure .v {
+    font-family: var(--mono); font-variant-numeric: tabular-nums;
+    font-weight: 500; font-size: 22px; line-height: 1.2; overflow-wrap: anywhere;
+  }
+
+  .figure.lead .v { font-size: 27px; font-weight: 600; color: var(--accent); }
+  .figure .sub { font-size: 12px; color: var(--faint); }
+
+  .roster { display: flex; flex-direction: column; }
+
+  .row {
+    display: grid; grid-template-columns: 34px minmax(0, 2fr) 110px minmax(0, 1fr) 90px 34px;
+    align-items: center; gap: 10px; padding: 8px 18px; border-bottom: 1px solid var(--line);
+  }
+
+  .roster.with-assists .row { grid-template-columns: 34px minmax(0, 2fr) 110px 90px minmax(0, 1fr) 90px 34px; }
+
+  .row.head { padding: 10px 18px; background: var(--surface-2); border-bottom: 1px solid var(--line-strong); }
+
+  .row.head span, .row.head button {
+    font-family: var(--display); font-weight: 600; font-size: 12px;
+    letter-spacing: .11em; text-transform: uppercase; color: var(--muted);
+    background: none; border: 0; padding: 0; text-align: left; cursor: pointer;
+  }
+
+  .row.head button:hover { color: var(--accent); }
+  .row.head button.num, .row.head button.pay { justify-self: end; }
+
+  .row .payout {
+    font-family: var(--mono); font-variant-numeric: tabular-nums;
+    font-weight: 500; text-align: right; overflow-wrap: anywhere;
+  }
+
+  .row.excluded { background: var(--surface-2); }
+  .row.excluded .payout { color: var(--faint); }
+  .row.paid .name-input, .row.paid .payout { opacity: .55; }
+  .row .paid-cell { display: flex; justify-content: center; }
+  .row .hold-reason { grid-column: 1 / -1; }
+  .row .hold-toggle { padding: 9px 6px; }
+  .row .drop { justify-self: end; width: 34px; padding: 9px 0; }
+
+  .row-actions { display: flex; flex-wrap: wrap; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  .empty { padding: 30px 18px; text-align: center; color: var(--faint); }
+
+  details { border-top: 1px solid var(--line); }
+
+  summary {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+    padding: 13px 18px; cursor: pointer;
+  }
+
+  summary:hover { color: var(--accent); }
+  details dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 14px; }
+  details dt { font-weight: 600; color: var(--muted); }
+  details dd { margin: 0; }
+
+  .caches {
+    font-size: 14px; color: var(--muted); background: var(--surface-2);
+    border: 1px solid var(--line); border-radius: 3px; padding: 11px 13px; margin: 0;
+  }
+  .caches strong { color: var(--ink); }
+  .caches[hidden] { display: none; }
+
+  footer { border-top: 1px solid var(--line); padding-top: 16px; color: var(--faint); font-size: 13px; }
+  footer p { margin: 0 0 6px; max-width: 72ch; }
+
+  .sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+  @media (max-width: 620px) {
+    .row { grid-template-columns: 34px minmax(0, 1fr) 84px 34px; gap: 4px 6px; padding: 8px 12px; }
+    .row.head { padding: 10px 12px; }
+    .row .paid-cell { grid-column: 1; grid-row: 1; }
+    .row .name-input, .row.head [data-sort="name"] { grid-column: 2; grid-row: 1; }
+    .row .count-input, .row.head .num { grid-column: 3; grid-row: 1; }
+    .row .payout { grid-column: 2; grid-row: 2; text-align: left; }
+    .row .hold-toggle, .row .hold-head { grid-column: 3 / 5; grid-row: 2; }
+    .row .drop, .row .drop-head { grid-column: 4; grid-row: 1; }
+    .row .hold-reason { grid-row: 3; }
+    .row.head .pay { display: none; }
+    .roster.with-assists .row { grid-template-columns: 34px minmax(0, 1fr) 60px 60px 34px; }
+    .roster.with-assists .row .assists-input, .roster.with-assists .row #assistsHead { grid-column: 4; grid-row: 1; }
+    .roster.with-assists .row .payout { grid-column: 2 / 4; }
+    .roster.with-assists .row .hold-toggle, .roster.with-assists .row .hold-head { grid-column: 4 / 6; }
+    .roster.with-assists .row .drop, .roster.with-assists .row .drop-head { grid-column: 5; }
+  }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <p class="trial" id="trialBanner" role="status" hidden></p>
+
+  <header class="masthead">
+    <div>
+      <h1>War Payout Ledger</h1>
+      <p>Load a finished ranked war, set the pot, and copy the result into faction chat.</p>
+    </div>
+    <span class="stamp">Knights of Seven Kingdoms &middot; 53697</span>
+  </header>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Load a war</h2>
+      <p class="hint">Fills the roster for you. Skip it and type by hand if you prefer.</p>
+    </div>
+    <div class="panel-body">
+      <div>
+        <label class="lbl" for="apiKey">Torn Custom API Key</label>
+        <div class="toolbar" style="margin-top:6px">
+          <input type="password" id="apiKey" class="grow" autocomplete="off" spellcheck="false"
+                 placeholder="Paste your key">
+          <button type="button" class="btn" id="toggleKey" aria-pressed="false">Show</button>
+          <button type="button" class="btn primary" id="loadWars">Find wars</button>
+          <button type="button" class="btn quiet" id="forgetKey">Forget key</button>
+        </div>
+      </div>
+
+      <div class="toolbar" id="warPicker" hidden>
+        <label class="sr" for="warSelect">Ranked war</label>
+        <select id="warSelect" class="grow"></select>
+        <button type="button" class="btn primary" id="loadReport">Load hits</button>
+      </div>
+
+      <p class="msg err" id="errorBox" role="alert" hidden></p>
+      <p class="msg ok" id="okBox" role="status" hidden></p>
+      <p class="caches" id="cacheBox" hidden></p>
+    </div>
+
+    <details>
+      <summary>Which key selections this needs</summary>
+      <div class="panel-body">
+        <dl>
+          <dt>Selections</dt>
+          <dd>faction → <strong>members</strong>, <strong>rankedwars</strong>,
+            <strong>rankedwarreport</strong> and <strong>attacks</strong>.
+            Missing one gives error 16, which is a tick box, not a broken key.
+            Reading the attack log also needs Faction API access in the faction.</dd>
+          <dt>Purpose</dt>
+          <dd>Reads the list of your ranked wars, one war report and that war's attack log,
+            when you press the buttons.</dd>
+          <dt>Storage</dt>
+          <dd>This browser only. No server, no account. Press Forget key to remove it.</dd>
+          <dt>Sharing</dt>
+          <dd>Never. Sent only to api.torn.com, in a request header, never in a web address.</dd>
+          <dt>Writes</dt>
+          <dd>None. Reading only.</dd>
+        </dl>
+      </div>
+    </details>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>The pot</h2>
+      <p class="hint">What the caches actually sold for, not their market value.</p>
+    </div>
+    <div class="panel-body">
+      <div class="field-grid">
+        <div class="field" id="poolField">
+          <label for="pot">Cash from caches</label>
+          <input type="text" id="pot" inputmode="numeric" autocomplete="off" placeholder="0">
+          <span class="note">Total after selling, before any cut.</span>
+        </div>
+
+        <div class="field" id="bonusField">
+          <label for="bonus">Bonus</label>
+          <input type="text" id="bonus" inputmode="numeric" autocomplete="off" placeholder="0">
+          <span class="note">Extra money added to the pot, e.g. a donation. Not cut.</span>
+        </div>
+
+        <div class="field" id="bonusNoteField">
+          <label for="bonusNote">Bonus note</label>
+          <input type="text" id="bonusNote" maxlength="80" autocomplete="off" placeholder="e.g. a donation">
+          <span class="note">Optional. Shows in the summary.</span>
+        </div>
+
+        <div class="field" id="rateField" hidden>
+          <label for="fixedRate">Rate per hit</label>
+          <input type="text" id="fixedRate" inputmode="numeric" autocomplete="off" placeholder="0">
+          <span class="note">The pot is worked out from it.</span>
+        </div>
+
+        <div class="field">
+          <label for="cut">Faction keeps</label>
+          <input type="text" id="cut" inputmode="decimal" autocomplete="off" placeholder="0">
+          <span class="note">Percent off the top, before the split.</span>
+        </div>
+
+        <div class="field">
+          <label for="minHits">Minimum to qualify</label>
+          <input type="text" id="minHits" inputmode="numeric" autocomplete="off" placeholder="0">
+          <span class="note" id="minHitsNote">Below this and a member is skipped.</span>
+        </div>
+
+        <div class="field">
+          <span class="legend" id="basisLabel">Split by</span>
+          <div class="segmented" role="group" aria-labelledby="basisLabel">
+            <button type="button" data-basis="hits" aria-pressed="true">Hits</button>
+            <button type="button" data-basis="respect" aria-pressed="false">Respect</button>
+          </div>
+          <span class="note">The war report carries both, so you can compare instantly.</span>
+        </div>
+
+        <div class="field">
+          <span class="legend" id="modeLabel">Work it out from</span>
+          <div class="segmented" role="group" aria-labelledby="modeLabel">
+            <button type="button" data-mode="pool" aria-pressed="true">The pot</button>
+            <button type="button" data-mode="rate" aria-pressed="false">A set rate</button>
+          </div>
+          <span class="note">Set rate tells you what the payout will cost.</span>
+        </div>
+
+        <div class="field">
+          <span class="legend" id="assistsLabel">Assists</span>
+          <div class="segmented" role="group" aria-labelledby="assistsLabel">
+            <button type="button" data-assists="false" aria-pressed="true">Not paid</button>
+            <button type="button" data-assists="true" aria-pressed="false">Paid as hits</button>
+          </div>
+          <span class="note">Some wars pay assists the same as a hit.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="figures" aria-label="Result summary">
+    <div class="figure lead">
+      <span class="k" id="leadKey">Per hit</span>
+      <span class="v" id="leadValue">$0</span>
+      <span class="sub" id="leadSub">Nothing entered yet</span>
+    </div>
+    <div class="figure">
+      <span class="k">Distributable</span>
+      <span class="v" id="distributable">$0</span>
+      <span class="sub" id="cutSub">No cut taken</span>
+    </div>
+    <div class="figure">
+      <span class="k">Paid out</span>
+      <span class="v" id="paidOut">$0</span>
+      <span class="sub" id="paidSub">0 of 0 members</span>
+    </div>
+    <div class="figure">
+      <span class="k">Stays in bank</span>
+      <span class="v" id="remainder">$0</span>
+      <span class="sub">Cut plus rounding</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Roster</h2>
+      <p class="hint" id="paidHint">Payouts round down to whole dollars.</p>
+    </div>
+
+    <div class="roster">
+      <div class="row head">
+        <span class="paid-cell" aria-hidden="true"></span>
+        <button type="button" data-sort="name">Member</button>
+        <button type="button" class="num" data-sort="count" id="countHead">Hits</button>
+        <button type="button" class="num" data-sort="assists" id="assistsHead">Assists</button>
+        <button type="button" class="pay" data-sort="payout">Payout</button>
+        <span class="hold-head" aria-hidden="true"></span>
+        <span class="drop-head" aria-hidden="true"></span>
+      </div>
+      <div id="rows"></div>
+      <p class="empty" id="empty">Load a war above, or add members by hand.</p>
+    </div>
+
+    <div class="row-actions">
+      <button type="button" class="btn primary" id="loadAllMembers">Load all members</button>
+      <button type="button" class="btn" id="addRow">Add member</button>
+      <button type="button" class="btn" id="untickPaid">Untick all paid</button>
+      <button type="button" class="btn quiet" id="clearRoster">Clear roster</button>
+    </div>
+    <p class="msg ok" id="rosterToast" role="status" hidden style="margin:0 18px 14px"></p>
+
+    <details>
+      <summary>Paste a list instead</summary>
+      <div class="panel-body">
+        <p class="hint" style="margin:0">One member per line. The last number is the count, the rest
+          is the name. Player IDs in brackets are ignored.</p>
+        <label class="sr" for="pasteBox">Members to import</label>
+        <textarea id="pasteBox" spellcheck="false" placeholder="Player One [1234567]   42&#10;Player Two   17"></textarea>
+        <div class="toolbar">
+          <button type="button" class="btn" id="importAdd">Add to roster</button>
+          <button type="button" class="btn" id="importReplace">Replace roster</button>
+          <span class="msg ok" id="importToast" role="status" hidden></span>
+        </div>
+      </div>
+    </details>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Hand it over</h2>
+      <p class="hint">Plain text for faction chat or a forum post.</p>
+    </div>
+    <div class="panel-body">
+      <div class="toolbar">
+        <button type="button" class="btn primary" id="copyBtn">Copy payout summary</button>
+        <span class="msg ok" id="copyToast" role="status" hidden></span>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p><strong>Rounding.</strong> Every payout rounds down to a whole dollar, so the leftover stays
+      in the bank rather than leaving you short on the last payment.</p>
+    <p><strong>Reading only.</strong> The page fetches war data when you press a button and never
+      acts inside Torn.</p>
+    <p><strong>Licence.</strong> KS War Payout Ledger by
+      <a href="https://www.torn.com/profiles.php?XID=2179382">Kingshade [2179382]</a>.
+      Licensed to Knights of Seven Kingdoms [53697] only.</p>
+  </footer>
+</div>
+
+<script>
+  (function () {
+    'use strict';
+
+    var LICENSE = { factionId: 53697, factionName: "Knights of Seven Kingdoms", trialEndsAt: null };
+    var FACTION_ID = LICENSE.factionId;
+    var SELLER_URL = 'https://www.torn.com/profiles.php?XID=2179382';
+    var KEY_STORE = 'ks-war-payout-sale-key';
+    var STORE_KEY = 'ks-war-payout-sale-v1';
+
+    var state = {
+      pot: 0, bonus: 0, bonusNote: '', fixedRate: 0, cut: 0, minCount: 0,
+      basis: 'hits', mode: 'pool', payAssists: false, members: [], war: null
+    };
+
+    var wars = [];
+    var loadToken = 0;
+    var reportLoading = false;
+    var nextId = 1;
+    var verifiedKey = '';
+
+    var el = {};
+    ['apiKey','toggleKey','loadWars','forgetKey','warPicker','warSelect','loadReport','errorBox',
+     'okBox','cacheBox','pot','fixedRate','cut','minHits','minHitsNote','poolField','rateField',
+     'bonus','bonusNote','bonusField','bonusNoteField',
+     'rows','empty','countHead','assistsHead','leadKey','leadValue','leadSub','distributable','cutSub','paidOut',
+     'paidSub','remainder','addRow','clearRoster','pasteBox','importAdd','importReplace',
+     'importToast','copyBtn','copyToast','loadAllMembers','rosterToast','paidHint','untickPaid','trialBanner']
+      .forEach(function (id) { el[id] = document.getElementById(id); });
+
+    /* ---------- helpers ---------- */
+
+    function parseNumber(value) {
+      if (typeof value !== 'string') return 0;
+      var cleaned = value.replace(/[^0-9.]/g, '');
+      var parts = cleaned.split('.');
+      if (parts.length > 2) cleaned = parts[0] + '.' + parts.slice(1).join('');
+      var n = parseFloat(cleaned);
+      return isFinite(n) && n > 0 ? n : 0;
+    }
+
+    function money(n) { return '$' + Math.round(n).toLocaleString('en-US'); }
+    function plural(n, one, many) { return n === 1 ? one : many; }
+    function countWord() { return state.basis === 'hits' ? 'hits' : 'respect'; }
+    function countWordFor(n) {
+      if (state.basis !== 'hits') return 'respect';
+      return n === 1 ? 'hit' : 'hits';
+    }
+    function countWordSingular() { return state.basis === 'hits' ? 'hit' : 'respect'; }
+
+    function countOf(member) {
+      return state.basis === 'hits'
+        ? member.hits + (state.payAssists ? member.assists : 0) : member.score;
+    }
+
+    function prettyCount(n) {
+      return state.basis === 'hits'
+        ? n.toLocaleString('en-US')
+        : n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+    }
+
+    function show(box, message) { box.textContent = message; box.hidden = false; }
+    function hide(box) { box.textContent = ''; box.hidden = true; }
+
+    function dateText(unix) {
+      var d = new Date(unix * 1000);
+      return d.getUTCDate() + ' ' +
+        ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()] +
+        ' ' + d.getUTCFullYear();
+    }
+
+    /* ---------- storage ---------- */
+
+    function save() {
+      state.members.forEach(function (m) {
+        m.holdReason = typeof m.holdReason === 'string' ? m.holdReason.trim().slice(0, 120) : '';
+      });
+      try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (err) { /* ignore */ }
+    }
+
+    function readStoredKey() {
+      try { return localStorage.getItem(KEY_STORE) || ''; } catch (err) { return ''; }
+    }
+
+    function storeKey(value) {
+      try {
+        if (value) localStorage.setItem(KEY_STORE, value);
+        else localStorage.removeItem(KEY_STORE);
+      } catch (err) { /* ignore */ }
+    }
+
+    function load() {
+      var raw = null;
+      try { raw = localStorage.getItem(STORE_KEY); } catch (err) { raw = null; }
+      if (!raw) return;
+      try {
+        var saved = JSON.parse(raw);
+        if (!saved || typeof saved !== 'object') return;
+        ['pot', 'fixedRate', 'cut', 'minCount'].forEach(function (k) {
+          if (typeof saved[k] === 'number') state[k] = saved[k];
+        });
+        state.bonus = typeof saved.bonus === 'number' && Number.isFinite(saved.bonus) && saved.bonus >= 0
+          ? saved.bonus : 0;
+        state.bonusNote = typeof saved.bonusNote === 'string' ? saved.bonusNote.trim().slice(0, 80) : '';
+        state.basis = saved.basis === 'respect' ? 'respect' : 'hits';
+        state.mode = saved.mode === 'rate' ? 'rate' : 'pool';
+        state.payAssists = saved.payAssists === true;
+        var war = saved.war;
+        state.war = war && typeof war === 'object' && !Array.isArray(war) &&
+          typeof war.id === 'number' && typeof war.opponent === 'string' &&
+          typeof war.start === 'number' && ['won', 'lost', 'ongoing'].indexOf(war.outcome) !== -1
+          ? {
+            id: war.id, opponent: war.opponent, start: war.start, outcome: war.outcome,
+            ourScore: typeof war.ourScore === 'number' ? war.ourScore : null,
+            theirScore: typeof war.theirScore === 'number' ? war.theirScore : null
+          } : null;
+        if (Array.isArray(saved.members)) {
+          state.members = saved.members.map(function (m) {
+            return {
+              id: nextId++,
+              name: typeof m.name === 'string' ? m.name : '',
+              hits: typeof m.hits === 'number' ? m.hits : 0,
+              assists: typeof m.assists === 'number' ? m.assists : 0,
+              score: typeof m.score === 'number' ? m.score : 0,
+              paid: m.paid === true, hold: m.hold === true,
+              holdReason: typeof m.holdReason === 'string' ? m.holdReason.trim().slice(0, 120) : '',
+              tornId: Number.isSafeInteger(m.tornId) && m.tornId > 0 ? m.tornId : null
+            };
+          });
+        }
+      } catch (err) { /* start clean */ }
+    }
+
+    /* ---------- torn api ---------- */
+
+    var TERMINAL_CODES = { 2: 1, 10: 1, 13: 1, 18: 1 };
+
+    function describeError(code, text) {
+      if (code === 2) return 'Torn rejected the key. Check it was copied whole.';
+      if (code === 16) return 'The key is missing a selection. Enable faction → members, rankedwars, rankedwarreport and attacks on the Custom Key.';
+      if (code === 13) return 'This key is disabled after seven days of account inactivity.';
+      if (code === 10) return 'The key owner is in federal jail, so the key cannot be used.';
+      if (code === 18) return 'This key has been paused by its owner.';
+      if (code === 5) return 'Too many calls in the last minute. Wait a moment and try again.';
+      if (code === 9) return 'Torn’s API is temporarily unavailable. Try again shortly.';
+      if (code === 17) return 'Torn is in a backend update. Try again in a minute.';
+      return 'Torn returned error ' + code + (text ? ': ' + text : '') + '.';
+    }
+
+    async function checkFactionAccess(key) {
+      try {
+        var r = await fetch('https://api.torn.com/v2/key/info?comment=KSLeaderAccessCheck',
+          { headers: { Authorization: 'ApiKey ' + key } });
+        var data = await r.json();
+        if (data.error) {
+          console.warn('[KS access check] Torn error', data.error, 'key length', key.length);
+          return false;
+        }
+        var infoUser = data.info && data.info.user;
+        var ok = !!(infoUser && infoUser.faction_id === FACTION_ID);
+        if (!ok) console.warn('[KS access check] unexpected user object', infoUser, 'key length', key.length);
+        return ok;
+      } catch (e) {
+        console.warn('[KS access check] request failed', e, 'key length', key.length);
+        return false;
+      }
+    }
+
+    /* ---------- licence / trial ---------- */
+
+    var tornClockOffset = null;   // seconds, Torn clock minus this computer's clock
+
+    function nowSeconds() {
+      return Date.now() / 1000 + (tornClockOffset === null ? 0 : tornClockOffset);
+    }
+
+    function trialEnded() {
+      return LICENSE.trialEndsAt !== null && nowSeconds() >= LICENSE.trialEndsAt;
+    }
+
+    function trialEndText() {
+      var d = new Date(LICENSE.trialEndsAt * 1000);
+      var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      function two(n) { return n < 10 ? '0' + n : String(n); }
+      return d.getUTCDate() + ' ' + months[d.getUTCMonth()] + ' ' + d.getUTCFullYear() + ' ' +
+        two(d.getUTCHours()) + ':' + two(d.getUTCMinutes()) + ' TCT';
+    }
+
+    function renderTrial() {
+      if (LICENSE.trialEndsAt === null) { el.trialBanner.hidden = true; return; }
+      var ended = trialEnded();
+      el.trialBanner.className = 'trial' + (ended ? ' ended' : '');
+      el.trialBanner.textContent = (ended ? 'TRIAL ENDED ' + trialEndText() + '. '
+        : 'TRIAL — works until ' + trialEndText() + '. ') + 'Full version: contact ';
+      var a = document.createElement('a');
+      a.href = SELLER_URL;
+      a.textContent = 'Kingshade [2179382]';
+      el.trialBanner.appendChild(a);
+      el.trialBanner.appendChild(document.createTextNode('.'));
+      el.trialBanner.hidden = false;
+    }
+
+    async function readTornClock(key) {
+      try {
+        var r = await fetch('https://api.torn.com/v2/faction/timestamp?comment=KSPayoutTrial',
+          { headers: { Authorization: 'ApiKey ' + key } });
+        var data = await r.json();
+        var t = data && data.timestamp;
+        if (typeof t !== 'number' || !Number.isFinite(t) || t <= 0) {
+          console.warn('[KS trial] Torn clock not available, using this computer\'s clock', data && data.error);
+          return null;
+        }
+        return t;
+      } catch (e) {
+        console.warn('[KS trial] Torn clock request failed, using this computer\'s clock', e);
+        return null;
+      }
+    }
+
+    function trialEndedError() {
+      renderTrial();
+      return new Error('The trial ended ' + trialEndText() + '. Contact Kingshade [2179382] for the full version.');
+    }
+
+    async function tornGet(path) {
+      var key = el.apiKey.value.trim();
+      if (!key) throw new Error('Paste your Custom API Key first.');
+      if (key !== verifiedKey) {
+        var allowed = await checkFactionAccess(key);
+        if (!allowed) {
+          storeKey('');
+          el.apiKey.value = '';
+          throw new Error('This key does not belong to a current member of ' + LICENSE.factionName +
+            ' [' + FACTION_ID + ']. This copy is licensed to that faction only.');
+        }
+        if (LICENSE.trialEndsAt !== null) {
+          var tornNow = await readTornClock(key);
+          if (tornNow !== null) tornClockOffset = tornNow - Date.now() / 1000;
+          renderTrial();
+        }
+        verifiedKey = key;
+      }
+      if (trialEnded()) throw trialEndedError();
+      var joiner = path.indexOf('?') === -1 ? '?' : '&';
+      var response = await fetch('https://api.torn.com/v2' + path + joiner + 'comment=KSPayoutLedger',
+        { headers: { Authorization: 'ApiKey ' + key } });
+      var payload = await response.json();
+      if (payload && payload.error) {
+        if (TERMINAL_CODES[payload.error.code]) { storeKey(''); el.apiKey.value = ''; }
+        throw new Error(describeError(payload.error.code, payload.error.error));
+      }
+      storeKey(key);
+      return payload;
+    }
+
+    function busy(button, on, label) {
+      button.disabled = on;
+      button.textContent = on ? 'Loading' : label;
+    }
+
+    async function loadWars() {
+      loadToken += 1;
+      hide(el.errorBox); hide(el.okBox); hide(el.cacheBox);
+      busy(el.loadWars, true, 'Find wars');
+      busy(el.loadReport, true, 'Load hits');
+      try {
+        var payload = await tornGet('/faction/rankedwars?limit=20&sort=DESC');
+        wars = Array.isArray(payload.rankedwars) ? payload.rankedwars : [];
+        if (wars.length === 0) {
+          show(el.errorBox, 'No ranked wars came back for this faction.');
+          return;
+        }
+        el.warSelect.textContent = '';
+        wars.forEach(function (war, index) {
+          var us = (war.factions || []).filter(function (f) { return Number(f.id) === FACTION_ID; })[0];
+          var them = (war.factions || []).filter(function (f) { return Number(f.id) !== FACTION_ID; })[0];
+          var outcome = war.winner === null || war.winner === undefined ? 'ongoing'
+            : Number(war.winner) === FACTION_ID ? 'won' : 'lost';
+          var option = document.createElement('option');
+          option.value = String(index);
+          option.textContent = dateText(war.start) + ' — vs ' + ((them && them.name) || 'unknown') +
+            ' — ' + outcome +
+            (us && them ? ' (' + us.score + '–' + them.score + ')' : '');
+          el.warSelect.appendChild(option);
+        });
+        el.warPicker.hidden = false;
+        show(el.okBox, 'Found ' + wars.length + ' ' + plural(wars.length, 'war', 'wars') +
+          '. Pick one and load the hits.');
+      } catch (err) {
+        show(el.errorBox, err.message);
+      } finally {
+        busy(el.loadWars, false, 'Find wars');
+        busy(el.loadReport, reportLoading, 'Load hits');
+      }
+    }
+
+    var TORN_CALLS_PER_MINUTE = 100;
+    var ATTACK_PAGE_DELAY = Math.max(700, Math.ceil(60000 / TORN_CALLS_PER_MINUTE));
+
+    async function fetchWarAttacks(report, opponentId, token) {
+      if (typeof report.end !== 'number') {
+        throw new Error('This war has not ended yet, so its attack log cannot be counted.');
+      }
+      if (!Number.isFinite(report.start) || !Number.isFinite(report.end) || report.end < report.start) {
+        throw new Error('The war report has an invalid time window. Nothing was loaded.');
+      }
+      var attacks = new Map();
+      var cursor = report.end;
+      var results = ['None', 'Attacked', 'Mugged', 'Hospitalized', 'Arrested', 'Looted',
+        'Lost', 'Stalemate', 'Assist', 'Escape', 'Timeout', 'Special', 'Bounty', 'Interrupted'];
+      function validFaction(faction) {
+        return faction === null || (faction && Number.isSafeInteger(Number(faction.id)) && Number(faction.id) > 0);
+      }
+      for (var pageNumber = 0; pageNumber < 80; pageNumber += 1) {
+        if (token !== loadToken) return null;
+        if (pageNumber > 0) {
+          await new Promise(function (resolve) { setTimeout(resolve, ATTACK_PAGE_DELAY); });
+          if (token !== loadToken) return null;
+        }
+        var payload = await tornGet('/faction/attacks?filters=outgoing&limit=100&sort=DESC' +
+          '&from=' + (report.start - 1) + '&to=' + cursor);
+        if (token !== loadToken) return null;
+        var page = payload && payload.attacks;
+        if (!Array.isArray(page) || page.length > 100) {
+          throw new Error('Torn answered, but not with a valid attack log. Nothing was loaded.');
+        }
+        var before = attacks.size;
+        var earliest = Infinity;
+        page.forEach(function (attack) {
+          if (!attack || !Number.isSafeInteger(attack.id) || attack.id <= 0 ||
+              !Number.isFinite(attack.started) || !Number.isFinite(attack.ended) || attack.ended < attack.started ||
+              typeof attack.is_ranked_war !== 'boolean' || results.indexOf(attack.result) === -1 ||
+              !attack.defender || !validFaction(attack.defender.faction) ||
+              (attack.attacker !== null && (!attack.attacker ||
+                !Number.isSafeInteger(Number(attack.attacker.id)) || Number(attack.attacker.id) <= 0 ||
+                typeof attack.attacker.name !== 'string' || !validFaction(attack.attacker.faction)))) {
+            throw new Error('Torn answered, but not with a valid attack log. Nothing was loaded.');
+          }
+          if (!attacks.has(attack.id)) attacks.set(attack.id, attack);
+          earliest = Math.min(earliest, attack.ended);
+        });
+        show(el.okBox, 'Reading the attack log… ' + attacks.size.toLocaleString('en-US') + ' attacks so far.');
+        if (page.length < 100) {
+          var members = new Map();
+          var hiddenAttackers = 0;
+          var hits = 0;
+          var assists = 0;
+          attacks.forEach(function (attack) {
+            if (attack.attacker === null) { hiddenAttackers += 1; return; }
+            if (!attack.attacker.faction || Number(attack.attacker.faction.id) !== FACTION_ID ||
+                attack.is_ranked_war !== true || !attack.defender.faction ||
+                Number(attack.defender.faction.id) !== opponentId) return;
+            var hit = ['Attacked', 'Mugged', 'Hospitalized'].indexOf(attack.result) !== -1;
+            var assist = attack.result === 'Assist';
+            if (!hit && !assist) return;
+            var id = Number(attack.attacker.id);
+            if (!members.has(id)) members.set(id, { name: attack.attacker.name, hits: 0, assists: 0 });
+            var member = members.get(id);
+            if (hit) { member.hits += 1; hits += 1; }
+            if (assist) { member.assists += 1; assists += 1; }
+          });
+          return { members: members, hits: hits, assists: assists,
+            attacks: attacks.size, hiddenAttackers: hiddenAttackers };
+        }
+        cursor = earliest - (attacks.size === before ? 1 : 0);
+      }
+      throw new Error('The attack log for this war is too long to read (over 8,000 attacks). Nothing was loaded.');
+    }
+
+    async function loadReport() {
+      if (reportLoading || el.loadWars.disabled) return;
+      var token = ++loadToken;
+      hide(el.errorBox); hide(el.okBox);
+      var war = wars[Number(el.warSelect.value)];
+      if (!war) { show(el.errorBox, 'Pick a war first.'); return; }
+      var previousWarId = state.war ? state.war.id : null;
+      var previousMembers = new Map();
+      state.members.forEach(function (m) {
+        if (Number.isSafeInteger(m.tornId) && m.tornId > 0) previousMembers.set(m.tornId, m);
+      });
+      reportLoading = true;
+      busy(el.loadReport, true, 'Load hits');
+      try {
+        var payload = await tornGet('/faction/' + war.id + '/rankedwarreport');
+        if (token !== loadToken) return;
+        var report = payload && payload.rankedwarreport;
+        var sides = report && Array.isArray(report.factions) ? report.factions : [];
+        // Our own side only. Never fall back to the other side: that would pay our members
+        // the opponent's hit counts without saying so.
+        var ours = sides.filter(function (f) { return Number(f.id) === FACTION_ID; })[0];
+        if (!ours) {
+          show(el.errorBox, 'This war report does not contain faction ' + FACTION_ID +
+            '. Nothing was loaded — pick another war.');
+          return;
+        }
+        if (!Array.isArray(ours.members)) {
+          show(el.errorBox, 'The report came back without a member list.');
+          return;
+        }
+
+        var opponent = sides.filter(function (f) { return Number(f.id) !== FACTION_ID; })[0];
+        if (!opponent || !Number.isSafeInteger(Number(opponent.id)) || Number(opponent.id) <= 0) {
+          throw new Error('The war report does not identify the opposing faction. Nothing was loaded.');
+        }
+        var counted = await fetchWarAttacks(report, Number(opponent.id), token);
+        if (token !== loadToken || !counted) return;
+
+        var us = (war.factions || []).filter(function (f) { return Number(f.id) === FACTION_ID; })[0];
+        var them = (war.factions || []).filter(function (f) { return Number(f.id) !== FACTION_ID; })[0];
+        var loadedWar = {
+          id: Number(war.id), opponent: (them && them.name) || 'unknown', start: war.start,
+          outcome: war.winner === null || war.winner === undefined ? 'ongoing'
+            : Number(war.winner) === FACTION_ID ? 'won' : 'lost',
+          ourScore: us && typeof us.score === 'number' ? us.score : null,
+          theirScore: them && typeof them.score === 'number' ? them.score : null
+        };
+
+        var reportIds = new Set();
+        var loadedMembers = ours.members.map(function (m) {
+          if (!m || !Number.isSafeInteger(Number(m.id)) || Number(m.id) <= 0) {
+            throw new Error('The report came back with an invalid member. Nothing was loaded.');
+          }
+          var id = Number(m.id);
+          var counts = counted.members.get(id);
+          reportIds.add(id);
+          return {
+            tornId: id,
+            name: counts ? counts.name : typeof m.name === 'string' ? m.name : String(m.id),
+            hits: counts ? counts.hits : 0, assists: counts ? counts.assists : 0,
+            score: typeof m.score === 'number' && Number.isFinite(m.score) ? m.score : 0
+          };
+        });
+        counted.members.forEach(function (m, id) {
+          if (!reportIds.has(id)) loadedMembers.push({ tornId: id, name: m.name, hits: m.hits, assists: m.assists, score: 0 });
+        });
+        loadedMembers = loadedMembers.filter(function (m) { return m.hits > 0 || m.assists > 0 || m.score > 0; });
+        loadedMembers.sort(function (a, b) { return b.hits - a.hits || b.assists - a.assists; });
+        var rewards = ours.rewards || {};
+        var items = Array.isArray(rewards.items) ? rewards.items : [];
+        var cacheText = items.map(function (i) {
+          if (!i || typeof i.name !== 'string' || !Number.isFinite(i.quantity) || i.quantity < 0) {
+            throw new Error('The report came back with invalid cache rewards. Nothing was loaded.');
+          }
+          return i.quantity + ' × ' + i.name;
+        }).join(', ') + '. Sell them, then put the total in the pot below.';
+        state.members = loadedMembers.map(function (m) {
+          var previous = previousWarId === loadedWar.id ? previousMembers.get(m.tornId) : null;
+          return {
+            id: nextId++, name: m.name, hits: m.hits, assists: m.assists, score: m.score,
+            tornId: m.tornId, paid: previous ? previous.paid === true : false,
+            hold: previous ? previous.hold === true : false, holdReason: previous ? previous.holdReason : ''
+          };
+        });
+        state.war = loadedWar;
+        hide(el.cacheBox);
+
+        if (items.length > 0) {
+          el.cacheBox.innerHTML = '';
+          var strong = document.createElement('strong');
+          strong.textContent = 'Caches won: ';
+          el.cacheBox.appendChild(strong);
+          el.cacheBox.appendChild(document.createTextNode(cacheText));
+          el.cacheBox.hidden = false;
+        }
+
+        show(el.okBox, 'Loaded ' + state.members.length.toLocaleString('en-US') + ' ' +
+          plural(state.members.length, 'member', 'members') + ' from the war report: ' +
+          counted.hits.toLocaleString('en-US') + ' ' + plural(counted.hits, 'hit', 'hits') + ' and ' +
+          counted.assists.toLocaleString('en-US') + ' ' + plural(counted.assists, 'assist', 'assists') +
+          ' counted from ' + counted.attacks.toLocaleString('en-US') + ' ' +
+          plural(counted.attacks, 'attack', 'attacks') + ' in the log.' +
+          (counted.hiddenAttackers > 0 ? ' ' + counted.hiddenAttackers.toLocaleString('en-US') + ' ' +
+            plural(counted.hiddenAttackers, 'attack had', 'attacks had') +
+            ' no attacker shown and ' + plural(counted.hiddenAttackers, 'was', 'were') + ' not counted.' : ''));
+        render();
+        save();
+      } catch (err) {
+        if (token === loadToken) { hide(el.okBox); show(el.errorBox, err.message); }
+      } finally {
+        reportLoading = false;
+        busy(el.loadReport, el.loadWars.disabled, 'Load hits');
+      }
+    }
+
+    /* ---------- calculation ---------- */
+
+    function calculate() {
+      var qualified = state.members.filter(function (m) {
+        var c = countOf(m);
+        return m.hold !== true && c > 0 && c >= state.minCount;
+      });
+      var totalCount = qualified.reduce(function (sum, m) { return sum + countOf(m); }, 0);
+      var cutFraction = Math.min(state.cut, 100) / 100;
+
+      var distributable, rate, potNeeded;
+      if (state.mode === 'rate') {
+        rate = state.fixedRate;
+        distributable = rate * totalCount;
+        potNeeded = cutFraction < 1 ? distributable / (1 - cutFraction) : 0;
+      } else {
+        distributable = state.pot * (1 - cutFraction) + state.bonus;
+        rate = totalCount > 0 ? distributable / totalCount : 0;
+        potNeeded = state.pot;
+      }
+
+      var payouts = state.members.map(function (m) {
+        var c = countOf(m);
+        var eligible = m.hold !== true && c > 0 && c >= state.minCount;
+        return { member: m, count: c, eligible: eligible, amount: eligible ? Math.floor(rate * c) : 0 };
+      });
+
+      var paid = payouts.reduce(function (sum, p) { return sum + p.amount; }, 0);
+
+      return {
+        qualifiedCount: qualified.length, totalCount: totalCount, rate: rate,
+        distributable: distributable, potNeeded: potNeeded,
+        factionCut: potNeeded * cutFraction, payouts: payouts, paid: paid,
+        remainder: Math.max(potNeeded + (state.mode === 'pool' ? state.bonus : 0) - paid, 0)
+      };
+    }
+
+    /* ---------- rendering ---------- */
+
+    function renderRows(result) {
+      el.rows.textContent = '';
+      state.members.forEach(function (member, index) {
+        var payout = result.payouts[index];
+        var row = document.createElement('div');
+        row.className = 'row' + (payout.eligible ? '' : ' excluded') + (member.paid === true ? ' paid' : '');
+
+        var paidCell = document.createElement('span');
+        paidCell.className = 'paid-cell';
+        if (payout.eligible) {
+          var paid = document.createElement('input');
+          paid.type = 'checkbox';
+          paid.checked = member.paid === true;
+          paid.setAttribute('aria-label', 'Paid ' + (member.name || 'member'));
+          paid.addEventListener('change', function () {
+            member.paid = paid.checked;
+            render(); save();
+          });
+          paidCell.appendChild(paid);
+        }
+
+        var name = document.createElement('input');
+        name.type = 'text';
+        name.className = 'name-input';
+        name.value = member.name;
+        name.placeholder = 'Member name';
+        name.setAttribute('aria-label', 'Member name');
+        name.addEventListener('input', function () {
+          member.name = name.value;
+          var label = member.name || 'member';
+          if (paid) paid.setAttribute('aria-label', 'Paid ' + label);
+          hold.setAttribute('aria-label', (member.hold === true ? 'Release ' : 'Hold back ') + label);
+          if (reason) reason.setAttribute('aria-label', 'Reason for holding back ' + label);
+          save();
+        });
+
+        var count = document.createElement('input');
+        count.type = 'text';
+        count.className = 'count-input';
+        count.inputMode = 'decimal';
+        var inputCount = state.basis === 'hits' ? member.hits : member.score;
+        count.value = inputCount ? String(inputCount) : '';
+        count.placeholder = '0';
+        count.setAttribute('aria-label', countWord());
+        count.addEventListener('input', function () {
+          var value = parseNumber(count.value);
+          if (state.basis === 'hits') member.hits = value; else member.score = value;
+          render();
+          save();
+        });
+
+        var assists = document.createElement('input');
+        assists.type = 'text';
+        assists.className = 'assists-input';
+        assists.inputMode = 'numeric';
+        assists.value = member.assists ? String(member.assists) : '';
+        assists.placeholder = '0';
+        assists.setAttribute('aria-label', 'Assists');
+        assists.hidden = state.basis !== 'hits';
+        assists.addEventListener('input', function () {
+          member.assists = parseNumber(assists.value);
+          render(); save();
+        });
+
+        var payoutCell = document.createElement('span');
+        payoutCell.className = 'payout';
+        payoutCell.textContent = member.hold === true ? 'held' : payout.eligible ? money(payout.amount) : 'skipped';
+
+        var hold = document.createElement('button');
+        hold.type = 'button';
+        hold.className = 'btn quiet hold-toggle';
+        hold.textContent = member.hold === true ? 'Release' : 'Hold';
+        hold.setAttribute('aria-label', (member.hold === true ? 'Release ' : 'Hold back ') + (member.name || 'member'));
+        hold.addEventListener('click', function () {
+          member.hold = member.hold !== true;
+          render(); save();
+        });
+
+        var drop = document.createElement('button');
+        drop.type = 'button';
+        drop.className = 'btn quiet drop';
+        drop.textContent = '×';
+        drop.setAttribute('aria-label', 'Remove ' + (member.name || 'member'));
+        drop.addEventListener('click', function () {
+          state.members = state.members.filter(function (m) { return m.id !== member.id; });
+          render(); save();
+        });
+
+        row.appendChild(paidCell);
+        row.appendChild(name);
+        row.appendChild(count);
+        row.appendChild(assists);
+        row.appendChild(payoutCell);
+        row.appendChild(hold);
+        row.appendChild(drop);
+        if (member.hold === true) {
+          var reason = document.createElement('input');
+          reason.type = 'text';
+          reason.className = 'hold-reason';
+          reason.value = member.holdReason;
+          reason.placeholder = 'Reason (shows in the summary)';
+          reason.setAttribute('aria-label', 'Reason for holding back ' + (member.name || 'member'));
+          reason.maxLength = 120;
+          reason.addEventListener('input', function () {
+            member.holdReason = reason.value;
+            save();
+          });
+          row.appendChild(reason);
+        }
+        el.rows.appendChild(row);
+      });
+
+      el.empty.hidden = state.members.length > 0;
+    }
+
+    function render() {
+      var result = calculate();
+
+      el.countHead.textContent = state.basis === 'hits' ? 'Hits' : 'Respect';
+      el.assistsHead.hidden = state.basis !== 'hits';
+      el.rows.parentElement.classList.toggle('with-assists', state.basis === 'hits');
+      el.minHitsNote.textContent = 'Less ' + countWord() + ' than this and a member is skipped.';
+      el.poolField.hidden = state.mode !== 'pool';
+      el.bonusField.hidden = state.mode !== 'pool';
+      el.bonusNoteField.hidden = state.mode !== 'pool';
+      el.rateField.hidden = state.mode !== 'rate';
+
+      if (state.mode === 'rate') {
+        el.leadKey.textContent = 'Pot needed';
+        el.leadValue.textContent = money(result.potNeeded);
+        el.leadSub.textContent = result.totalCount > 0
+          ? money(state.fixedRate) + ' × ' + prettyCount(result.totalCount) + ' ' + countWord()
+          : 'Enter a rate and some ' + countWord();
+      } else {
+        el.leadKey.textContent = 'Per ' + countWordSingular();
+        el.leadValue.textContent = money(Math.floor(result.rate));
+        el.leadSub.textContent = result.totalCount > 0
+          ? prettyCount(result.totalCount) + ' ' + countWord() + ' counted'
+          : 'Enter the pot and load a war';
+      }
+
+      el.distributable.textContent = money(result.distributable);
+      el.cutSub.textContent = state.cut > 0
+        ? money(result.factionCut) + ' held back (' + state.cut + '%)'
+        : 'No cut taken';
+      if (state.mode === 'pool' && state.bonus > 0) {
+        el.cutSub.textContent += ' · ' + money(state.bonus) + ' bonus added';
+      }
+
+      el.paidOut.textContent = money(result.paid);
+      el.paidSub.textContent = result.qualifiedCount + ' of ' + state.members.length + ' ' +
+        plural(state.members.length, 'member', 'members');
+
+      el.remainder.textContent = money(result.remainder);
+      var paidCount = 0;
+      var stillToPay = 0;
+      result.payouts.forEach(function (p) {
+        if (!p.eligible) return;
+        if (p.member.paid === true) paidCount += 1;
+        else stillToPay += p.amount;
+      });
+      el.paidHint.textContent = result.qualifiedCount === 0 ? 'Payouts round down to whole dollars.'
+        : paidCount === result.qualifiedCount ? 'All ' + result.qualifiedCount + ' paid.'
+        : paidCount + ' of ' + result.qualifiedCount + ' paid · ' + money(stillToPay) + ' still to pay';
+      renderRows(result);
+    }
+
+    /* ---------- summary ---------- */
+
+    function summaryText() {
+      var result = calculate();
+      var lines = ['RANKED WAR PAYOUT — ' + LICENSE.factionName];
+      if (LICENSE.trialEndsAt !== null) lines.unshift('TRIAL VERSION — KS War Payout Ledger');
+      if (state.war !== null) {
+        var warDay = new Date(state.war.start * 1000);
+        var warDate = warDay.getUTCDate() + ' ' +
+          ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][warDay.getUTCMonth()] +
+          ' ' + warDay.getUTCFullYear();
+        lines.push('War: vs ' + state.war.opponent + ' — ' + warDate + ' — ' + state.war.outcome +
+          (typeof state.war.ourScore === 'number' && typeof state.war.theirScore === 'number'
+            ? ' (' + state.war.ourScore + '–' + state.war.theirScore + ')' : ''));
+      }
+      lines.push('');
+
+      if (state.mode === 'rate') {
+        lines.push('Rate set at ' + money(state.fixedRate) + ' per ' + countWordSingular());
+        lines.push('Pot needed: ' + money(result.potNeeded));
+      } else {
+        lines.push('Cash from caches: ' + money(state.pot));
+        if (state.bonus > 0) {
+          lines.push('Bonus: ' + money(state.bonus) + (state.bonusNote ? ' — ' + state.bonusNote : ''));
+        }
+        lines.push('Rate: ' + money(Math.floor(result.rate)) + ' per ' + countWordSingular());
+      }
+      var hasAssists = state.basis === 'hits' && state.members.reduce(function (sum, m) {
+        return sum + m.assists;
+      }, 0) > 0;
+      if (hasAssists && state.payAssists) {
+        var totals = result.payouts.reduce(function (sum, p) {
+          if (p.eligible) { sum.hits += p.member.hits; sum.assists += p.member.assists; }
+          return sum;
+        }, { hits: 0, assists: 0 });
+        lines.push('Total counted: ' + prettyCount(totals.hits) + ' ' + plural(totals.hits, 'hit', 'hits') +
+          ' + ' + prettyCount(totals.assists) + ' ' + plural(totals.assists, 'assist', 'assists') +
+          ' = ' + prettyCount(result.totalCount));
+      } else {
+        lines.push('Total counted: ' + prettyCount(result.totalCount) + ' ' + countWordFor(result.totalCount));
+      }
+      if (hasAssists) lines.push('Assists: ' + (state.payAssists ? 'paid as hits' : 'not paid'));
+      if (state.cut > 0) lines.push('Faction keeps ' + state.cut + '%: ' + money(result.factionCut));
+      if (state.minCount > 0) lines.push('Minimum to qualify: ' + state.minCount + ' ' + countWordFor(state.minCount));
+      lines.push('');
+
+      var eligible = result.payouts.filter(function (p) { return p.eligible; })
+        .slice().sort(function (a, b) { return b.amount - a.amount; });
+
+      eligible.forEach(function (p) {
+        var description = prettyCount(p.count) + ' ' + countWordFor(p.count);
+        if (hasAssists && state.payAssists && p.member.assists > 0) {
+          description = prettyCount(p.member.hits) + ' ' + plural(p.member.hits, 'hit', 'hits') +
+            ' + ' + prettyCount(p.member.assists) + ' ' + plural(p.member.assists, 'assist', 'assists');
+        }
+        lines.push((p.member.name || 'Unnamed') + ' — ' + description + ' — ' + money(p.amount));
+      });
+
+      var held = result.payouts.filter(function (p) { return p.member.hold === true; });
+      if (held.length > 0) {
+        lines.push('');
+        lines.push('Held back:');
+        held.forEach(function (p) {
+          var description = prettyCount(p.count) + ' ' + countWordFor(p.count);
+          if (hasAssists && state.payAssists && p.member.assists > 0) {
+            description = prettyCount(p.member.hits) + ' ' + plural(p.member.hits, 'hit', 'hits') +
+              ' + ' + prettyCount(p.member.assists) + ' ' + plural(p.member.assists, 'assist', 'assists');
+          }
+          lines.push((p.member.name || 'Unnamed') + ' — ' + description +
+            (p.member.holdReason ? ' — ' + p.member.holdReason : ''));
+        });
+      }
+
+      var skipped = result.payouts.filter(function (p) {
+        return p.member.hold !== true && p.count > 0 && !p.eligible;
+      });
+      if (skipped.length > 0) {
+        lines.push('');
+        lines.push('Below minimum: ' + skipped.map(function (p) {
+          return (p.member.name || 'Unnamed') + ' (' + prettyCount(p.count) + ')';
+        }).join(', '));
+      }
+
+      lines.push('');
+      lines.push('Paid out: ' + money(result.paid) + ' to ' + eligible.length + ' ' +
+        plural(eligible.length, 'member', 'members'));
+      lines.push('Stays in bank: ' + money(result.remainder));
+      return lines.join('\n');
+    }
+
+    /* ---------- import ---------- */
+
+    function parsePaste(text) {
+      var found = [];
+      text.split(/\r?\n/).forEach(function (line) {
+        var trimmed = line.replace(/\[\s*\d+\s*\]/g, ' ').trim();
+        if (!trimmed) return;
+        var match = trimmed.match(/^(.+?)[\s:|-]+([0-9][0-9,]*(?:\.[0-9]+)?)$/);
+        if (!match) return;
+        var name = match[1].replace(/[\s\t:|,-]+$/, '').trim();
+        var count = parseNumber(match[2]);
+        if (!name || count <= 0) return;
+        found.push({
+          id: nextId++, name: name,
+          hits: state.basis === 'hits' ? count : 0,
+          score: state.basis === 'hits' ? 0 : count
+        });
+      });
+      return found;
+    }
+
+    /* ---------- wiring ---------- */
+
+    function bindNumber(input, key) {
+      input.addEventListener('input', function () {
+        state[key] = parseNumber(input.value);
+        render(); save();
+      });
+    }
+
+    bindNumber(el.pot, 'pot');
+    bindNumber(el.bonus, 'bonus');
+    el.bonusNote.addEventListener('input', function () {
+      state.bonusNote = el.bonusNote.value.trim().slice(0, 80);
+      save();
+    });
+    bindNumber(el.fixedRate, 'fixedRate');
+    bindNumber(el.cut, 'cut');
+    bindNumber(el.minHits, 'minCount');
+
+    document.querySelectorAll('[data-basis]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        state.basis = button.getAttribute('data-basis');
+        document.querySelectorAll('[data-basis]').forEach(function (other) {
+          other.setAttribute('aria-pressed', String(other === button));
+        });
+        render(); save();
+      });
+    });
+
+    document.querySelectorAll('[data-mode]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        state.mode = button.getAttribute('data-mode');
+        document.querySelectorAll('[data-mode]').forEach(function (other) {
+          other.setAttribute('aria-pressed', String(other === button));
+        });
+        render(); save();
+      });
+    });
+
+    document.querySelectorAll('[data-assists]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        state.payAssists = button.getAttribute('data-assists') === 'true';
+        document.querySelectorAll('[data-assists]').forEach(function (other) {
+          other.setAttribute('aria-pressed', String(other === button));
+        });
+        render(); save();
+      });
+    });
+
+    document.querySelectorAll('[data-sort]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var key = button.getAttribute('data-sort');
+        var result = calculate();
+        if (key === 'name') {
+          state.members.sort(function (a, b) {
+            return a.name.localeCompare(b.name, 'en', { sensitivity: 'base' });
+          });
+        } else if (key === 'count') {
+          state.members.sort(function (a, b) { return countOf(b) - countOf(a); });
+        } else if (key === 'assists') {
+          state.members.sort(function (a, b) { return b.assists - a.assists; });
+        } else {
+          var amounts = {};
+          result.payouts.forEach(function (p) { amounts[p.member.id] = p.amount; });
+          state.members.sort(function (a, b) { return amounts[b.id] - amounts[a.id]; });
+        }
+        render(); save();
+      });
+    });
+
+    el.toggleKey.addEventListener('click', function () {
+      var showing = el.apiKey.type === 'text';
+      el.apiKey.type = showing ? 'password' : 'text';
+      el.toggleKey.textContent = showing ? 'Show' : 'Hide';
+      el.toggleKey.setAttribute('aria-pressed', String(!showing));
+    });
+
+    el.forgetKey.addEventListener('click', function () {
+      storeKey(''); el.apiKey.value = '';
+      hide(el.errorBox); show(el.okBox, 'Key removed from this browser.');
+    });
+
+    el.loadWars.addEventListener('click', function () { void loadWars(); });
+    el.loadReport.addEventListener('click', function () { void loadReport(); });
+    el.warSelect.addEventListener('change', function () { loadToken += 1; hide(el.okBox); });
+    window.addEventListener('pagehide', function () { loadToken += 1; });
+
+    async function loadAllMembers() {
+      hide(el.rosterToast);
+      busy(el.loadAllMembers, true, 'Load all members');
+      try {
+        var payload = await tornGet('/faction/members?striptags=true');
+        var list = Array.isArray(payload.members) ? payload.members : null;
+        if (!list) {
+          el.rosterToast.className = 'msg err';
+          show(el.rosterToast, 'Torn answered, but not with a member list.');
+          return;
+        }
+        var existing = {};
+        state.members.forEach(function (m) { existing[m.name.toLowerCase()] = m; });
+        var added = 0;
+        list.forEach(function (m) {
+          var name = typeof m.name === 'string' ? m.name : String(m.id);
+          if (existing[name.toLowerCase()]) return;
+          state.members.push({ id: nextId++, name: name, hits: 0, assists: 0, score: 0,
+            tornId: null, paid: false, hold: false, holdReason: '' });
+          added += 1;
+        });
+        state.members.sort(function (a, b) {
+          return a.name.localeCompare(b.name, 'en', { sensitivity: 'base' });
+        });
+        el.rosterToast.className = 'msg ok';
+        show(el.rosterToast, added === 0
+          ? 'Everyone is already on the roster.'
+          : 'Added ' + added + ' ' + plural(added, 'member', 'members') +
+            '. Now fill in the ' + countWord() + ', or load a war above to fill them in for you.');
+        render();
+        save();
+      } catch (err) {
+        el.rosterToast.className = 'msg err';
+        show(el.rosterToast, err.message);
+      } finally {
+        busy(el.loadAllMembers, false, 'Load all members');
+      }
+    }
+
+    el.loadAllMembers.addEventListener('click', function () { void loadAllMembers(); });
+
+    el.addRow.addEventListener('click', function () {
+      state.members.push({ id: nextId++, name: '', hits: 0, assists: 0, score: 0,
+        tornId: null, paid: false, hold: false, holdReason: '' });
+      render(); save();
+      var inputs = el.rows.querySelectorAll('.name-input');
+      if (inputs.length) inputs[inputs.length - 1].focus();
+    });
+
+    el.untickPaid.addEventListener('click', function () {
+      state.members.forEach(function (m) { m.paid = false; });
+      render(); save();
+    });
+
+    el.clearRoster.addEventListener('click', function () {
+      state.members = []; state.war = null; render(); save();
+    });
+
+    function runImport(replace) {
+      var parsed = parsePaste(el.pasteBox.value);
+      parsed.forEach(function (m) {
+        m.assists = 0; m.tornId = null; m.paid = false; m.hold = false; m.holdReason = '';
+      });
+      if (parsed.length === 0) {
+        show(el.importToast, 'No lines matched. Each line needs a name and a number.');
+        el.importToast.className = 'msg err';
+        return;
+      }
+      state.members = replace ? parsed : state.members.concat(parsed);
+      if (replace) state.war = null;
+      el.pasteBox.value = '';
+      el.importToast.className = 'msg ok';
+      show(el.importToast, 'Added ' + parsed.length + ' ' +
+        plural(parsed.length, 'member', 'members') + '.');
+      render(); save();
+    }
+
+    el.importAdd.addEventListener('click', function () { runImport(false); });
+    el.importReplace.addEventListener('click', function () { runImport(true); });
+
+    el.copyBtn.addEventListener('click', function () {
+      if (trialEnded()) {
+        renderTrial();
+        el.copyToast.className = 'msg err';
+        show(el.copyToast, trialEndedError().message);
+        return;
+      }
+      var text = summaryText();
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () {
+          el.copyToast.className = 'msg ok';
+          show(el.copyToast, 'Copied.');
+        }, function () {
+          el.copyToast.className = 'msg err';
+          show(el.copyToast, 'Could not copy. Select the roster and copy by hand.');
+        });
+      } else {
+        el.copyToast.className = 'msg err';
+        show(el.copyToast, 'Clipboard unavailable in this browser.');
+      }
+    });
+
+    /* ---------- start ---------- */
+
+    load();
+    el.apiKey.value = readStoredKey();
+    el.pot.value = state.pot ? String(state.pot) : '';
+    el.bonus.value = state.bonus ? String(state.bonus) : '';
+    el.bonusNote.value = state.bonusNote;
+    el.fixedRate.value = state.fixedRate ? String(state.fixedRate) : '';
+    el.cut.value = state.cut ? String(state.cut) : '';
+    el.minHits.value = state.minCount ? String(state.minCount) : '';
+    document.querySelectorAll('[data-basis]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-basis') === state.basis));
+    });
+    document.querySelectorAll('[data-mode]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-mode') === state.mode));
+    });
+    document.querySelectorAll('[data-assists]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String((b.getAttribute('data-assists') === 'true') === state.payAssists));
+    });
+    render();
+    renderTrial();
+  })();
+</script>
+</body>
+</html>
