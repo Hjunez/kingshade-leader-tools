@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PC
 // @namespace    kingshade.torn
-// @version      1.1.8
+// @version      1.1.9
 // @downloadURL  https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @description  PC TEST: DIBS as a native roster column beside Torn's Attack cell; FF and Est from FFScouter's get-stats API. War Stuff Enhanced is detected and shown read-only; it never blocks.
@@ -16,6 +16,23 @@
 // ==/UserScript==
 
 /*
+ * KS Torn War Dibs PC v1.1.9 TEST
+ *
+ * ONE MAIN CHANGE: the opponent roster is sorted by hospital time when Torn's
+ * own Status column header is the active sort. Same mechanism as PDA 1.5.182:
+ * KS never moves a row in the DOM. ul.members-list gets display:flex +
+ * flex-direction:column and every row gets a CSS order, so a DOM re-sort by
+ * Torn or WSE cannot undo it. Status down: Okay, Hospital shortest first,
+ * Hospital without a time, Traveling/Abroad, other. Status up: Hospital
+ * shortest first, Hospital without a time, Okay, Traveling/Abroad, other.
+ * Any other active column -- Torn's Members/Level/Score or FFScouter's
+ * Stats sort (its header cell carries data-ffscouter-sort and its own
+ * activeIcon, measured 2026-10-03) -- or an unreadable header: KS releases
+ * the order and Torn/FFScouter decide. KS never clicks the header. Note E
+ * below ("sorting permanently off") is superseded for this case only; the
+ * old DIBS column sort stays locked OFF. Restored on every unmount.
+ *
+ * ---------------------------------------------------------------------------
  * KS Torn War Dibs PC v1.1.8 TEST
  *
  * ONE MAIN CHANGE: updates now come from kingshade-leader-tools instead of Kingshade-Torn-Suite (@downloadURL and @updateURL). Nothing else changed.
@@ -365,8 +382,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs PC",
-    version: "1.1.8",
-    instanceKey: "__ksTornWarDibsPcV118",
+    version: "1.1.9",
+    instanceKey: "__ksTornWarDibsPcV119",
     rowHostPrefix: "ks-twd-wse-row-v010-",
     rosterStyleId: "ks-twd-wse-roster-style-v010",
     panelId: "ks-twd-wse-panel",
@@ -3800,6 +3817,9 @@
   }
 
   function removeAllRowPresentations() {
+    restoreRosterOrder();
+    rosterFirstSeen.clear();
+    rosterFirstSeenNext = 0;
     for (const row of [...rowBindings.keys()]) retireRowBinding(row);
     mountedRosterRoot = null;
   }
@@ -4147,6 +4167,185 @@
     dibsSortMode = DIBS_SORT.OFF;
     dibsSortSignature = "";
     updateSortHeaderLabel();
+  }
+
+  // 1.1.9 roster order. See the header note. Restored in removeAllRowPresentations.
+  const rosterFirstSeen = new Map();
+  let rosterFirstSeenNext = 0;
+  let sortedRosterList = null;
+  let sortedRosterListPrevious = null;
+  const sortedRosterRows = new Set();
+  // Every element KS ever wrote an order style to. Lets the roster observer
+  // recognise its own style writes after the rows have left sortedRosterRows.
+  const rosterOrderTouched = new WeakSet();
+  const ROSTER_GROUP = Object.freeze({ OKAY: 0, HOSPITAL: 1, HOSPITAL_UNKNOWN: 2, TRAVEL: 3, OTHER: 4, UNBOUND: 5 });
+  const ROSTER_GROUP_RANK = Object.freeze({
+    desc: [0, 1, 2, 3, 4, 5],
+    // Status up: hospital first. Index = group, value = rank.
+    asc: [2, 0, 1, 3, 4, 5]
+  });
+
+  // Torn's own header for this list: "off" unless Status is the ONLY active
+  // sort column. FFScouter's Stats sort leaves Torn's last icon active and adds
+  // its own (measured 2026-10-03), so any active icon outside Status, or any
+  // data-ffscouter-sort value, means someone else owns the order. Read only;
+  // KS never clicks it.
+  function rosterSortMode(list) {
+    if (!(list instanceof HTMLElement)) return "off";
+    let header = list.previousElementSibling;
+    let icons = header instanceof HTMLElement ? [...header.querySelectorAll("[class*='activeIcon']")] : [];
+    if (icons.length === 0) {
+      icons = [...(list.parentElement?.querySelectorAll("[class*='activeIcon']") || [])]
+        .filter(node => !list.contains(node));
+      header = icons[0]?.closest(".white-grad, [class*='tableHeader'], [class*='headerWrap']") || list.parentElement;
+    }
+    if (icons.length === 0) return "off";
+    if (header instanceof HTMLElement) {
+      const ffSorted = [...header.querySelectorAll("[data-ffscouter-sort]")]
+        .some(node => normalizeText(node.getAttribute("data-ffscouter-sort")) !== "");
+      if (ffSorted) return "off";
+    }
+    let mode = "off";
+    for (const icon of icons) {
+      if (!(icon instanceof HTMLElement)) return "off";
+      const column = icon.closest("[class*='tab___']") || icon.parentElement;
+      if (!(column instanceof HTMLElement) || !/(^|\s)status(\s|___|$)/.test(column.className)) return "off";
+      if (/asc___/.test(icon.className)) mode = "asc";
+      else if (/desc___/.test(icon.className)) mode = "desc";
+      else return "off";
+    }
+    return mode;
+  }
+
+  // The same Torn data the DIBS cell shows: in VIEW the merged members batch,
+  // otherwise the opponent batch; the row text only when there is no API data.
+  function rosterApiStatus(targetId) {
+    const id = String(targetId || "");
+    if (!viewOnlyMode()) return freshOpponentStatusForTarget(id);
+    if (
+      !Number.isFinite(viewMembersState.fetchedAt) ||
+      nowMs() - viewMembersState.fetchedAt > CONFIG.opponentMembersMaxAgeMs
+    ) return null;
+    return viewMembersState.members.get(id) || null;
+  }
+
+  function rosterSortKey(binding) {
+    // VIEW: the merged members batch, as the cell uses it. A member missing from
+    // that batch falls back to the row's own evidence instead of "not hospital".
+    const viewHospital = viewOnlyMode() ? viewHospitalForTarget(binding.targetId) : null;
+    const apiHospital = viewHospital?.reason === "member-not-in-fetched-rosters" ? null : viewHospital;
+    const hospital = apiHospital || computeHospitalSeconds(binding);
+    if (hospital?.isHospital === true) {
+      return Number.isFinite(hospital.seconds)
+        ? { group: ROSTER_GROUP.HOSPITAL, seconds: hospital.seconds }
+        : { group: ROSTER_GROUP.HOSPITAL_UNKNOWN, seconds: 0 };
+    }
+    const api = rosterApiStatus(binding.targetId);
+    // Released: the until time has passed even if the state still says Hospital.
+    if (hospital?.source === "torn-api-expired" || (api && isHospitalStatusValue(api.state) && hospitalUntilExpired(api.until))) {
+      return { group: ROSTER_GROUP.OKAY, seconds: 0 };
+    }
+    const statusDiv = binding.statusDiv instanceof HTMLElement ? binding.statusDiv : directStatusCell(binding.row);
+    const text = (normalizeText(api?.state) || normalizeText(statusDiv?.textContent)).toLowerCase();
+    if (text.startsWith("okay")) return { group: ROSTER_GROUP.OKAY, seconds: 0 };
+    if (text.includes("travel") || text.includes("abroad")) return { group: ROSTER_GROUP.TRAVEL, seconds: 0 };
+    return { group: ROSTER_GROUP.OTHER, seconds: 0 };
+  }
+
+  function restoreRosterOrder() {
+    for (const row of sortedRosterRows) {
+      if (row instanceof HTMLElement && row.style.order !== "") row.style.order = "";
+    }
+    sortedRosterRows.clear();
+    if (sortedRosterList instanceof HTMLElement && sortedRosterListPrevious) {
+      sortedRosterList.style.display = sortedRosterListPrevious.display;
+      sortedRosterList.style.flexDirection = sortedRosterListPrevious.flexDirection;
+    }
+    sortedRosterList = null;
+    sortedRosterListPrevious = null;
+  }
+
+  // Returns true when anything visible moved.
+  function syncRosterOrder() {
+    const rows = orderedBoundRows().filter(row => row.isConnected);
+    const list = rows[0]?.parentElement || null;
+    if (!(list instanceof HTMLElement) || !rows.every(row => row.parentElement === list)) {
+      const had = sortedRosterList !== null || sortedRosterRows.size > 0;
+      restoreRosterOrder();
+      return had;
+    }
+    const mode = rosterSortMode(list);
+    if (mode === "off") {
+      const had = sortedRosterList !== null || sortedRosterRows.size > 0;
+      restoreRosterOrder();
+      return had;
+    }
+    const rank = ROSTER_GROUP_RANK[mode];
+    let changed = false;
+    if (sortedRosterList !== list) {
+      restoreRosterOrder();
+      sortedRosterList = list;
+      sortedRosterListPrevious = { display: list.style.display, flexDirection: list.style.flexDirection };
+      rosterOrderTouched.add(list);
+      list.style.display = "flex";
+      list.style.flexDirection = "column";
+      changed = true;
+    }
+    const seq = targetId => {
+      if (!rosterFirstSeen.has(targetId)) rosterFirstSeen.set(targetId, rosterFirstSeenNext++);
+      return rosterFirstSeen.get(targetId);
+    };
+    const keyed = [];
+    for (const row of rows) {
+      const binding = rowBindings.get(row);
+      if (!binding) continue;
+      keyed.push({ row, seq: seq(binding.targetId), ...rosterSortKey(binding) });
+    }
+    const registered = new Set(keyed.map(item => item.row));
+    let unboundIndex = 0;
+    for (const child of list.children) {
+      if (child instanceof HTMLElement && child.tagName === "LI" && !registered.has(child)) {
+        keyed.push({ row: child, seq: 1e9 + unboundIndex++, group: ROSTER_GROUP.UNBOUND, seconds: 0 });
+      }
+    }
+    keyed.sort((a, b) => rank[a.group] - rank[b.group] || a.seconds - b.seconds || a.seq - b.seq);
+    const seen = new Set();
+    keyed.forEach((item, index) => {
+      const value = String(index + 1);
+      if (item.row.style.order !== value) {
+        rosterOrderTouched.add(item.row);
+        item.row.style.order = value;
+        changed = true;
+      }
+      seen.add(item.row);
+      sortedRosterRows.add(item.row);
+    });
+    for (const row of [...sortedRosterRows]) {
+      if (seen.has(row)) continue;
+      if (row instanceof HTMLElement && row.style.order !== "") row.style.order = "";
+      sortedRosterRows.delete(row);
+      changed = true;
+    }
+    return changed;
+  }
+
+  // A style record that only differs in what syncRosterOrder writes (order on a
+  // row; display/flex-direction on the list) is our own echo, not roster news.
+  function rosterStyleWithoutOrder(value, isList) {
+    const drop = isList ? /^(display|flex-direction)$/ : /^order$/;
+    return String(value || "")
+      .split(";")
+      .map(part => part.trim())
+      .filter(part => part && !drop.test(part.split(":")[0].trim().toLowerCase()))
+      .join(";");
+  }
+
+  function isOwnRosterOrderMutation(record) {
+    if (record?.type !== "attributes" || record.attributeName !== "style") return false;
+    const target = record.target;
+    if (!(target instanceof HTMLElement) || !rosterOrderTouched.has(target)) return false;
+    const isList = target.tagName !== "LI";
+    return rosterStyleWithoutOrder(record.oldValue, isList) === rosterStyleWithoutOrder(target.getAttribute("style"), isList);
   }
 
   // Exact detection contract ported from PDA v1.5.144. These attributes are
@@ -4602,6 +4801,7 @@
     ensureRosterStyle(root);
     for (const row of root.querySelectorAll("li.enemy")) reconcileWarRow(row);
     retireMissingRowBindings();
+    syncRosterOrder();
     ensureRosterHeaderCell(root);
     reconcileSortIndicator();
     updateModeBadge();
@@ -5134,6 +5334,7 @@
       // Our own cell is roster DOM now, so its mutations would feed straight
       // back into this observer. Ignore anything inside a KS-owned cell.
       if (isOwnPresentationNode(record.target)) continue;
+      if (isOwnRosterOrderMutation(record)) continue;
       const row = mutationRow(record.target);
       if (row) pendingRows.add(row);
 
@@ -5471,6 +5672,7 @@
         void maybeAutoReleaseBeatenTarget();
         updatePanel();
         updateBoundControls();
+        syncRosterOrder();
       }
       if (runtimeActive) scheduleDisplayTick();
     }, delay);
