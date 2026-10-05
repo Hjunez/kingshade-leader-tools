@@ -306,14 +306,14 @@
       <div class="card">
         <span class="tag">PC</span>
         <span class="name">KS Torn War Dibs</span>
-        <span class="ver">Version 1.1.9</span>
+        <span class="ver">Version 1.1.10</span>
         <span class="what">Shared DIBS for ranked war, drawn straight into Torn's own Attack column.
-          One target, one caller, no double hits. It works together with Call Guard — both talk to
-          the same FFScouter hit-calling server.</span>
+          One target, one caller, no double hits. The PC and Torn PDA versions share the same DIBS
+          through the faction's own KS War Room server.</span>
         <div class="facts">
           <div class="row"><span class="k">Runs on</span><span class="v">Torn faction pages</span></div>
-          <div class="row"><span class="k">Network</span><span class="v"><code>api.torn.com</code> and <code>ffscouter.com</code>. Nothing else.</span></div>
-          <div class="row"><span class="k">Stores</span><span class="v">Your key and settings in your own browser only. Never uploaded.</span></div>
+          <div class="row"><span class="k">Network</span><span class="v"><code>api.torn.com</code>, <code>ffscouter.com</code> (FF and Est only) and the KS War Room server <code>ks-war-room-claims.hans-viklund.workers.dev</code> (DIBS). Nothing else.</span></div>
+          <div class="row"><span class="k">Stores</span><span class="v">Your keys (encrypted) and settings in your own browser. Your Torn key is sent to the KS War Room server only to sign you in; the server asks Torn who you are and does not store the key. The server keeps the claims (target, your Torn ID, times) and deletes them when the war has been untouched for 12 hours.</span></div>
           <div class="row"><span class="k">Torn key</span><span class="v">Yes. Faction members and wars, user basic and profile.</span></div>
         </div>
         <div class="get">
@@ -351,15 +351,15 @@
       <div class="card">
         <span class="tag">Torn PDA</span>
         <span class="name">KS Torn War Dibs</span>
-        <span class="ver">Version 1.5.185</span>
+        <span class="ver">Version 1.5.186</span>
         <span class="what">The same shared DIBS as the computer version, built for the phone, so
           the whole faction can call targets from wherever they are playing.</span>
         <div class="facts">
           <div class="row"><span class="k">Runs on</span><span class="v">Torn faction pages</span></div>
-          <div class="row"><span class="k">Network</span><span class="v"><code>api.torn.com</code> and <code>ffscouter.com</code>. Nothing else.</span></div>
-          <div class="row"><span class="k">Stores</span><span class="v">Your key and settings in your own browser only. Never uploaded.</span></div>
+          <div class="row"><span class="k">Network</span><span class="v"><code>api.torn.com</code>, <code>ffscouter.com</code> (FF and Est only) and the KS War Room server <code>ks-war-room-claims.hans-viklund.workers.dev</code> (DIBS). Nothing else.</span></div>
+          <div class="row"><span class="k">Stores</span><span class="v">Your keys (encrypted) and settings in your own browser. Your Torn key is sent to the KS War Room server only to sign you in; the server asks Torn who you are and does not store the key. The server keeps the claims (target, your Torn ID, times) and deletes them when the war has been untouched for 12 hours.</span></div>
           <div class="row"><span class="k">Torn key</span><span class="v">Yes. Faction members and wars, user basic and profile.</span></div>
-          <div class="row"><span class="k">Read this</span><span class="v">If you were given a test build called <strong>KS Torn War Dibs PDA TEST</strong>, turn that one off before you install this. Two copies at once and only one of them draws.</span></div>
+          <div class="row"><span class="k">Read this</span><span class="v">If you were given a test build with <strong>TEST</strong> in its name, turn that one off before you install this. Two copies at once and only one of them draws.</span></div>
         </div>
         <div class="get">
           <a class="btn" href="KS_Torn_War_Dibs_PDA.user.js">Install</a>
@@ -411,24 +411,6 @@
 
       <div class="card">
         <span class="tag">PC + Torn PDA</span>
-        <span class="name">KS FFScouter Call Guard</span>
-        <span class="ver">Version 1.1.5</span>
-        <span class="what">Shared DIBS inside FFScouter's War Room, using their own hit-calling
-          claim and release API. First in the queue wins the target. Same file on the computer and on Torn PDA.</span>
-        <div class="facts">
-          <div class="row"><span class="k">Runs on</span><span class="v">ffscouter.com, on both devices. Not on Torn.</span></div>
-          <div class="row"><span class="k">Network</span><span class="v">None of its own. It uses the site it is already on.</span></div>
-          <div class="row"><span class="k">Stores</span><span class="v">Your settings in your own browser only. Never uploaded.</span></div>
-          <div class="row"><span class="k">Torn key</span><span class="v">No.</span></div>
-        </div>
-        <div class="get">
-          <a class="btn" href="KS_FFScouter_Call_Guard.user.js">Install</a>
-          <span class="file">KS_FFScouter_Call_Guard.user.js</span>
-        </div>
-      </div>
-
-      <div class="card">
-        <span class="tag">PC + Torn PDA</span>
         <span class="name">Bootlegging Advisor</span>
         <span class="ver">Version 5.2.15</span>
         <span class="what">Bootlegging guidance on the crimes page, with queue balancing and a
@@ -452,8 +434,9 @@
   <footer>
     <p>These scripts read Torn's official API and the page you have open yourself. None of them
       click, attack, travel or act for you — every move in Torn stays yours.</p>
-    <p>Nothing is stored on any server. Your Torn key, where a script needs one, stays in your own
-      browser and is only ever sent to Torn.</p>
+    <p>Your Torn key, where a script needs one, stays encrypted in your own browser and is sent to Torn.
+      The one exception is KS Torn War Dibs: it also sends the key to the faction's KS War Room server to sign
+      you in, and that server does not store it.</p>
   </footer>
 </div>
 </body>

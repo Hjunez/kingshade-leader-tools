@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PDA
 // @namespace    kingshade.torn
-// @version      1.5.185
+// @version      1.5.186
 // @description  Roster-local PDA presentation with v1.5.145 authority and shared-claim safety.
 // @author       Kingshade
 // @match        https://www.torn.com/factions.php*
@@ -9,11 +9,47 @@
 // @grant        GM_xmlhttpRequest
 // @connect      ffscouter.com
 // @connect      api.torn.com
+// @connect      ks-war-room-claims.hans-viklund.workers.dev
 // @run-at       document-idle
 // @noframes
 // ==/UserScript==
 
 /*
+ * 1.5.186 (2026-10-05): DIBS moves to the KS War Room server.
+ * CHANGED
+ *   - The claim board, claim and release go to the KS War Room server
+ *     (ks-war-room-claims.hans-viklund.workers.dev; POST only, JSON body)
+ *     instead of FFScouter's claim endpoints, which are gone from this file
+ *     together with their allowlist. FF/Est still come from FFScouter
+ *     get-stats, unchanged. The war on the wire is Torn's ranked war id.
+ *   - DIBS needs the Torn key, not the FFScouter key. Sign-in uses the Torn
+ *     key the script already holds; the sign-in token lives in a module
+ *     variable only. A refused key is never re-sent on its own: the next
+ *     attempt needs the key saved again, or one tap on Sync.
+ *   - The "War Room" link to FFScouter's own page is gone from the panel.
+ * ADDED
+ *   - Hospital report: a claimed target that is back in hospital is reported
+ *     to the server, which releases the claim. Only on a Torn reading taken
+ *     more than 45 s after the claim.
+ *   - Claimer names from the key owner's own faction member list (Torn
+ *     /v2/faction/members, at most once per 5 minutes, memory only).
+ *   - The own record carries wireId: the war its claim was made on.
+ * FIXED
+ *   - An own record that two complete board reads in a row no longer find is
+ *     dropped instead of blocking every target until it expires -- also
+ *     after a page reload, when the record's wireId is the board's war.
+ *   - A focused key field is never disabled: the lock acts on Save and says
+ *     why. Save and Cancel are 44px. Without an own claim a stale ownership
+ *     check no longer locks either key.
+ * KNOWN ISSUES
+ *   - An own record saved by 1.5.185 against FFScouter is not on the
+ *     server's board and has no wireId: it blocks DIBS until it expires.
+ * VERIFICATION
+ *   - CANDIDATE. Node and Chromium against fake services only. Never run in
+ *     Torn PDA or against the live server.
+ * Clock, countdown tick, roster order, moved rows, FF keep, the FF 2.00-3.40
+ * window, the low-life rule, the online rule, RW phase, the VIEW guard and
+ * every storage name are unchanged from 1.5.185.
  * 1.5.185: one failed FFScouter read no longer wipes every FF value. Each
  * value keeps its own 6 min validity (fairFightMaxAgeMs) and is dropped by
  * scoutStatsForTarget() when it gets older, so a 502/429/network error no
@@ -219,8 +255,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs",
-    version: "1.5.185",
-    instanceKey: "__ksTornWarDibsPdaV15185Test",
+    version: "1.5.186",
+    instanceKey: "__ksTornWarDibsPdaV15186Test",
     layerId: "ks-twd-pda-layer",
     rowHostPrefix: "ks-twd-pda-row-",
     panelId: "ks-twd-pda-panel",
@@ -235,13 +271,29 @@
     tornApiCipherId: "tornApiCipherV1",
     sharedApiChangeJournalKey: "ks_torn_war_dibs_pda_ff_change_journal_v1",
     ffscouterOrigin: "https://ffscouter.com",
-    ffscouterWarRoomUrl: "https://ffscouter.com/war-room",
     ffscouterTermsUrl: "https://ffscouter.com/",
     ffscouterPrivacyUrl: "https://ffscouter.com/privacy",
     tornApiOrigin: "https://api.torn.com",
     tornKeyInfoPath: "/v2/key/info",
     tornOwnWarsPath: "/v2/faction/wars",
+    // The key owner's own faction member list, for claimer names only.
+    tornOwnMembersPath: "/v2/faction/members",
     tornCustomKeyUrl: "https://www.torn.com/preferences.php#tab=api?step=addNewKey&title=KS%20Torn%20War%20Dibs%20PDA&faction=members,wars&user=basic,profile"
+  });
+
+  // KS War Room server (contract: 3C rapport avsnitt 10). POST only, JSON
+  // body, the sign-in token in the body field "session", nothing secret in the
+  // URL. The only thing in the URL is the war id on the wire -- see wireWarId().
+  //
+  // KS_SERVER_TEST_BUILD false: this is the sharp build. The war id on the
+  // wire is Torn's ranked war id, unchanged, so the script reads and writes
+  // the board of the real war on screen. (true is for a test build only.)
+  const KS_SERVER_TEST_BUILD = false;
+  const KS_SERVER = Object.freeze({
+    origin: "https://ks-war-room-claims.hans-viklund.workers.dev",
+    sessionPath: "/session",
+    warOps: Object.freeze(["claims", "claim", "unclaim", "report"]),
+    simPrefix: "sim-"
   });
 
   const CONFIG = Object.freeze({
@@ -301,7 +353,32 @@
     // in. A fresh reading above this is therefore proof of a NEW
     // hospitalisation, not the one the claim was taken during. 180 leaves
     // 60 s of margin over the 120 s gate.
-    autoReleaseHospitalSeconds: 180
+    autoReleaseHospitalSeconds: 180,
+    // KS server. The session is renewed a minute before it expires, so a
+    // claim or release almost never lands on an expired token. The one
+    // re-sign-in on 401 "expired" in ksWarRoomRequest covers what this misses.
+    ksSessionRenewMarginMs: 60000,
+    // Sign-in guard. The server pauses EVERY new sign-in for 10 minutes after
+    // 10 invalid-key answers from Torn in 120 s, and blocks one sender after 5
+    // failures in 300 s. A client that re-sends a refused key on every poll
+    // would shut the whole faction out, so a refusal is never retried on its
+    // own and a transient failure waits 15 s, then 30 s, then 60 s.
+    ksSignInBackoffMs: Object.freeze([15000, 30000, 60000]),
+    ksSignInBlockedMinWaitMs: 60000,
+    // Hospital report (server rule K5). The server releases a claim only when
+    // the reported end time is more than 180 s above the stored one, and
+    // refuses a reading older than 30 s. Reporting anything else is noise.
+    ksReportMarginSeconds: 180,
+    ksReportMaxAgeMs: 30000,
+    // R1. A Torn reading taken before a claim says nothing about that claim:
+    // it can still show the long hospital time the target had BEFORE medding
+    // down, and the server would release a live claim on it. A reading counts
+    // only when taken more than 45 s after the claim was made. 45 = Torn's
+    // cache 30 s (server REPORT_MAX_AGE_SECONDS) + the server's clock skew
+    // 15 s (REPORT_CLOCK_SKEW_SECONDS).
+    ksReportMinSecondsAfterClaim: 45,
+    // Own faction member names: at most one Torn call per 5 minutes.
+    ksMemberNamesRefreshMs: 300000
   });
 
   const TARGET_STATE = Object.freeze({
@@ -325,12 +402,6 @@
     CLAIMING: "claiming",
     RELEASING: "releasing",
     CLEANUP_REQUIRED: "cleanup-required"
-  });
-
-  const HIT_API = Object.freeze({
-    claims: "/api/v1/hit-calling/claims",
-    claim: "/api/v1/hit-calling/claim",
-    unclaim: "/api/v1/hit-calling/unclaim"
   });
 
   const STATS_API = Object.freeze({ getStats: "/api/v1/get-stats" });
@@ -367,6 +438,38 @@
   let sharedApiKey = "";
   let storedTornApiKey = "";
   let pdaTornApiKeyRejected = false;
+
+  // KS server session. The token lives in this module variable only: never in
+  // any storage, never in the console, never in a panel row or an error text,
+  // and never across a page reload -- it is fetched again with the Torn key
+  // the script already holds.
+  let ksSessionToken = "";
+  let ksSessionRenewAt = 0;
+  let ksSessionKeyUsed = "";
+  let ksSessionSignInPromise = null;
+  // Sign-in guard state (see CONFIG.ksSignInBackoffMs).
+  // ksSignInRefusedKey: the key the server refused outright. Never re-sent
+  // automatically; cleared when the Torn key is saved again or forgotten.
+  let ksSignInRefusedKey = "";
+  let ksSignInRefusedWord = "";
+  let ksSignInRetryAt = 0;
+  let ksSignInFailureStreak = 0;
+  let ksSignInManualAttempt = false;
+  // Bumped when the Torn key is saved again or forgotten, so an answer that
+  // was in flight for the old key is ignored.
+  let ksSignInEpoch = 0;
+  // The wire war id the claim snapshot in sharedClaims was read for.
+  let sharedClaimsWireId = "";
+  // Own faction member names (Torn id -> name). Memory only, never stored.
+  let ksMemberNames = new Map();
+  let ksMemberNamesAttemptAt = 0;
+  let ksMemberNamesSyncing = false;
+  // Hospital report: the end time last reported per target, so one
+  // (target, end time) pair is reported at most once.
+  const ksReportedHospitalUntil = new Map();
+  let ksReportBusy = false;
+  // True when the last board read was degraded: every target is unknown.
+  let sharedClaimsDegraded = false;
   let sharedSyncing = false;
   let sharedWriteBusy = false;
   let sharedWriteOperationSerial = 0;
@@ -474,7 +577,7 @@
   let fairFightEverSucceeded = false;
   let quarantinedClaimAcknowledgement = null;
 
-  let sharedStatus = { state: "loading-key", message: "Shared: loading saved key…", count: 0 };
+  let sharedStatus = { state: "loading-key", message: "War Room: CHECKING…", count: 0 };
   let tornStatusState = { state: "loading-key", message: "Torn: loading key…", count: 0 };
 
 
@@ -525,6 +628,12 @@
   function effectiveTornApiKey() {
     if (tornCredentialMutationInProgress) return "";
     return injectedPdaTornApiKey() || validateTornApiKey(storedTornApiKey);
+  }
+
+  // True once key storage has been read and there is no Torn key at all --
+  // not while a key change is in flight, when the key is only held back.
+  function tornApiKeyMissing() {
+    return apiKeyStorageReady && !tornCredentialMutationInProgress && !effectiveTornApiKey();
   }
 
   function emptyOwnWarsState(fetchedAt = 0, surface = null) {
@@ -837,6 +946,14 @@
   // Own claim persistence.
   // ---------------------------------------------------------------------------
 
+  // 1.5.186. The war id on the wire an own record may carry: exactly what
+  // ksServerPath() accepts in this build, anything else is "". A record
+  // without one (saved by 1.5.185 or older) is still a valid record.
+  function ownClaimWireId(value) {
+    if (typeof value !== "string") return "";
+    try { ksServerPath("claims", value); return value; } catch { return ""; }
+  }
+
   function sanitizeOwnClaim(raw, { allowExpired = false } = {}) {
     const claimId = normalizeText(raw?.claimId);
     const targetId = String(raw?.targetId ?? "").trim();
@@ -845,10 +962,11 @@
     const expiresAt = Number(raw?.expiresAt);
     const cleanupRequired = raw?.cleanupRequired === true;
     const createdLocalAt = Number(raw?.createdLocalAt) || 0;
+    const wireId = ownClaimWireId(raw?.wireId);
     if (!isValidClaimId(claimId) || !validTargetId(targetId)) return null;
     if (claimerPlayerId && !/^\d+$/.test(claimerPlayerId)) return null;
     if (!Number.isFinite(expiresAt) || (!allowExpired && expiresAt <= nowSeconds())) return null;
-    return { claimId, targetId, claimerPlayerId, claimerName, expiresAt, cleanupRequired, createdLocalAt };
+    return { claimId, targetId, claimerPlayerId, claimerName, expiresAt, cleanupRequired, createdLocalAt, wireId };
   }
 
   function loadOwnClaimState() {
@@ -1096,34 +1214,75 @@
       !tornCredentialStorageUnresolved && !claimAuthorityStorageUnresolved;
   }
 
-  function ffCredentialExternalLockActive() {
-    if (!apiKeyStorageReady || ffCredentialStorageUnresolved || claimAuthorityStorageUnresolved) return true;
-    if (sharedWriteBusy || ambiguousOwnServerClaims || tornCredentialMutationInProgress) return true;
-    const recoveryEvidence = captureCredentialRecoveryEvidence();
-    if (credentialRecoveryEvidenceActive(recoveryEvidence)) return true;
-    if (!sharedApiKey) return false;
-    return !sharedCredentialRejected && !ffCredentialOwnershipProofCurrent();
+  // Key-field lock. Cause, measured on the owner's phone 2026-09-22: once the
+  // claim board is read with the Torn key, the FFScouter key field locked
+  // (OWNERSHIP-PROOF-STALE) for as long as the Torn key was missing, and the
+  // Torn key field locked (NO-FF-KEY) for as long as the FF key was missing. A
+  // field that is disabled while it has focus loses it, and on a phone that
+  // closes the keyboard, so a new member could set neither key.
+  //
+  // The two evaluations below return WHICH condition decided, so the line
+  // under the field can say why. With no own claim and no quarantine record
+  // there is no DIBS ownership to protect, so OWNERSHIP-PROOF-STALE on the FF
+  // key and NO-FF-KEY on the Torn key do not apply; every other lock ground
+  // is unchanged. No new way to take or release a claim.
+  function lockVerdict(active, reason, evidence) {
+    return { active, reason: active ? reason : "", evidence: evidence || null };
   }
 
-  function tornCredentialExternalLockActive() {
-    if (!apiKeyStorageReady || tornCredentialStorageUnresolved) return true;
-    if (sharedWriteBusy || ffCredentialMutationInProgress) return true;
-    if (claimAuthorityEvidenceUnresolved) return true;
+  function evaluateFfCredentialExternalLock() {
+    if (!apiKeyStorageReady) return lockVerdict(true, "STORAGE-NOT-READY");
+    if (ffCredentialStorageUnresolved) return lockVerdict(true, "FF-STORAGE-UNRESOLVED");
+    if (claimAuthorityStorageUnresolved) return lockVerdict(true, "CLAIM-STORAGE-UNRESOLVED");
+    if (sharedWriteBusy) return lockVerdict(true, "WRITE-BUSY");
+    if (ambiguousOwnServerClaims) return lockVerdict(true, "AMBIGUOUS-CLAIMS");
+    if (tornCredentialMutationInProgress) return lockVerdict(true, "TORN-KEY-BUSY");
     const recoveryEvidence = captureCredentialRecoveryEvidence();
-    if (recoveryEvidence.own?.cleanupRequired === true) return true;
-    if (credentialRecoveryEvidenceActive(recoveryEvidence)) {
-      return !credentialRecoveryChangeAvailable();
+    if (credentialRecoveryEvidenceActive(recoveryEvidence)) return lockVerdict(true, "RECOVERY-ACTIVE", recoveryEvidence);
+    if (!sharedApiKey || !credentialRecoveryEvidenceActive(recoveryEvidence)) return lockVerdict(false, "", recoveryEvidence);
+    if (!sharedCredentialRejected && !ffCredentialOwnershipProofCurrent()) {
+      return lockVerdict(true, "OWNERSHIP-PROOF-STALE", recoveryEvidence);
     }
-    if (ffCredentialStorageUnresolved || claimAuthorityStorageUnresolved) return true;
-    if (ambiguousOwnServerClaims) return true;
+    return lockVerdict(false, "", recoveryEvidence);
+  }
+
+  function ffCredentialExternalLockActive() {
+    return evaluateFfCredentialExternalLock().active;
+  }
+
+  function evaluateTornCredentialExternalLock() {
+    if (!apiKeyStorageReady) return lockVerdict(true, "STORAGE-NOT-READY");
+    if (tornCredentialStorageUnresolved) return lockVerdict(true, "TORN-STORAGE-UNRESOLVED");
+    if (sharedWriteBusy) return lockVerdict(true, "WRITE-BUSY");
+    if (ffCredentialMutationInProgress) return lockVerdict(true, "FF-KEY-BUSY");
+    if (claimAuthorityEvidenceUnresolved) return lockVerdict(true, "AUTH-EVIDENCE-UNRESOLVED");
+    const recoveryEvidence = captureCredentialRecoveryEvidence();
+    if (recoveryEvidence.own?.cleanupRequired === true) return lockVerdict(true, "CLEANUP-REQUIRED", recoveryEvidence);
+    if (credentialRecoveryEvidenceActive(recoveryEvidence)) {
+      return lockVerdict(!credentialRecoveryChangeAvailable(), "RECOVERY-ACTIVE", recoveryEvidence);
+    }
+    if (ffCredentialStorageUnresolved) return lockVerdict(true, "FF-STORAGE-UNRESOLVED", recoveryEvidence);
+    if (claimAuthorityStorageUnresolved) return lockVerdict(true, "CLAIM-STORAGE-UNRESOLVED", recoveryEvidence);
+    if (ambiguousOwnServerClaims) return lockVerdict(true, "AMBIGUOUS-CLAIMS", recoveryEvidence);
     const currentKey = effectiveTornApiKey();
-    if (!currentKey) return false;
+    if (!currentKey) return lockVerdict(false, "", recoveryEvidence);
     const rejectedStoredKey =
       (storedTornCredentialRejected || storedTornCapabilityRejected) &&
       currentKey === validateTornApiKey(storedTornApiKey);
-    if (rejectedStoredKey) return false;
-    if (!sharedApiKey) return true;
-    return !ffCredentialOwnershipProofCurrent();
+    if (rejectedStoredKey) return lockVerdict(false, "", recoveryEvidence);
+    if (!sharedApiKey) return lockVerdict(credentialRecoveryEvidenceActive(recoveryEvidence), "NO-FF-KEY", recoveryEvidence);
+    // R4. Without an own claim and without a quarantine record there is no
+    // DIBS ownership to protect, so a stale ownership check does not lock the
+    // Torn key. (With a record this point is never reached: see above.)
+    return lockVerdict(
+      credentialRecoveryEvidenceActive(recoveryEvidence) && !ffCredentialOwnershipProofCurrent(),
+      "OWNERSHIP-PROOF-STALE",
+      recoveryEvidence
+    );
+  }
+
+  function tornCredentialExternalLockActive() {
+    return evaluateTornCredentialExternalLock().active;
   }
 
   function ffCredentialForgetLockActive() {
@@ -1136,8 +1295,63 @@
       ffCredentialStorageUnresolved || claimAuthorityStorageUnresolved ||
       claimAuthorityEvidenceUnresolved || sharedWriteBusy ||
       ffCredentialMutationInProgress || tornCredentialMutationInProgress ||
-      ffCredentialClaimLockActive() || credentialRecoveryEvidenceActive() ||
-      !sharedApiKey || !ffCredentialOwnershipProofCurrent();
+      // R4. A stale ownership check locks only together with an own claim or a
+      // quarantine record, and either of those already locks on its own here.
+      ffCredentialClaimLockActive() || credentialRecoveryEvidenceActive();
+  }
+
+  // Key setup A: a focused key field is never disabled. The lock is applied
+  // when the field loses focus by itself (handleCredentialInputFocusOut), and
+  // it acts on Save, so a member can always type but not always save.
+  function credentialInputHasFocus(input) {
+    return input instanceof HTMLInputElement && input.getRootNode().activeElement === input;
+  }
+
+  function setCredentialInputDisabled(input, disabled) {
+    if (!(input instanceof HTMLInputElement)) return;
+    input.disabled = Boolean(disabled) && !credentialInputHasFocus(input);
+  }
+
+  function closeCredentialEditorUnlessFocused(role) {
+    const editor = presentationShadow()?.querySelector("[data-role='" + role + "']");
+    if (!credentialInputHasFocus(editor?.querySelector("input"))) editor?.classList.remove("open");
+  }
+
+  function handleCredentialInputFocusOut(event) {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement)) return;
+    if (input.dataset.role === "key-input") {
+      setCredentialInputDisabled(input, ffCredentialExternalLockActive() || ffCredentialChangeBusy());
+    } else if (input.dataset.role === "torn-key-input") {
+      setCredentialInputDisabled(input, tornCredentialExternalLockActive() || tornCredentialMutationInProgress);
+    }
+  }
+
+  function credentialLockMessage(verdict, busy = false) {
+    if (!verdict.active) return busy ? "Please wait for the key change to finish." : "";
+    switch (verdict.reason) {
+      case "STORAGE-NOT-READY": return "Please wait while secure key storage opens.";
+      case "FF-STORAGE-UNRESOLVED": return "The saved FFScouter key could not be read or secured. Please try again after secure storage is available.";
+      case "TORN-STORAGE-UNRESOLVED": return "The saved Torn API key could not be read or secured. Please try again after secure storage is available.";
+      case "CLAIM-STORAGE-UNRESOLVED": return "DIBS storage could not be read or secured. Please wait until it is available.";
+      case "WRITE-BUSY": return "Please wait for the current DIBS change to finish.";
+      case "AMBIGUOUS-CLAIMS": return "More than one DIBS claim may belong to you. Please resolve them before changing this key.";
+      case "FF-KEY-BUSY": return "Please wait for the FFScouter key change to finish.";
+      case "TORN-KEY-BUSY": return "Please wait for the Torn API key change to finish.";
+      case "AUTH-EVIDENCE-UNRESOLVED": return "Your saved DIBS ownership could not be checked. Please wait until it can be checked safely.";
+      case "CLEANUP-REQUIRED": return "Your previous DIBS claim needs to be resolved before this key can change.";
+      case "RECOVERY-ACTIVE": return "A saved DIBS claim needs recovery. Please resolve it before changing this key.";
+      case "NO-FF-KEY": return "Set an FFScouter key so your saved DIBS ownership can be checked.";
+      case "OWNERSHIP-PROOF-STALE": return "Your DIBS ownership check is out of date. Please wait for a fresh check before changing this key.";
+      default: return "This key cannot change safely yet. Please try again when the current operation has finished.";
+    }
+  }
+
+  function renderCredentialLockMessage(node, verdict, busy) {
+    if (!node) return;
+    const message = credentialLockMessage(verdict, busy);
+    if (node.textContent !== message) node.textContent = message;
+    node.hidden = !message;
   }
 
   function closeFfCredentialEditor() {
@@ -1146,19 +1360,20 @@
 
   function enforceFfCredentialLock() {
     if (!ffCredentialExternalLockActive()) return false;
-    closeFfCredentialEditor();
+    closeCredentialEditorUnlessFocused("key-editor");
     updatePanel();
     return true;
   }
 
   function beginFfCredentialEdit() {
     registerTrustedInteraction();
-    if (ffCredentialChangeBusy() || ffCredentialExternalLockActive()) {
-      closeFfCredentialEditor();
-      setSharedStatus("error", "Shared: key change locked while DIBS ownership is active or unresolved");
-      return false;
+    const editor = presentationShadow()?.querySelector("[data-role='key-editor']");
+    editor?.classList.add("open");
+    const input = editor?.querySelector("input");
+    if (input instanceof HTMLInputElement) {
+      input.disabled = false;
+      input.focus();
     }
-    presentationShadow()?.querySelector("[data-role='key-editor']")?.classList.add("open");
     updatePanel();
     return true;
   }
@@ -1169,14 +1384,17 @@
 
   function beginTornCredentialEdit() {
     registerTrustedInteraction();
-    if (injectedPdaTornApiKey() || tornCredentialMutationInProgress || tornCredentialExternalLockActive()) {
-      closeTornCredentialEditor();
-      if (!injectedPdaTornApiKey()) {
-        setTornStatusState("error", "Torn: key change locked while DIBS ownership is active or unresolved");
-      }
+    if (injectedPdaTornApiKey()) {
+      closeCredentialEditorUnlessFocused("torn-key-editor");
       return false;
     }
-    presentationShadow()?.querySelector("[data-role='torn-key-editor']")?.classList.add("open");
+    const editor = presentationShadow()?.querySelector("[data-role='torn-key-editor']");
+    editor?.classList.add("open");
+    const input = editor?.querySelector("input");
+    if (input instanceof HTMLInputElement) {
+      input.disabled = false;
+      input.focus();
+    }
     updatePanel();
     return true;
   }
@@ -1532,46 +1750,478 @@
     try { return JSON.parse(text || "{}"); } catch { return {}; }
   }
 
-  async function hitApiRequest(path, { method = "GET", body = null, apiKey = sharedApiKey } = {}) {
-    if (!Object.values(HIT_API).includes(path)) throw new Error("Blocked non-allowlisted FFScouter endpoint");
-    const requestApiKey = validateFfscouterKey(apiKey);
-    if (!requestApiKey) throw new Error("FFScouter key required");
-    const url = new URL(path, SCRIPT.ffscouterOrigin);
-    url.searchParams.set("key", requestApiKey);
-    const result = await gmXhr({
-      method,
-      url: url.toString(),
-      headers: body === null ? { Accept: "application/json" } : { Accept: "application/json", "Content-Type": "application/json" },
-      data: body === null ? undefined : JSON.stringify(body)
-    });
-    return { ...result, body: parseJsonSafe(result.responseText) };
-  }
+  // ---------------------------------------------------------------------------
+  // KS War Room server transport (contract: 3C rapport avsnitt 10).
+  // Allowlist: exactly POST /session and POST /war/<wire id>/(claims|claim|
+  // unclaim|report). Nothing else, and no wipe. Always gmXhr
+  // (GM_xmlhttpRequest), always POST, always a JSON body. The sign-in token
+  // goes in the body field "session": never in a header, never in the URL.
+  // ---------------------------------------------------------------------------
 
-  function retryDelayMs(result) {
-    const code = Number(result?.body?.code);
-    const seconds = Number(result?.body?.retry_after_seconds);
-    if (result?.status !== 409 || code !== 24) return 0;
-    return Number.isFinite(seconds) ? Math.max(250, Math.min(2500, seconds * 1000)) : 1000;
-  }
-
-  function isExplicitFfCredentialRejection(result) {
-    const status = Number(result?.status);
-    return status === 401 || status === 403;
-  }
-
-  async function hitApiWriteWithBusyRetry(path, body, isCurrent = () => true, apiKey = sharedApiKey) {
-    let lastResult = null;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      if (!isCurrent()) return lastResult;
-      lastResult = await hitApiRequest(path, { method: "POST", body, apiKey });
-      if (!isCurrent()) return lastResult;
-      if (lastResult.ok) return lastResult;
-      const delay = retryDelayMs(lastResult);
-      if (!delay || attempt === 1) return lastResult;
-      await wait(delay);
-      if (!isCurrent()) return lastResult;
+  // Torn's ranked war id for the war on screen: the id on the war card, which
+  // is the value the script verifies against /v2/faction/wars. If the Torn API
+  // has confirmed a different id for the own war, there is no id to use.
+  function ksScreenTornWarId() {
+    const surfaceId = String(canonicalPdaRankedWarSurface()?.warId ?? "");
+    if (!viewOnlyMode()) {
+      const confirmedId = String(ownWarsState.warId || "");
+      if (confirmedId && confirmedId !== surfaceId) return "";
     }
-    return lastResult;
+    return surfaceId;
+  }
+
+  // The ONE place the war id on the wire is made. Digits only in; anything
+  // else throws and nothing is sent. Same rule as the War Room page
+  // (warroom-3d.html wireWarId): in a test build the id is "sim-" + Torn's
+  // id, so the script and the page meet in the same test war and a test build
+  // can never write to a real war's board.
+  function wireWarId(tornWarId = ksScreenTornWarId()) {
+    const raw = String(tornWarId ?? "").trim();
+    if (!/^\d{1,10}$/.test(raw) || raw !== String(Number(raw)) || Number(raw) <= 0) {
+      throw new Error("KS server: no Torn ranked war id");
+    }
+    const wire = KS_SERVER_TEST_BUILD ? `${KS_SERVER.simPrefix}${raw}` : raw;
+    if (KS_SERVER_TEST_BUILD && !wire.startsWith(KS_SERVER.simPrefix)) {
+      throw new Error("KS server: test build refuses a war id without sim-");
+    }
+    return wire;
+  }
+
+  function currentWireWarId() {
+    try { return wireWarId(); } catch { return ""; }
+  }
+
+  // Second lock on the same door: every path is built here and nowhere else,
+  // and a test build refuses any war id that does not carry sim-.
+  function ksServerPath(op, wireId) {
+    if (op === "session") return KS_SERVER.sessionPath;
+    if (!KS_SERVER.warOps.includes(op)) throw new Error("Blocked non-allowlisted KS server endpoint");
+    const id = String(wireId ?? "");
+    const allowed = KS_SERVER_TEST_BUILD ? /^sim-[1-9]\d{0,9}$/ : /^[1-9]\d{0,9}$/;
+    if (!allowed.test(id)) throw new Error("Blocked KS server war id");
+    return `/war/${id}/${op}`;
+  }
+
+  // Returns { ok, status, body } and nothing else of the raw response. body is
+  // null when the answer was not a JSON object (Cloudflare's own error page,
+  // an empty reply, a transport failure) -- never an empty object that could
+  // be mistaken for an answer.
+  async function ksServerPost(op, wireId, body) {
+    const path = ksServerPath(op, wireId);
+    const result = await gmXhr({
+      method: "POST",
+      url: `${KS_SERVER.origin}${path}`,
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      data: JSON.stringify(body || {})
+    });
+    let parsed = null;
+    try {
+      const value = JSON.parse(result.responseText || "");
+      if (isPlainRecord(value)) parsed = value;
+    } catch {}
+    return { ok: result.ok === true, status: Number(result.status) || 0, body: parsed };
+  }
+
+  function ksSessionReady(apiKey) {
+    return Boolean(ksSessionToken) && Boolean(apiKey) && ksSessionKeyUsed === apiKey && nowMs() < ksSessionRenewAt;
+  }
+
+  function ksDropSession() {
+    ksSessionToken = "";
+    ksSessionRenewAt = 0;
+    ksSessionKeyUsed = "";
+  }
+
+  // Called when the Torn key is saved again or forgotten. A newly saved key is
+  // a new question to the server; the old refusal says nothing about it.
+  function ksResetSignInGuard() {
+    ksSignInEpoch += 1;
+    ksDropSession();
+    ksSignInRefusedKey = "";
+    ksSignInRefusedWord = "";
+    ksSignInRetryAt = 0;
+    ksSignInFailureStreak = 0;
+    ksSignInManualAttempt = false;
+  }
+
+  // One tap on Sync buys ONE sign-in attempt with a key the server refused.
+  // With no refusal standing there is nothing to buy, and no spare attempt is
+  // kept for later.
+  function ksAllowOneManualSignIn() {
+    ksSignInManualAttempt = Boolean(ksSignInRefusedKey);
+  }
+
+  function ksSignInWait(word, retryAt = 0) {
+    return { ok: false, word, retryAt };
+  }
+
+  // What the guard says about signing in right now, without sending anything.
+  // null means a sign-in may be sent.
+  function ksSignInGuardVerdict(apiKey) {
+    if (!apiKey) return ksSignInWait("KEY REQUIRED");
+    if (nowMs() < ksSignInRetryAt) return ksSignInWait("SERVER OFFLINE", ksSignInRetryAt);
+    if (ksSignInRefusedKey && ksSignInRefusedKey === apiKey && !ksSignInManualAttempt) {
+      return ksSignInWait(ksSignInRefusedWord || "KEY REJECTED");
+    }
+    return null;
+  }
+
+  // Reads a /session answer and updates the guard. The word is chosen on the
+  // HTTP status and the error/retryable fields, never on the server's own
+  // detail text (it is Swedish).
+  //   400 invalid_key, 401 key_rejected (not retryable), 403 not_a_member
+  //       -> refused: no automatic sign-in with the SAME key again
+  //   429 -> wait retryAfterSeconds, 60 s when the field is missing
+  //   anything else (401 retryable, 500, 502, 503, status 0, not JSON)
+  //       -> wait 15 s, then 30 s, then 60 s
+  function ksApplySignInResult(apiKey, result) {
+    const status = Number(result?.status) || 0;
+    const body = result?.body || null;
+    const error = body ? normalizeText(body.error) : "";
+    if (status === 200 && body?.ok === true && typeof body.session === "string" && body.session) {
+      const ttlSeconds = Number(body.sessionTtlSeconds);
+      const ttlMs = (Number.isFinite(ttlSeconds) && ttlSeconds > 0 ? ttlSeconds : 600) * 1000;
+      ksSessionToken = body.session;
+      ksSessionKeyUsed = apiKey;
+      ksSessionRenewAt = nowMs() + Math.max(1000, ttlMs - CONFIG.ksSessionRenewMarginMs);
+      ksSignInRefusedKey = "";
+      ksSignInRefusedWord = "";
+      ksSignInRetryAt = 0;
+      ksSignInFailureStreak = 0;
+      return { ok: true, word: "SIGNED IN", retryAt: 0 };
+    }
+    ksDropSession();
+    const refusedWord =
+      status === 400 && error === "invalid_key" ? "KEY REJECTED"
+        : status === 401 && error === "key_rejected" && body?.retryable !== true ? "KEY REJECTED"
+          : status === 403 && error === "not_a_member" ? "NOT A MEMBER"
+            : "";
+    if (refusedWord) {
+      ksSignInRefusedKey = apiKey;
+      ksSignInRefusedWord = refusedWord;
+      return ksSignInWait(refusedWord);
+    }
+    if (status === 429) {
+      const retryAfterSeconds = Number(body?.retryAfterSeconds);
+      ksSignInRetryAt = nowMs() + (
+        Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+          ? Math.ceil(retryAfterSeconds) * 1000
+          : CONFIG.ksSignInBlockedMinWaitMs
+      );
+      return ksSignInWait("SERVER OFFLINE", ksSignInRetryAt);
+    }
+    const steps = CONFIG.ksSignInBackoffMs;
+    ksSignInRetryAt = nowMs() + steps[Math.min(ksSignInFailureStreak, steps.length - 1)];
+    ksSignInFailureStreak += 1;
+    return ksSignInWait("SERVER OFFLINE", ksSignInRetryAt);
+  }
+
+  // One sign-in at a time: a concurrent caller shares the request in flight
+  // instead of sending the Torn key twice. The key goes in the body of
+  // POST /session and nowhere else.
+  function ksSignIn(apiKey) {
+    if (ksSessionSignInPromise) return ksSessionSignInPromise;
+    ksSignInManualAttempt = false;
+    const epoch = ksSignInEpoch;
+    const pending = (async () => {
+      let result = null;
+      try { result = await ksServerPost("session", "", { apiKey }); } catch { result = null; }
+      // The key was saved again or forgotten while this was in flight: the
+      // answer belongs to a question nobody is asking any more.
+      if (epoch !== ksSignInEpoch) return ksSignInWait("SERVER OFFLINE");
+      return ksApplySignInResult(apiKey, result);
+    })();
+    ksSessionSignInPromise = pending;
+    const clear = () => { if (ksSessionSignInPromise === pending) ksSessionSignInPromise = null; };
+    pending.then(clear, clear);
+    return pending;
+  }
+
+  // { ok:true } when there is a session for this key; otherwise the word the
+  // panel should show. Sends at most one sign-in, and only when the guard
+  // allows it.
+  async function ksEnsureSession(apiKey) {
+    if (ksSessionReady(apiKey)) return { ok: true, word: "SIGNED IN", retryAt: 0 };
+    const verdict = ksSignInGuardVerdict(apiKey);
+    if (verdict) return verdict;
+    const outcome = await ksSignIn(apiKey);
+    if (outcome.ok && !ksSessionReady(apiKey)) return ksSignInWait("SERVER OFFLINE");
+    return outcome;
+  }
+
+  // Signs in if needed, sends ONE data request, and answers a 401 exactly
+  // once -- never a loop:
+  //   reason expired                  -> ONE new sign-in and ONE re-run
+  //   reason malformed, bad_signature -> the token is dropped and ONE new
+  //                                      sign-in is made; no re-run
+  // Returns { ok, status, body }. signIn is set when no request could be sent
+  // because there is no session; signIn.word says why.
+  async function ksWarRoomRequest(op, wireId, extraBody, { isCurrent = () => true } = {}) {
+    const apiKey = effectiveTornApiKey();
+    const noSession = outcome => ({ ok: false, status: 0, body: null, signIn: outcome });
+    const ensured = await ksEnsureSession(apiKey);
+    if (!ensured.ok) return noSession(ensured);
+    if (!isCurrent()) return { ok: false, status: 0, body: null };
+    const sentToken = ksSessionToken;
+    let result = await ksServerPost(op, wireId, { ...(extraBody || {}), session: sentToken });
+    if (result.status !== 401 || normalizeText(result.body?.error) !== "unauthorized") return result;
+    const reason = normalizeText(result.body?.reason);
+    // R5. The 401 is about the token this request sent. If another caller has
+    // signed in again meanwhile, the token held now is a newer one: dropping
+    // it would cost a second sign-in for one expiry.
+    if (ksSessionToken === sentToken) ksDropSession();
+    if (!isCurrent()) return result;
+    const renewed = await ksEnsureSession(apiKey);
+    if (!renewed.ok) return noSession(renewed);
+    if (reason !== "expired" || !isCurrent()) return result;
+    result = await ksServerPost(op, wireId, { ...(extraBody || {}), session: ksSessionToken });
+    return result;
+  }
+
+  // The War Room row for a request that did not give a usable answer. English,
+  // chosen on status and error/reason fields only: no HTTP code, no error
+  // code, no path and none of the server's own detail text.
+  function ksFailureLine(result) {
+    const signIn = result?.signIn;
+    if (signIn?.word === "KEY REQUIRED") return "War Room: KEY REQUIRED — set your Torn API key";
+    if (signIn?.word === "KEY REJECTED" || signIn?.word === "NOT A MEMBER") return `War Room: ${signIn.word}`;
+    if (signIn && signIn.retryAt > nowMs()) {
+      return `War Room: SERVER OFFLINE · retry in ${Math.max(1, Math.ceil((signIn.retryAt - nowMs()) / 1000))}s`;
+    }
+    return "War Room: SERVER OFFLINE";
+  }
+
+  function ksFailureState(result) {
+    const word = result?.signIn?.word;
+    if (word === "KEY REQUIRED") return "key-required";
+    if (word === "KEY REJECTED" || word === "NOT A MEMBER") return "error";
+    return "offline";
+  }
+
+  // A locally derived, stable claim id for a server claim, in the UUID-v4
+  // shape sanitizeOwnClaim()/isValidClaimId() already require. Deterministic
+  // on the wire war id, the target, the member and the server's EXACT
+  // claimedAt in milliseconds, so one server claim gets the same id in the
+  // answer to /claim and in every later read of the board. That is what lets
+  // findSharedClaimById() recognise this device's own claim between polls and
+  // lets a release pass the ownership proof. Correlation only; it is never
+  // sent anywhere.
+  function ksDeterministicClaimId(wireId, targetId, memberId, claimedAtMs) {
+    const source = `ks-war-room:${wireId}:${targetId}:${memberId}:${claimedAtMs}`;
+    const bytes = [];
+    let seed = 2166136261;
+    for (let round = 0; round < 4; round += 1) {
+      let h = seed ^ Math.imul(round + 1, 0x9e3779b9);
+      for (let i = 0; i < source.length; i += 1) {
+        h = Math.imul(h ^ source.charCodeAt(i), 16777619) >>> 0;
+      }
+      seed = h;
+      for (let shift = 24; shift >= 0; shift -= 8) bytes.push((h >>> shift) & 0xff);
+    }
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = bytes.map(b => b.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+  }
+
+  // Who holds a claim, as members see it. The server knows Torn ids only, so
+  // the name comes from the own faction member list; "#<Torn id>" until that
+  // list has the member. The own claim reads as it always has.
+  function ksClaimerDisplayName(memberId) {
+    const id = String(memberId || "");
+    if (id && id === String(selfPlayerId)) return selfPlayerName || "You";
+    return ksMemberNames.get(id) || `#${id}`;
+  }
+
+  // THE one conversion point: a claim as the server sends it becomes the queue
+  // entry the rest of this file works with. The server's claimedAt and
+  // expiresAt are MILLISECONDS; every claim time in this file is SECONDS
+  // (expiresAt is compared with nowSeconds()). No other place in the file sees
+  // the server's milliseconds. hospitalUntil is Torn seconds already, or null
+  // when the claim has no stored hospital time.
+  // Used for a row of the board AND for the claim in the answer to /claim --
+  // same function, same input, same claim id.
+  // Returns null for anything that is not a claim the server could have sent.
+  function ksQueueEntryFromServerClaim(wireId, raw) {
+    if (!isPlainRecord(raw)) return null;
+    const targetId = String(raw.targetId ?? "").trim();
+    const memberId = String(raw.memberId ?? "").trim();
+    const claimedAtMs = raw.claimedAt;
+    const expiresAtMs = raw.expiresAt;
+    if (
+      targetId !== String(Number(targetId)) || !validTargetId(targetId) ||
+      memberId !== String(Number(memberId)) || !validTargetId(memberId) ||
+      !Number.isSafeInteger(claimedAtMs) || !Number.isSafeInteger(expiresAtMs) ||
+      // A value this small is seconds, not milliseconds: not this contract.
+      claimedAtMs < 1e12 || expiresAtMs <= claimedAtMs
+    ) return null;
+    return {
+      targetId,
+      entry: {
+        claimId: ksDeterministicClaimId(wireId, targetId, memberId, claimedAtMs),
+        position: 1,
+        createdAt: Math.floor(claimedAtMs / 1000),
+        expiresAt: Math.floor(expiresAtMs / 1000),
+        hospitalUntil: Number.isSafeInteger(raw.hospitalUntil) && raw.hospitalUntil >= 0 ? raw.hospitalUntil : null,
+        claimer: { playerId: memberId, name: ksClaimerDisplayName(memberId) }
+      }
+    };
+  }
+
+  // The server's board is single-owner: one claim per target, no queue. Each
+  // target maps to a one-entry queue so the code written for a queue keeps
+  // working unchanged.
+  //
+  // Fail closed, three ways:
+  //   - one row in claims[] that cannot be read makes the WHOLE answer
+  //     invalid (null): a partial board reads as "these targets are free";
+  //   - every targetId in unreadable[] is unknown;
+  //   - degraded:true makes every known target unknown.
+  function normalizeKsWarRoomClaims(payload, wireId) {
+    if (!isPlainRecord(payload) || payload.ok !== true || payload.warId !== wireId) return null;
+    if (!Array.isArray(payload.claims) || !Array.isArray(payload.unreadable) || typeof payload.degraded !== "boolean") return null;
+    const claims = new Map();
+    const unreadable = new Set();
+    for (const raw of payload.claims) {
+      const converted = ksQueueEntryFromServerClaim(wireId, raw);
+      if (!converted || claims.has(converted.targetId)) return null;
+      claims.set(converted.targetId, [converted.entry]);
+    }
+    for (const raw of payload.unreadable) {
+      const targetId = String((isPlainRecord(raw) ? raw.targetId : raw) ?? "").trim();
+      if (validTargetId(targetId)) unreadable.add(String(Number(targetId)));
+    }
+    const degraded = payload.degraded === true || payload.unreadable.length > 0;
+    if (degraded) {
+      for (const id of knownOpponentTargetIds()) unreadable.add(id);
+    }
+    return { claims, unreadable, degraded, unreadableCount: Math.max(unreadable.size, payload.unreadable.length) };
+  }
+
+  // Claimer names. At most one Torn call per CONFIG.ksMemberNamesRefreshMs
+  // while the script is active on an own war page, never in VIEW, kept in
+  // memory and never stored. The path is the key owner's own faction.
+  function normalizeOwnFactionMemberNames(payload) {
+    if (!isPlainRecord(payload) || payload.error) return null;
+    const source = payload.members;
+    const entries = Array.isArray(source)
+      ? source.map(member => ["", member])
+      : (isPlainRecord(source) ? Object.entries(source) : null);
+    if (!entries) return null;
+    const names = new Map();
+    for (const [key, member] of entries) {
+      if (!isPlainRecord(member)) continue;
+      const rawId = String(member.id ?? member.player_id ?? key ?? "").trim();
+      const name = normalizeText(member.name);
+      if (validTargetId(rawId) && name) names.set(String(Number(rawId)), name);
+    }
+    return names;
+  }
+
+  async function fetchOwnFactionMemberNames() {
+    if (!runtimeActive || !isRuntimeEligible() || viewOnlyMode() || ksMemberNamesSyncing) return false;
+    const key = effectiveTornApiKey();
+    if (!key) return false;
+    if (ksMemberNamesAttemptAt > 0 && nowMs() - ksMemberNamesAttemptAt < CONFIG.ksMemberNamesRefreshMs) return false;
+    ksMemberNamesAttemptAt = nowMs();
+    ksMemberNamesSyncing = true;
+    const epoch = ksSignInEpoch;
+    try {
+      const result = await tornApiRequest(SCRIPT.tornOwnMembersPath, key, { trackCredentialState: false });
+      if (epoch !== ksSignInEpoch || !result?.ok || result.body?.error) return false;
+      const names = normalizeOwnFactionMemberNames(result.body);
+      if (!names) return false;
+      ksMemberNames = names;
+      return true;
+    } catch {
+      return false;
+    } finally {
+      ksMemberNamesSyncing = false;
+    }
+  }
+
+  // The Torn key changed: the old key's session, its refusal and its faction's
+  // names all belong to somebody else now.
+  function ksResetForTornKeyChange() {
+    ksResetSignInGuard();
+    ksMemberNames = new Map();
+    ksMemberNamesAttemptAt = 0;
+    ksReportedHospitalUntil.clear();
+  }
+
+  // Torn-synced time for a moment on the device clock, or null while the Torn
+  // clock is not calibrated. Same clock getTornNowMs() reads.
+  function tornSyncedMsAtLocal(localMs) {
+    return Number.isFinite(tornClockLowMs) && Number.isFinite(localMs) ? localMs + tornClockLowMs : null;
+  }
+
+  // Hospital report (server rule K5): lets the server release a claim whose
+  // target is back in hospital when the member holding it forgot to. Anyone
+  // signed in may report, so this walks every claim on the board except this
+  // device's own -- the own claim keeps its auto-release paths, which call
+  // /unclaim. Each rule below is the server's own:
+  //   - only when the fresh end time is more than 180 s above the claim's
+  //     stored hospitalUntil (anything less the server answers "unchanged");
+  //   - at most one report per (target, end time);
+  //   - observedAt is Torn-synced time at the moment the Torn answer arrived,
+  //     in seconds, never the device clock; no calibrated clock, no report;
+  //   - no report on a reading older than 30 s by that same clock;
+  //   - a report only on a reading taken more than 45 s after the claim was
+  //     made (R1): an earlier one may describe the target before the claim;
+  //   - never in VIEW.
+  // No Torn call is made for this: it reads the opponent batch already polled.
+  async function reportHospitalUpdatesToWarRoom() {
+    if (ksReportBusy || viewOnlyMode() || !runtimeActive || !isRuntimeEligible() || sharedWriteBusy) return 0;
+    if (!effectiveTornApiKey() || sharedClaims.size === 0 || sharedClaimsVerifiedAt <= 0) return 0;
+    if (!validTargetId(opponentFactionId) || opponentMembersState.factionId !== opponentFactionId) return 0;
+    const observedAtTornMs = tornSyncedMsAtLocal(Number(opponentMembersState.fetchedAt) || 0);
+    if (observedAtTornMs === null || !(Number(opponentMembersState.fetchedAt) > 0)) return 0;
+    if (getTornNowMs() - observedAtTornMs > CONFIG.ksReportMaxAgeMs) return 0;
+    const observedAt = Math.floor(observedAtTornMs / 1000);
+    const wireId = sharedClaimsWireId;
+    if (!wireId || wireId !== currentWireWarId()) return 0;
+    for (const id of [...ksReportedHospitalUntil.keys()]) {
+      if (!sharedClaims.has(id)) ksReportedHospitalUntil.delete(id);
+    }
+    const ownTargetId = currentOwnClaim()?.targetId || "";
+    let sent = 0;
+    ksReportBusy = true;
+    try {
+      for (const [targetId, queue] of [...sharedClaims.entries()]) {
+        if (viewOnlyMode() || !runtimeActive || !isRuntimeEligible()) break;
+        const claim = Array.isArray(queue) ? queue[0] : null;
+        if (!claim || targetId === ownTargetId || String(claim.claimer?.playerId || "") === String(selfPlayerId)) continue;
+        if (!Number.isSafeInteger(claim.hospitalUntil)) continue;
+        // R1. The reading must be newer than the claim by Torn's cache plus the
+        // server's clock skew. Checked before the once-per-end-time mark below,
+        // so a later reading of the same end time can still be reported.
+        // createdAt is the claim time rounded DOWN to a whole second (the
+        // server's milliseconds stop at the conversion point), so the reading
+        // must be MORE than 45 whole seconds later to be 45 s after the claim
+        // itself. The server holds the same rule on its exact time and answers
+        // a report inside that second "before_claim" -- and this end time,
+        // once marked as reported, would never be reported again.
+        if (!Number.isFinite(claim.createdAt) || observedAt <= claim.createdAt + CONFIG.ksReportMinSecondsAfterClaim) continue;
+        const status = opponentMembersState.members.get(targetId);
+        if (!status) continue;
+        const inHospital =
+          isHospitalStatusValue(status.state) ||
+          isHospitalStatusValue(status.description) ||
+          isHospitalStatusValue(status.details);
+        const freshUntil = Number(status.until);
+        if (!inHospital || !Number.isSafeInteger(freshUntil)) continue;
+        if (freshUntil <= claim.hospitalUntil + CONFIG.ksReportMarginSeconds) continue;
+        if (ksReportedHospitalUntil.get(targetId) === freshUntil) continue;
+        ksReportedHospitalUntil.set(targetId, freshUntil);
+        sent += 1;
+        try {
+          await ksWarRoomRequest("report", wireId, { targetId, hospitalUntil: freshUntil, observedAt });
+        } catch {}
+      }
+    } finally {
+      ksReportBusy = false;
+    }
+    return sent;
   }
 
   async function fairFightStatsRequest(targetIds, { initial = false, isCurrent = () => true, apiKey = sharedApiKey } = {}) {
@@ -1625,7 +2275,9 @@
     const isUserProfile = /^\/v2\/user\/\d+\/profile$/.test(path);
     const isOwnFactionWars = path === SCRIPT.tornOwnWarsPath;
     const isOpponentMembers = /^\/v2\/faction\/\d+\/members$/.test(path);
-    if (path !== SCRIPT.tornKeyInfoPath && !isUserBasic && !isUserProfile && !isOwnFactionWars && !isOpponentMembers) {
+    // The key owner's own faction member list: claimer names only.
+    const isOwnFactionMembers = path === SCRIPT.tornOwnMembersPath;
+    if (path !== SCRIPT.tornKeyInfoPath && !isUserBasic && !isUserProfile && !isOwnFactionWars && !isOpponentMembers && !isOwnFactionMembers) {
       throw new Error("Blocked non-allowlisted Torn API endpoint");
     }
     const apiKey = validateTornApiKey(key);
@@ -1905,64 +2557,22 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Shared FFScouter queue
+  // Shared claim queue (KS War Room board, see normalizeKsWarRoomClaims)
   // ---------------------------------------------------------------------------
 
-  // Two kinds of bad response, deliberately handled differently -- the same
-  // contract PC 1.0.39 uses, so both clients say the same thing about the same
-  // target.
-  //
-  // The SHAPE being wrong -- no claims.faction object, or a key that is not a
-  // Torn ID -- means this is not a claims response, or names a target there is
-  // no row to warn on. Rejected whole; the panel goes offline. An empty object
-  // would read as "nobody has claimed anything", and acting on that would let
-  // the whole faction pile onto targets that are in fact taken.
-  //
-  // A single ENTRY being unreadable is different. Rejecting the whole roster
-  // over one bad entry takes the client offline for the rest of the war. So the
-  // entry is skipped -- but its target is remembered in `unreadable`, the row
-  // reads DIBS? instead of free, and it cannot be claimed. Skipping silently is
-  // the one thing that must never happen: that is how two members hit the same
-  // target.
-  function normalizeSharedClaims(payload) {
-    const faction = payload?.claims?.faction;
-    const result = new Map();
-    const unreadable = new Set();
-    const seenClaimIds = new Set();
-    if (Array.isArray(faction)) return faction.length === 0 ? { claims: result, unreadable } : null;
-    if (!isPlainRecord(faction)) return null;
-    for (const [rawTargetId, rawQueue] of Object.entries(faction)) {
-      const targetId = String(rawTargetId || "").trim();
-      if (targetId !== String(Number(targetId)) || !validTargetId(targetId)) return null;
-      if (!Array.isArray(rawQueue) || !rawQueue.length) { unreadable.add(targetId); continue; }
-      const queue = rawQueue.map((claim, index) => {
-        if (!isPlainRecord(claim) || !isPlainRecord(claim.claimer)) return null;
-        const claimId = normalizeText(claim?.claim_id);
-        const claimerId = String(claim?.claimer?.player_id ?? "").trim();
-        const claimerName = normalizeText(claim?.claimer?.name);
-        const createdAt = Number(claim?.created_at);
-        const expiresAt = Number(claim?.expires_at);
-        if (
-          !isValidClaimId(claimId) || seenClaimIds.has(claimId) ||
-          claimerId !== String(Number(claimerId)) || !validTargetId(claimerId) || !claimerName ||
-          !Number.isFinite(createdAt) || !Number.isFinite(expiresAt) || expiresAt <= createdAt
-        ) return null;
-        seenClaimIds.add(claimId);
-        return { claimId, position: index + 1, createdAt, expiresAt, claimer: { playerId: claimerId, name: claimerName } };
-      });
-      if (queue.some(item => item === null)) unreadable.add(targetId);
-      const normalizedQueue = queue.filter(item => item !== null);
-      if (normalizedQueue.length) result.set(targetId, normalizedQueue);
-    }
-    return { claims: result, unreadable };
-  }
-
+  // A candidate FFScouter key is tried against the one FFScouter endpoint this
+  // script still uses: get-stats, for the targets it already knows. The key no
+  // longer has anything to do with DIBS, so there is no claim board to try it
+  // against. With no known target there is nothing to ask and the key is
+  // accepted on its format alone.
   async function ffCandidateKeyIsOperational(key, isCurrent) {
     if (!isCurrent()) return false;
-    const result = await hitApiRequest(HIT_API.claims, { method: "GET", apiKey: key });
-    if (!isCurrent() || !result?.ok) return false;
-    const claims = normalizeSharedClaims(result.body);
-    return Boolean(isCurrent() && claims?.claims instanceof Map);
+    const result = await fairFightStatsRequest(knownOpponentTargetIds(), { initial: true, isCurrent, apiKey: key });
+    // R6b. A 200 whose body carries an error field is FFScouter saying no
+    // inside a 200. It does not validate a key.
+    const body = result?.body;
+    const refused = isPlainRecord(body) && body.error !== undefined && body.error !== null && body.error !== false && body.error !== "";
+    return Boolean(isCurrent() && result?.ok && !refused);
   }
 
   function findSharedClaimById(claimId) {
@@ -2001,6 +2611,12 @@
       (!quarantine.claimId || quarantine.claimId === own.claimId);
   }
 
+  // True when the server could not say whether this target is taken: it was
+  // named in unreadable[], or the whole board was degraded. Never free.
+  function sharedClaimUnknown(targetId) {
+    return sharedClaimsDegraded || sharedClaimsUnreadable.has(String(targetId || ""));
+  }
+
   function sharedClaimForTarget(playerId) {
     const queue = sharedClaims.get(String(playerId || ""));
     if (!Array.isArray(queue) || !queue.length) return null;
@@ -2008,16 +2624,12 @@
     return active.length ? { first: active[0], queue: active } : null;
   }
 
-  function upsertImmediateSharedClaim(targetId, claim, position = 1) {
+  // Takes a queue entry already made by ksQueueEntryFromServerClaim() -- the
+  // claim in the server's answer to /claim -- so the board shows it at once,
+  // before the next poll, under the same claim id the poll will give it.
+  function upsertImmediateSharedClaim(targetId, entry) {
     const id = String(targetId || "");
-    const entry = {
-      claimId: normalizeText(claim?.claim_id),
-      position: Number.isInteger(position) && position > 0 ? position : 1,
-      createdAt: Number(claim?.created_at),
-      expiresAt: Number(claim?.expires_at),
-      claimer: { playerId: String(claim?.claimer?.player_id ?? ""), name: normalizeText(claim?.claimer?.name) }
-    };
-    if (!validTargetId(id) || !isValidClaimId(entry.claimId) || !/^\d+$/.test(entry.claimer.playerId) || !entry.claimer.name || !Number.isFinite(entry.createdAt) || !Number.isFinite(entry.expiresAt)) return;
+    if (!validTargetId(id) || !entry || !isValidClaimId(entry.claimId) || !/^\d+$/.test(String(entry.claimer?.playerId ?? "")) || !entry.claimer.name || !Number.isFinite(entry.createdAt) || !Number.isFinite(entry.expiresAt)) return;
     const queue = Array.isArray(sharedClaims.get(id)) ? [...sharedClaims.get(id)] : [];
     if (!queue.some(item => item.claimId === entry.claimId)) queue.push(entry);
     queue.sort((a, b) => a.position - b.position || a.createdAt - b.createdAt);
@@ -2066,7 +2678,8 @@
       claimerName: normalizeText(claim?.claimer?.name) || selfPlayerName || "You",
       expiresAt: claim.expiresAt,
       cleanupRequired: Number(claim.position) > 1,
-      createdLocalAt: nowMs()
+      createdLocalAt: nowMs(),
+      wireId: sharedClaimsWireId
     });
     ownClaimLastConfirmedAt = sharedClaimsVerifiedAt;
     return true;
@@ -2106,7 +2719,8 @@
           claimerPlayerId: selfPlayerId,
           claimerName: proven.claim.claimer.name || selfPlayerName || "You",
           expiresAt: proven.claim.expiresAt,
-          cleanupRequired: Number(proven.claim.position) > 1
+          cleanupRequired: Number(proven.claim.position) > 1,
+          wireId: sharedClaimsWireId
         });
         const committed = currentOwnClaim();
         if (
@@ -2125,13 +2739,20 @@
       claimerName: proven.claim.claimer.name || selfPlayerName || "You",
       expiresAt: proven.claim.expiresAt,
       cleanupRequired: Number(proven.claim.position) > 1,
-      createdLocalAt: nowMs()
+      createdLocalAt: nowMs(),
+      wireId: sharedClaimsWireId
     });
     ownClaimLastConfirmedAt = sharedClaimsVerifiedAt;
     if (persisted && currentOwnClaim()?.claimId === proven.claim.claimId) {
       saveClaimQuarantine(null);
     }
   }
+
+  // R2. Where the own record was last found on the board, and how many
+  // complete reads in a row have missed it since. Read and written only by
+  // reconcileOwnClaimFromShared. Memory only: after a page reload it is empty
+  // and the record's own wireId stands in for it (see below).
+  let ownClaimBoardTrack = { claimId: "", wireId: "", readAt: 0, missingReads: 0 };
 
   function reconcileOwnClaimFromShared() {
     if (sharedClaimsVerifiedAt <= 0) return;
@@ -2159,17 +2780,65 @@
         return;
       }
       ownClaimLastConfirmedAt = sharedClaimsVerifiedAt;
+      ownClaimBoardTrack = { claimId: own.claimId, wireId: sharedClaimsWireId, readAt: sharedClaimsVerifiedAt, missingReads: 0 };
       saveOwnClaim({
         ...own,
         targetId: found.targetId,
         claimerPlayerId: found.claim.claimer.playerId,
         claimerName: found.claim.claimer.name,
         expiresAt: found.claim.expiresAt,
-        cleanupRequired: Number(found.claim.position) > 1
+        cleanupRequired: Number(found.claim.position) > 1,
+        wireId: sharedClaimsWireId
       });
       return;
     }
+    // The own record is not on the board. Until enough complete reads say so
+    // nothing is known, and every DIBS button stays blocked as before.
     ambiguousOwnServerClaims = true;
+    // R2. The server's board is single-owner and atomic: a claim it holds is
+    // on the board. So an own record that complete reads no longer find has
+    // been released by the server (another member's hospital report, expiry,
+    // a release from another device). Same rule as PC: at least
+    // ownClaimMissingReadThreshold reads in a row, at least
+    // ownClaimMissingGraceMs after the last confirmation. Stricter than PC in
+    // three ways, each so that a record the server still holds is never
+    // dropped:
+    //   - the record must belong to THIS war's board. Either this page has
+    //     found it there before (the track), or -- 1.5.186, for a page that
+    //     was reloaded and has no track -- the record itself names this
+    //     board: own.wireId is written only from the server's own data for
+    //     that war (the answer to /claim, or a row of its board), so it is
+    //     the one board the claim can be on. A record without wireId (saved
+    //     by 1.5.185 or older) or with another war's id is left alone, as
+    //     before: it may belong to another board;
+    //   - a read counts only if it was complete for this target: the board
+    //     not degraded and the target not unreadable;
+    //   - one board read counts once, however often this runs on it.
+    if (!sharedClaimsWireId) return;
+    let track = ownClaimBoardTrack;
+    if (track.claimId !== own.claimId || track.wireId !== sharedClaimsWireId) {
+      if (!own.wireId || own.wireId !== sharedClaimsWireId) return;
+      track = ownClaimBoardTrack = { claimId: own.claimId, wireId: sharedClaimsWireId, readAt: 0, missingReads: 0 };
+    }
+    if (sharedClaimUnknown(own.targetId)) {
+      track.missingReads = 0;
+      track.readAt = sharedClaimsVerifiedAt;
+      return;
+    }
+    if (track.readAt === sharedClaimsVerifiedAt) return;
+    track.readAt = sharedClaimsVerifiedAt;
+    track.missingReads += 1;
+    const sinceConfirmedMs = ownClaimLastConfirmedAt > 0
+      ? nowMs() - ownClaimLastConfirmedAt
+      : Math.max(0, nowMs() - Number(own.createdLocalAt || 0));
+    if (track.missingReads < CONFIG.ownClaimMissingReadThreshold || sinceConfirmedMs < CONFIG.ownClaimMissingGraceMs) return;
+    saveOwnClaim(null);
+    ownClaimLastConfirmedAt = 0;
+    ownClaimBoardTrack = { claimId: "", wireId: "", readAt: 0, missingReads: 0 };
+    // More than one own claim on the board is still ambiguous. Exactly one --
+    // a newer claim of this member's -- becomes the own record at once.
+    ambiguousOwnServerClaims = activeSharedClaimsForClaimer(selfPlayerId).length > 1;
+    adoptSingleOwnServerClaim();
   }
 
   // A write result must stay readable. Without the hold, the shared poll that
@@ -2196,17 +2865,53 @@
       updatePanel();
       return;
     }
-    sharedStatus = { state: next, message: normalizeText(message) || "Shared: unknown", count: Number.isInteger(count) && count >= 0 ? count : 0 };
+    sharedStatus = { state: next, message: normalizeText(message) || "War Room: unknown", count: Number.isInteger(count) && count >= 0 ? count : 0 };
     updatePanel();
   }
 
+  // Reads the KS War Room claim board (POST /war/<wire id>/claims), polled
+  // every CONFIG.sharedPollMs as the FFScouter board was. It needs the Torn
+  // key, not the FFScouter key. Never in VIEW: the transport refuses it there
+  // anyway, and a request that never left must not feed the sign-in guard.
+  //
+  // Fail closed: anything but a complete, readable board -- no session, 503,
+  // status 0, an answer that is not JSON, one unreadable row -- leaves
+  // sharedClaimsVerifiedAt at 0, which blocks every DIBS button. It is never
+  // read as "nobody has claimed anything".
   async function fetchSharedClaims({ allowDuringWrite = false } = {}) {
     if (!runtimeActive || !isRuntimeEligible() || !bridgeMounted || !isWarPanelPresent()) return false;
+    if (viewOnlyMode()) return false;
     if (ffCredentialChangeBusy() || tornCredentialMutationInProgress || (sharedWriteBusy && !allowDuringWrite)) return false;
-    if (!sharedApiKey || sharedSyncing || nowMs() < sharedBackoffUntil) return false;
+    const requestKey = effectiveTornApiKey();
+    if (!requestKey || sharedSyncing || nowMs() < sharedBackoffUntil) return false;
+    const wireId = currentWireWarId();
+    if (!wireId) {
+      // R6a. The war on screen cannot be established, so the board held in
+      // memory is verified for nothing: it must not stand as verified.
+      sharedClaimsVerifiedAt = 0;
+      return false;
+    }
+    if (sharedClaimsWireId !== wireId) {
+      // The snapshot was read for another war. It says nothing about this one.
+      sharedClaims = new Map(); sharedClaimsUnreadable = new Set();
+      sharedClaimsDegraded = false;
+      sharedClaimsVerifiedAt = 0;
+      sharedClaimsWireId = wireId;
+    }
+    if (!ksSessionReady(requestKey)) {
+      const waiting = ksSignInGuardVerdict(requestKey);
+      if (waiting) {
+        // The guard is holding the sign-in back: nothing is sent, and the row
+        // says why instead of flashing CHECKING on every poll.
+        const held = { signIn: waiting };
+        sharedClaimsVerifiedAt = 0;
+        setSharedStatus(ksFailureState(held), ksFailureLine(held));
+        return false;
+      }
+    }
     const generation = runtimeGeneration;
     const authorityEpoch = sharedAuthorityEpoch;
-    const requestKey = sharedApiKey;
+    const credentialEpoch = tornCredentialEpoch;
     const requestRoot = canonicalPdaRankedWarSurface()?.root || null;
     const requestSerial = ++sharedRequestSerial;
     sharedSyncing = true;
@@ -2214,66 +2919,77 @@
       generation === runtimeGeneration &&
       authorityEpoch === sharedAuthorityEpoch &&
       requestSerial === sharedRequestSerial &&
-      requestKey === sharedApiKey &&
+      credentialEpoch === tornCredentialEpoch &&
+      requestKey === effectiveTornApiKey() &&
       requestRoot === (canonicalPdaRankedWarSurface()?.root || null) &&
+      wireId === currentWireWarId() &&
       !tornCredentialMutationInProgress &&
       runtimeActive &&
       isRuntimeEligible() &&
       isWarPanelPresent()
     );
-    setSharedStatus("syncing", sharedTransportFailureStreak > 0 ? "Shared: reconnecting…" : "Shared: syncing…");
+    setSharedStatus("syncing", "War Room: CHECKING…");
+    let failed = null;
     try {
       let result = null;
       for (let attempt = 0; attempt <= CONFIG.sharedTransportRetryAttempts; attempt += 1) {
         if (!isCurrentRequest()) return false;
-        result = await hitApiRequest(HIT_API.claims, { method: "GET", apiKey: requestKey });
+        result = await ksWarRoomRequest("claims", wireId, {}, { isCurrent: isCurrentRequest });
         if (!isCurrentRequest()) return false;
-        if (result.ok || result.status !== 0 || attempt >= CONFIG.sharedTransportRetryAttempts) break;
+        // A sign-in the guard refused is not a transport hiccup: no retry.
+        if (result.ok || result.status !== 0 || result.signIn || attempt >= CONFIG.sharedTransportRetryAttempts) break;
         await wait(CONFIG.sharedTransportRetryDelayMs * (attempt + 1));
         if (!isCurrentRequest()) return false;
       }
-      const body = result?.body || {};
-      if (!result?.ok) {
-        if (isExplicitFfCredentialRejection(result)) sharedCredentialRejected = true;
-        const retryAfterSeconds = Number(body?.retry_after_seconds);
-        if ((result?.status === 429 || result?.status === 409) && Number.isFinite(retryAfterSeconds)) sharedBackoffUntil = nowMs() + Math.max(1, retryAfterSeconds) * 1000;
-        if (Number(result?.status) === 0) sharedTransportFailureStreak += 1; else sharedTransportFailureStreak = 0;
-        throw new Error(normalizeText(body?.error) || `HTTP ${result?.status ?? 0}`);
+      const normalized = result?.ok ? normalizeKsWarRoomClaims(result.body, wireId) : null;
+      if (!normalized) {
+        if (Number(result?.status) === 0 && !result?.signIn) sharedTransportFailureStreak += 1; else sharedTransportFailureStreak = 0;
+        failed = result || {};
+        throw new Error("claim board not readable");
       }
       sharedTransportFailureStreak = 0;
-      const normalized = normalizeSharedClaims(body);
-      if (!normalized || !(normalized.claims instanceof Map)) throw new Error("malformed claims response");
       sharedCredentialRejected = false;
       sharedClaims = normalized.claims;
-      sharedClaimsUnreadable = normalized.unreadable instanceof Set ? normalized.unreadable : new Set();
+      sharedClaimsUnreadable = normalized.unreadable;
+      sharedClaimsDegraded = normalized.degraded;
       sharedClaimsVerifiedAt = nowMs();
       sharedBackoffUntil = 0;
       reconcileOwnClaimFromShared();
       if (ambiguousOwnServerClaims) {
-        setSharedStatus("error", "Shared: multiple own claims require manual review", sharedClaims.size);
+        setSharedStatus("error", "War Room: multiple own claims require manual review", sharedClaims.size);
       } else if (currentClaimQuarantine()) {
-        setSharedStatus("error", "Shared: claim acknowledgement awaiting verification", sharedClaims.size);
-      } else if (sharedClaimsUnreadable.size) {
-        // A partial list that looks complete is worse than an offline one,
+        setSharedStatus("error", "War Room: claim acknowledgement awaiting verification", sharedClaims.size);
+      } else if (sharedClaimsDegraded || sharedClaimsUnreadable.size) {
+        // A partial board that looks complete is worse than an offline one,
         // because it reads as "these targets are free".
-        setSharedStatus("degraded", `Shared: online · ${sharedClaims.size} targets · ${sharedClaimsUnreadable.size} unreadable`, sharedClaims.size);
+        setSharedStatus("degraded", `War Room: SIGNED IN · ${sharedClaims.size} targets · ${normalized.unreadableCount} unreadable`, sharedClaims.size);
       } else {
-        setSharedStatus("online", `Shared: online · ${sharedClaims.size} targets`, sharedClaims.size);
+        setSharedStatus("online", `War Room: SIGNED IN · ${sharedClaims.size} targets`, sharedClaims.size);
       }
       scanWarRows();
+      // Follow-ups off the board just read, neither of them a second read of
+      // it: the hospital report (K5) and the claimer names (5 min throttle).
+      queueMicrotask(() => {
+        if (!runtimeActive || !isRuntimeEligible()) return;
+        void reportHospitalUpdatesToWarRoom();
+        void fetchOwnFactionMemberNames();
+      });
       return true;
-    } catch (error) {
+    } catch {
       if (isCurrentRequest()) {
         sharedClaimsVerifiedAt = 0;
-        setSharedStatus("offline", `Shared: offline · ${normalizeText(error?.message) || "request failed"}`);
+        setSharedStatus(ksFailureState(failed), ksFailureLine(failed));
       }
       return false;
     } finally {
-      if (
-        authorityEpoch === sharedAuthorityEpoch &&
-        requestSerial === sharedRequestSerial &&
-        requestKey === sharedApiKey
-      ) sharedSyncing = false;
+      // R3. The newest read started owns the busy flag, and it always hands it
+      // back. The old test also asked for an unchanged credential epoch and
+      // key, and those can change without invalidateSharedReads() (a rejected
+      // injected key): the flag then stayed set and no read ever ran again.
+      // Two reads still cannot both count: every read takes a new serial, a
+      // read commits only while its serial is the newest (isCurrentRequest),
+      // and an older read neither commits nor clears the newer one's flag.
+      if (requestSerial === sharedRequestSerial) sharedSyncing = false;
     }
   }
 
@@ -3495,7 +4211,7 @@
       rwPhase,
       ownershipUnresolved: Boolean(
         !newClaimStorageAuthorityReady() ||
-        (sharedApiKey && sharedClaimsVerifiedAt <= 0) ||
+        (effectiveTornApiKey() && sharedClaimsVerifiedAt <= 0) ||
         tornCredentialMutationInProgress ||
         currentClaimQuarantine() ||
         ambiguousOwnServerClaims
@@ -3531,121 +4247,35 @@
     return { targetId: String(targetId), status, seconds, fetchedAt };
   }
 
-  function normalizeClaimAcknowledgement(payload) {
-    if (!isPlainRecord(payload) || !isPlainRecord(payload.claim) || !isPlainRecord(payload.claim.claimer)) return null;
-    const claim = payload.claim;
-    const claimId = normalizeText(claim.claim_id);
-    const position = Number(payload.position);
-    const createdAt = Number(claim.created_at);
-    const expiresAt = Number(claim.expires_at);
-    const claimerPlayerId = String(claim.claimer.player_id ?? "").trim();
-    const claimerName = normalizeText(claim.claimer.name);
-    if (
-      !isValidClaimId(claimId) || !Number.isInteger(position) || position < 1 ||
-      !Number.isFinite(createdAt) || !Number.isFinite(expiresAt) ||
-      expiresAt <= createdAt || expiresAt <= nowSeconds() ||
-      claimerPlayerId !== String(Number(claimerPlayerId)) || !validTargetId(claimerPlayerId) ||
-      !claimerName
-    ) return null;
-    return { claimId, position, createdAt, expiresAt, claimerPlayerId, claimerName, raw: claim };
-  }
+  // normalizeClaimAcknowledgement, quarantineClaimAcknowledgement,
+  // exactCleanupCreatedClaim and exactCleanupQuarantinedAcknowledgement from
+  // 1.5.185 are gone with the FFScouter claim transport they served: that
+  // transport answered with a queue position, and a position above 1 had to
+  // be cleaned up. The KS server's /claim is atomic and single-owner, so
+  // there is no position, no acknowledgement to quarantine and nothing to
+  // clean up -- its status field is the whole answer.
 
-  function quarantineClaimAcknowledgement(targetId, rawClaim, expectedSelfPlayerId = selfPlayerId) {
-    const rawClaimId = normalizeText(rawClaim?.claim_id);
-    const rawExpiresAt = Number(rawClaim?.expires_at);
-    return saveClaimQuarantine({
-      targetId,
-      claimId: isValidClaimId(rawClaimId) ? rawClaimId : "",
-      expectedSelfPlayerId,
-      expiresAt: Number.isFinite(rawExpiresAt) && rawExpiresAt > nowSeconds()
-        ? rawExpiresAt
-        : null,
-      createdLocalAt: nowMs()
-    });
-  }
-
-  async function exactCleanupCreatedClaim(own, isCurrent, ownsWrite, writeKey) {
-    if (
-      !own || !isValidClaimId(own.claimId) ||
-      own.claimerPlayerId !== String(selfPlayerId) ||
-      currentOwnClaim()?.claimId !== own.claimId || !isCurrent()
-    ) return false;
-    invalidateSharedReads();
-    const cleanup = await hitApiWriteWithBusyRetry(
-      HIT_API.unclaim,
-      { claim_id: own.claimId },
-      isCurrent,
-      writeKey
-    );
-    const localOwn = currentOwnClaim();
-    const bookkeepingCurrent = Boolean(
-      ownsWrite() &&
-      writeKey === sharedApiKey &&
-      localOwn?.claimId === own.claimId &&
-      localOwn.targetId === own.targetId
-    );
-    if (cleanup?.ok && cleanup?.body?.released === true && bookkeepingCurrent) {
-      invalidateSharedReads();
-      removeImmediateSharedClaim(own.claimId);
-      if (currentOwnClaim()?.claimId === own.claimId) saveOwnClaim(null);
-      return true;
-    }
-    if (!isCurrent()) return false;
-    return false;
-  }
-
-  async function exactCleanupQuarantinedAcknowledgement(
-    targetId,
-    rawClaim,
-    expectedSelfPlayerId,
-    isCurrent,
-    ownsWrite,
-    writeKey
-  ) {
-    const claimId = normalizeText(rawClaim?.claim_id);
-    const claimerPlayerId = String(rawClaim?.claimer?.player_id ?? "").trim();
-    if (
-      !validTargetId(targetId) || !isValidClaimId(claimId) ||
-      claimerPlayerId !== String(expectedSelfPlayerId) || !isCurrent()
-    ) return false;
-    invalidateSharedReads();
-    const cleanup = await hitApiWriteWithBusyRetry(
-      HIT_API.unclaim,
-      { claim_id: claimId },
-      isCurrent,
-      writeKey
-    );
-    const localQuarantine = currentClaimQuarantine();
-    const bookkeepingCurrent = Boolean(
-      ownsWrite() &&
-      writeKey === sharedApiKey &&
-      localQuarantine?.claimId === claimId &&
-      localQuarantine.targetId === String(targetId) &&
-      localQuarantine.expectedSelfPlayerId === String(expectedSelfPlayerId)
-    );
-    if (cleanup?.ok && cleanup?.body?.released === true && bookkeepingCurrent) {
-      invalidateSharedReads();
-      removeImmediateSharedClaim(claimId);
-      if (currentOwnClaim()?.claimId === claimId) saveOwnClaim(null);
-      if (currentClaimQuarantine()?.claimId === claimId) saveClaimQuarantine(null);
-      ownClaimLastConfirmedAt = 0;
-      return true;
-    }
-    if (!isCurrent()) return false;
-    return false;
-  }
-
+  // POST /war/<wire id>/claim. Every gate before the write is 1.5.185's,
+  // unchanged: own LIVE war, fresh board, fresh own-wars LIVE proof, fresh
+  // target read, FF window, online rule, low-life rule, storage writable.
+  // None of them was FFScouter-specific. Only the write and what follows it
+  // are new. Five outcomes, each with its own row:
+  //   200 claimed          -> own record saved
+  //   200 already_claimed  -> own record, "already yours", expiry unchanged
+  //   409 taken            -> no own record, "taken by <name>"
+  //   409 already_holding  -> no new record, the board is read again
+  //   409 unreadable       -> no record, "cannot verify"
   async function claimSharedTarget(playerId, playerName) {
     const targetId = String(playerId || "");
     if (
       !runtimeActive || !isRuntimeEligible() || sharedWriteBusy || ffCredentialChangeBusy() ||
       tornCredentialMutationInProgress ||
       !newClaimStorageAuthorityReady() ||
-      !sharedApiKey || !validTargetId(targetId)
+      !effectiveTornApiKey() || !validTargetId(targetId)
     ) return;
     if (
       currentOwnClaim() || currentClaimQuarantine() || ambiguousOwnServerClaims ||
-      sharedClaimForTarget(targetId) || sharedClaimsUnreadable.has(targetId)
+      sharedClaimForTarget(targetId) || sharedClaimUnknown(targetId)
     ) return;
     const clickedBinding = xidBindings.get(targetId);
     const clickedResolved = currentResolvedBinding(clickedBinding);
@@ -3655,25 +4285,28 @@
     const eligibility = currentDecisionForTarget(targetId);
     if (!eligibility || eligibility.state !== TARGET_STATE.READY) {
       if (eligibility?.state === TARGET_STATE.FREE) {
-        holdSharedWriteFailure("Shared: claim refused · target is online (free for all)");
+        holdSharedWriteFailure("War Room: claim refused · target is online (free for all)");
       }
       scanWarRows(); return;
     }
 
+    // The war this claim is for, fixed at the tap. No id, nothing is sent.
+    const wireId = currentWireWarId();
+    if (!wireId) { scanWarRows(); return; }
     const generation = runtimeGeneration;
     const operationSerial = ++sharedWriteOperationSerial;
-    const writeKey = sharedApiKey;
     const credentialEpoch = tornCredentialEpoch;
     const tornKey = effectiveTornApiKey();
     const selfAtStart = selfPlayerId;
+    let failed = null;
     const ownsWrite = () => operationSerial === sharedWriteOperationSerial;
     const operationRuntimeCurrent = () => (
       ownsWrite() &&
       generation === runtimeGeneration &&
       credentialEpoch === tornCredentialEpoch &&
       tornKey === effectiveTornApiKey() &&
-      writeKey === sharedApiKey &&
       selfAtStart === selfPlayerId &&
+      wireId === currentWireWarId() &&
       runtimeActive &&
       isRuntimeEligible()
     );
@@ -3683,22 +4316,22 @@
     sharedWriteBusy = true;
     claimFlowState = CLAIM_FLOW_STATE.CLAIMING;
     pendingTargetId = targetId;
-    setSharedStatus("writing", `Shared: claiming ${normalizeText(playerName) || targetId}…`);
+    setSharedStatus("writing", `War Room: claiming ${normalizeText(playerName) || targetId}…`);
     scanWarRows();
 
     try {
       invalidateSharedReads();
       if (!(await fetchSharedClaims({ allowDuringWrite: true }))) {
-        throw new Error("fresh shared claims snapshot failed");
+        throw new Error("fresh claim board read failed");
       }
       if (!claimCreationCurrent()) return;
       if (
         currentOwnClaim() || currentClaimQuarantine() || ambiguousOwnServerClaims ||
-        sharedClaimForTarget(targetId) || sharedClaimsUnreadable.has(targetId)
+        sharedClaimForTarget(targetId) || sharedClaimUnknown(targetId)
       ) throw new Error("target already claimed or ownership unresolved");
       if (eligibility.fairFight > CONFIG.maxFairFight &&
           !(await waitForLifeClaimReadSlot(targetId, claimCreationCurrent))) {
-        if (claimCreationCurrent()) holdSharedWriteFailure("Shared: claim refused · low life could not be confirmed");
+        if (claimCreationCurrent()) holdSharedWriteFailure("War Room: claim refused · low life could not be confirmed");
         return;
       }
       if (!claimCreationCurrent()) return;
@@ -3722,17 +4355,17 @@
       let lowLifeProfileRead = false;
       if (fairFightForTarget(targetId) > CONFIG.maxFairFight) {
         if (freshOpponentActivityForTarget(targetId) === "online") {
-          holdSharedWriteFailure("Shared: claim refused · target is online (free for all)");
+          holdSharedWriteFailure("War Room: claim refused · target is online (free for all)");
           return;
         }
         const life = await readTargetLife(targetId, { forClaim: true, isCurrent: claimCreationCurrent });
         if (!claimCreationCurrent()) return;
         if (freshOpponentActivityForTarget(targetId) === "online") {
-          holdSharedWriteFailure("Shared: claim refused · target is online (free for all)");
+          holdSharedWriteFailure("War Room: claim refused · target is online (free for all)");
           return;
         }
         if (!life || life.ratio > CONFIG.lowHpLifeMaxRatio) {
-          holdSharedWriteFailure("Shared: claim refused · low life could not be confirmed");
+          holdSharedWriteFailure("War Room: claim refused · low life could not be confirmed");
           return;
         }
         lowLifeProfileRead = true;
@@ -3748,7 +4381,7 @@
         rwPhase: currentRwPhase()
       });
       if (finalEligibility?.state === TARGET_STATE.FREE) {
-        holdSharedWriteFailure("Shared: claim refused · target is online (free for all)");
+        holdSharedWriteFailure("War Room: claim refused · target is online (free for all)");
         return;
       }
       if (
@@ -3761,7 +4394,7 @@
         )) ||
         !newClaimStorageAuthorityReady() ||
         currentOwnClaim() || currentClaimQuarantine() || ambiguousOwnServerClaims ||
-        sharedClaimForTarget(targetId) || sharedClaimsUnreadable.has(targetId) ||
+        sharedClaimForTarget(targetId) || sharedClaimUnknown(targetId) ||
         !ownWarsFreshLive(CONFIG.ownWarsWriteMaxAgeMs) ||
         nowMs() - targetProof.fetchedAt > CONFIG.targetBasicWriteMaxAgeMs ||
         !finalEligibility || finalEligibility.state !== TARGET_STATE.READY
@@ -3770,50 +4403,66 @@
         throw new Error("claim authority storage is not durably writable");
       }
       invalidateSharedReads();
-      const result = await hitApiWriteWithBusyRetry(
-        HIT_API.claim,
-        { target_player_id: Number(targetId) },
-        claimCreationCurrent,
-        writeKey
+      // hospitalUntil in whole Torn seconds, straight off the fresh target
+      // read verified above (status.until); 0 means Okay. No Torn call is made
+      // for it. memberId is never sent: the server takes it from the session.
+      const provenUntil = Number(targetProof.status?.until);
+      const hospitalUntilSeconds = Number.isSafeInteger(provenUntil) && provenUntil > 0 ? provenUntil : 0;
+      const result = await ksWarRoomRequest(
+        "claim",
+        wireId,
+        { targetId, hospitalUntil: hospitalUntilSeconds },
+        { isCurrent: claimCreationCurrent }
       );
       if (!claimCreationCurrent()) return;
-      const claim = result?.body?.claim;
-      const acknowledgement = result?.ok ? normalizeClaimAcknowledgement(result.body) : null;
-      if (result?.ok) invalidateSharedReads();
-      if (!result?.ok) {
-        throw new Error(normalizeText(result?.body?.error) || `Claim failed (HTTP ${result?.status ?? 0})`);
-      }
-      if (!acknowledgement || acknowledgement.claimerPlayerId !== String(selfAtStart)) {
-        const quarantined = quarantineClaimAcknowledgement(targetId, claim, selfAtStart);
-        const cleaned = await exactCleanupQuarantinedAcknowledgement(
-          targetId,
-          claim,
-          selfAtStart,
-          operationRuntimeCurrent,
-          ownsWrite,
-          writeKey
-        );
-        if (operationRuntimeCurrent()) {
-          setSharedStatus(
-            cleaned ? "online" : "error",
-            cleaned
-              ? "Shared: unverified acknowledgement cleaned exactly"
-              : (quarantined
-                ? "Shared: claim acknowledgement quarantined · verifying ownership"
-                : "Shared: claim acknowledgement locked in memory · storage failed")
-          );
-        }
+      invalidateSharedReads();
+      const answer = result?.body || null;
+      const status = answer ? normalizeText(answer.status) : "";
+      // Three refusals, each with its own row, none of them shown as a claim
+      // and none of them leaving an own record behind.
+      if (result?.status === 409 && status === "taken") {
+        const holder = ksQueueEntryFromServerClaim(wireId, answer.claim);
+        holdSharedWriteFailure(`War Room: taken by ${holder?.entry.claimer.name || "another member"}`);
         return;
       }
-
+      if (result?.status === 409 && status === "already_holding") {
+        // The finally block reads the board again, which shows what is held.
+        holdSharedWriteFailure("War Room: you already hold another target");
+        return;
+      }
+      if (result?.status === 409 && status === "unreadable") {
+        holdSharedWriteFailure("War Room: cannot verify — try again");
+        return;
+      }
+      if (!result?.ok || answer?.ok !== true || (status !== "claimed" && status !== "already_claimed")) {
+        failed = result || {};
+        throw new Error("claim not confirmed");
+      }
+      // The claim as the server holds it, through the same conversion the
+      // board goes through -- so the own record gets the claim id the next
+      // poll will find, and its times are seconds like every other claim time.
+      const converted = ksQueueEntryFromServerClaim(wireId, answer.claim);
+      if (
+        !converted || converted.targetId !== targetId ||
+        converted.entry.claimer.playerId !== String(selfAtStart) ||
+        converted.entry.expiresAt <= nowSeconds()
+      ) {
+        // The server said yes, but the claim in its answer cannot be read as
+        // this member's live claim on this target. Nothing is recorded; the
+        // board read in the finally block decides what is true.
+        holdSharedWriteFailure("War Room: cannot verify — try again");
+        return;
+      }
+      const claimerName = selfPlayerName || "You";
       const ownRecord = {
-        claimId: acknowledgement.claimId,
+        claimId: converted.entry.claimId,
         targetId,
-        claimerPlayerId: acknowledgement.claimerPlayerId,
-        claimerName: acknowledgement.claimerName,
-        expiresAt: acknowledgement.expiresAt,
-        cleanupRequired: acknowledgement.position > 1,
-        createdLocalAt: nowMs()
+        claimerPlayerId: String(selfAtStart),
+        claimerName,
+        expiresAt: converted.entry.expiresAt,
+        cleanupRequired: false,
+        createdLocalAt: nowMs(),
+        wireId
       };
       const ownPersisted = saveOwnClaim(ownRecord);
       ownClaimLastConfirmedAt = 0;
@@ -3824,37 +4473,32 @@
         committedOwn.claimerPlayerId === ownRecord.claimerPlayerId
       );
       if (!durableOwn) {
+        // The server holds this claim under our Torn id even though local
+        // storage would not record it durably. Say so and require RELEASE.
         claimFlowState = CLAIM_FLOW_STATE.CLEANUP_REQUIRED;
-        setSharedStatus("error", "Shared: claim storage failed · cleaning exact own claim…");
-        if (await exactCleanupCreatedClaim(ownRecord, operationRuntimeCurrent, ownsWrite, writeKey)) {
-          if (operationRuntimeCurrent()) {
-            setSharedStatus("online", "Shared: undurable claim cleaned exactly", sharedClaims.size);
-          }
-          return;
-        }
-        if (operationRuntimeCurrent()) {
-          setSharedStatus("error", "Shared: claim storage failed · RELEASE required", sharedClaims.size);
-        }
+        setSharedStatus("error", "War Room: claim storage failed · RELEASE required", sharedClaims.size);
         return;
       }
-      upsertImmediateSharedClaim(targetId, acknowledgement.raw, acknowledgement.position);
+      upsertImmediateSharedClaim(targetId, converted.entry);
       if (!operationRuntimeCurrent()) return;
-
-      if (acknowledgement.position === 1) {
-        setSharedStatus("online", `Shared: DIBS ✓ ${ownRecord.claimerName}`, sharedClaims.size);
-        return;
-      }
-
-      const others = Array.isArray(result?.body?.other_claims_for_target) ? result.body.other_claims_for_target : [];
-      const winner = others.find(item => Number(item?.position) === 1);
-      const winnerName = normalizeText(winner?.claimer?.name) || "another member";
-      claimFlowState = CLAIM_FLOW_STATE.CLEANUP_REQUIRED;
-      if (operationRuntimeCurrent()) {
-        setSharedStatus("error", `Shared: queued behind ${winnerName} · RELEASE required`, sharedClaims.size);
-      }
+      // already_claimed: the server did not move the expiry, and neither does
+      // this -- the own record carries the server's unchanged end time.
+      setSharedStatus(
+        "online",
+        status === "already_claimed"
+          ? "War Room: already yours · time unchanged"
+          : `War Room: DIBS ✓ ${claimerName}`,
+        sharedClaims.size
+      );
+      // The poll started in the finally block would replace the row at once.
+      // "Already yours" explains a countdown that did not restart, so it is
+      // held the way a refusal is held. "DIBS ✓" is left as 1.5.185 has it.
+      if (status === "already_claimed") sharedStatusHoldUntil = nowMs() + CONFIG.sharedErrorHoldMs;
     } catch (error) {
       if (operationRuntimeCurrent()) {
-        holdSharedWriteFailure(`Shared: claim failed · ${normalizeText(error?.message) || "request failed"}`);
+        holdSharedWriteFailure(failed
+          ? `War Room: claim failed · ${ksFailureLine(failed).replace(/^War Room: /, "")}`
+          : `War Room: claim failed · ${normalizeText(error?.message) || "request failed"}`);
       }
     } finally {
       if (ownsWrite()) {
@@ -3868,19 +4512,28 @@
     }
   }
 
+  // POST /war/<wire id>/unclaim. The ownership proof before the write is
+  // 1.5.185's, unchanged: the own record must be found on a fresh board, by
+  // claim id, under this member's Torn id. unclaimed and absent remove the
+  // own record; 409 not_owner and 409 unreadable leave it and say so.
   async function releaseOwnSharedTarget() {
     const own = currentOwnClaim();
     const quarantine = currentClaimQuarantine();
+    // The war the own claim was read on. No id, nothing is sent.
+    const wireId = currentWireWarId();
+    if (!wireId || wireId !== sharedClaimsWireId) return;
+    let failed = null;
     if (
       !runtimeActive || !isRuntimeEligible() || sharedWriteBusy || ffCredentialChangeBusy() ||
       tornCredentialMutationInProgress ||
-      !sharedApiKey || !own || !isValidClaimId(own.claimId) ||
+      !effectiveTornApiKey() || !own || !isValidClaimId(own.claimId) ||
       !quarantineAllowsExactOwnRelease(own, quarantine) ||
       !exactSharedProofForOwnClaim(own)
     ) return;
     const generation = runtimeGeneration;
     const operationSerial = ++sharedWriteOperationSerial;
-    const writeKey = sharedApiKey;
+    const credentialEpoch = tornCredentialEpoch;
+    const tornKey = effectiveTornApiKey();
     const selfAtStart = selfPlayerId;
     const ownsWrite = () => operationSerial === sharedWriteOperationSerial;
     const writeRuntimeCurrent = () => (
@@ -3888,20 +4541,22 @@
       generation === runtimeGeneration &&
       runtimeActive &&
       isRuntimeEligible() &&
-      writeKey === sharedApiKey &&
+      credentialEpoch === tornCredentialEpoch &&
+      tornKey === effectiveTornApiKey() &&
       selfAtStart === selfPlayerId &&
+      wireId === currentWireWarId() &&
       currentOwnClaim()?.claimId === own.claimId &&
       quarantineAllowsExactOwnRelease(currentOwnClaim())
     );
     sharedWriteBusy = true;
     claimFlowState = CLAIM_FLOW_STATE.RELEASING;
     pendingTargetId = own.targetId;
-    setSharedStatus("writing", `Shared: releasing ${own.claimerName || "DIBS"}…`);
+    setSharedStatus("writing", `War Room: releasing ${own.claimerName || "DIBS"}…`);
     scanWarRows();
     try {
       invalidateSharedReads();
       if (!(await fetchSharedClaims({ allowDuringWrite: true }))) {
-        throw new Error("fresh shared claims snapshot failed");
+        throw new Error("fresh claim board read failed");
       }
       if (!writeRuntimeCurrent()) return;
       const verifiedOwn = currentOwnClaim();
@@ -3913,26 +4568,42 @@
         found.claim.claimer.playerId !== selfAtStart
       ) throw new Error("server ownership proof did not match this exact claim");
       invalidateSharedReads();
-      const result = await hitApiWriteWithBusyRetry(
-        HIT_API.unclaim,
-        { claim_id: own.claimId },
-        writeRuntimeCurrent,
-        writeKey
+      const result = await ksWarRoomRequest(
+        "unclaim",
+        wireId,
+        { targetId: own.targetId },
+        { isCurrent: writeRuntimeCurrent }
       );
-      if (result?.ok && result?.body?.released === true) {
+      const answer = result?.body || null;
+      const status = answer ? normalizeText(answer.status) : "";
+      // unclaimed: it was ours and is gone. absent: there was nothing left to
+      // release. Either way the own record goes.
+      if (result?.ok && answer?.ok === true && (status === "unclaimed" || status === "absent")) {
         invalidateSharedReads();
         removeImmediateSharedClaim(own.claimId);
         if (currentOwnClaim()?.claimId === own.claimId) saveOwnClaim(null);
         if (currentClaimQuarantine()) saveClaimQuarantine(null);
         ownClaimLastConfirmedAt = 0;
-        if (writeRuntimeCurrent()) setSharedStatus("online", "Shared: released", sharedClaims.size);
+        if (writeRuntimeCurrent()) setSharedStatus("online", "War Room: released", sharedClaims.size);
         return;
       }
       if (!writeRuntimeCurrent()) return;
-      throw new Error(normalizeText(result?.body?.error) || `Release failed (HTTP ${result?.status ?? 0})`);
+      // Two refusals where the own record stays, and the panel says so.
+      if (result?.status === 409 && status === "not_owner") {
+        holdSharedWriteFailure("War Room: release refused · not your claim · DIBS kept");
+        return;
+      }
+      if (result?.status === 409 && status === "unreadable") {
+        holdSharedWriteFailure("War Room: release not confirmed · cannot verify — DIBS kept");
+        return;
+      }
+      failed = result || {};
+      throw new Error("release not confirmed");
     } catch (error) {
       if (writeRuntimeCurrent()) {
-        holdSharedWriteFailure(`Shared: release failed · ${normalizeText(error?.message) || "request failed"}`);
+        holdSharedWriteFailure(failed
+          ? `War Room: release failed · ${ksFailureLine(failed).replace(/^War Room: /, "")}`
+          : `War Room: release failed · ${normalizeText(error?.message) || "request failed"}`);
       }
     } finally {
       if (ownsWrite()) {
@@ -4000,8 +4671,8 @@
     // and that poll would overwrite the message within about 100 ms. Hold it the
     // same way a write failure is held, so the owner actually sees what happened.
     setSharedStatus("online", online
-      ? "Shared: auto-released · target online (free for all)"
-      : "Shared: auto-released \u00b7 target back in hospital", sharedClaims.size);
+      ? "War Room: auto-released · target online (free for all)"
+      : "War Room: auto-released \u00b7 target back in hospital", sharedClaims.size);
     sharedStatusHoldUntil = nowMs() + CONFIG.sharedErrorHoldMs;
     return true;
   }
@@ -4366,11 +5037,9 @@
     if (!(panel instanceof HTMLElement) || boundPanelNodes.has(panel)) return;
     boundPanelNodes.add(panel);
     const byRole = role => panelShadow.querySelector(`[data-role='${role}']`);
-    const warRoom = byRole("war-room");
     const ffTerms = byRole("ff-terms");
     const ffPrivacy = byRole("ff-privacy");
     const createKey = byRole("create-key");
-    if (warRoom instanceof HTMLAnchorElement) warRoom.href = SCRIPT.ffscouterWarRoomUrl;
     if (ffTerms instanceof HTMLAnchorElement) ffTerms.href = SCRIPT.ffscouterTermsUrl;
     if (ffPrivacy instanceof HTMLAnchorElement) ffPrivacy.href = SCRIPT.ffscouterPrivacyUrl;
     if (createKey instanceof HTMLAnchorElement) createKey.href = SCRIPT.tornCustomKeyUrl;
@@ -4380,6 +5049,11 @@
       if (!(control instanceof HTMLElement)) return;
       handlePanelControl(control.dataset.role, event);
     });
+    // Key setup A. Delegated from the panel node for the same reason the
+    // click handler is: the two key inputs move between the breakout slot and
+    // Settings but never out of this panel, and focusout bubbles. A lock that
+    // was held back while the field had focus is applied when it loses it.
+    panel.addEventListener("focusout", handleCredentialInputFocusOut);
   }
 
   function handlePanelControl(role, event) {
@@ -4398,8 +5072,10 @@
       case "forget-torn": void runTornCredentialMutation(forgetTornKey); return;
       case "sync":
         event.preventDefault(); registerTrustedInteraction();
-        if (sharedApiKey) { void fetchSharedClaims(); void fetchFairFightStats({ force: true }); }
-        if (effectiveTornApiKey()) void fetchTornStatuses({ force: true });
+        // One tap, one sign-in attempt -- also with a key the server refused.
+        ksAllowOneManualSignIn();
+        if (effectiveTornApiKey()) { void fetchSharedClaims(); void fetchTornStatuses({ force: true }); }
+        if (sharedApiKey) void fetchFairFightStats({ force: true });
         scanWarRows();
         return;
       case "demo":
@@ -4525,9 +5201,20 @@
         .controls > button:active,.controls > a:active { background:rgba(56,189,248,.22); border-color:#38bdf8; color:#f8fafc; }
         .controls > [aria-disabled='true'] { color:#8494a8; border-style:dashed; border-color:rgba(100,116,139,.5); background:rgba(2,6,23,.3); }
         .controls > button:disabled { opacity:.4; cursor:default; }
-        .editor { display:none; align-items:center; gap:5px; margin-top:5px; }
+        .editor { display:none; flex-wrap:wrap; align-items:center; gap:5px; margin-top:5px; }
         .editor.open { display:flex; }
+        /* Key setup A: the lock's reason, directly below the editor controls. */
+        .credential-lock-message { flex:0 0 100%; color:#fbbf24; font:600 10px/1.35 system-ui,sans-serif; white-space:normal; overflow-wrap:anywhere; }
+        /* Key setup B: Save and Cancel at both key fields are at least
+           44 x 44 px. Only these four touch targets change size. */
+        button[data-role='key-save'],button[data-role='key-cancel'],button[data-role='torn-key-save'],button[data-role='torn-key-cancel'] { min-width:44px; min-height:44px; flex-shrink:0; padding:6px; touch-action:manipulation; }
         .editor input { min-width:0; flex:1 1 180px; height:28px; box-sizing:border-box; border:1px solid #64748b; border-radius:5px; background:#111827; color:#f8fafc; padding:4px 7px; font:700 10px/1 system-ui,sans-serif; outline:none; }
+        /* B: keep the larger targets inside the existing breakout grid row. */
+        .controls > .editor { margin-top:0; }
+        /* B: with two 44px buttons in the same cell the field was left
+           22px wide. Full width puts the field on its own row; .editor
+           wraps, so Save and Cancel sit below it and keep their size. */
+        .controls > .editor input { flex-basis:100%; }
         .note { margin-top:4px; color:#8794a5; font:600 7.2px/1.3 system-ui,sans-serif; }
         .api-policy { margin-top:6px; padding-top:6px; border-top:1px solid rgba(148,163,184,.18); color:#9aa9ba; font:600 7px/1.35 system-ui,sans-serif; }
         .api-policy strong { color:#d8e1eb; font-weight:750; }
@@ -4552,7 +5239,7 @@
         <div class="controls" data-role="key-breakout" hidden></div>
         <div class="settings-panel" data-role="settings-panel">
           <div class="status-grid">
-            <div class="status-item" data-role="shared-item"><span class="dot"></span><span class="status" data-role="status">Shared: loading…</span></div>
+            <div class="status-item" data-role="shared-item"><span class="dot"></span><span class="status" data-role="status">War Room: CHECKING…</span></div>
             <div class="status-item" data-role="torn-item"><span class="dot"></span><span class="status" data-role="torn-status">Torn: loading…</span></div>
             <div class="status-item" data-role="rw-item"><span class="dot"></span><span class="status" data-role="rw-status">DIBS: checking RW…</span></div>
             <div class="status-item" data-role="clock-item"><span class="dot"></span><span class="status" data-role="clock-status">Clock: loading…</span></div>
@@ -4563,18 +5250,21 @@
             <button type="button" data-role="torn-key">Torn key</button>
             <a data-role="create-key" target="_blank" rel="noopener noreferrer">Create custom API key</a>
             <button type="button" data-role="sync">Sync</button>
-            <a data-role="war-room" target="_blank" rel="noopener noreferrer">War Room</a>
           </div>
-          <div class="editor" data-role="key-editor"><input data-role="key-input" type="text" maxlength="16" autocomplete="off" placeholder="16-character FFScouter key"><button type="button" data-role="key-save">Save</button><button type="button" data-role="key-cancel">Cancel</button></div>
-          <div class="editor" data-role="torn-key-editor"><input data-role="torn-key-input" type="text" maxlength="16" autocomplete="off" placeholder="16-character Torn API key"><button type="button" data-role="torn-key-save">Save</button><button type="button" data-role="torn-key-cancel">Cancel</button></div>
+          <div class="editor" data-role="key-editor"><input data-role="key-input" type="text" maxlength="16" autocomplete="off" placeholder="16-character FFScouter key"><button type="button" data-role="key-save">Save</button><button type="button" data-role="key-cancel">Cancel</button><div class="credential-lock-message" data-role="key-lock-message" role="status" hidden></div></div>
+          <div class="editor" data-role="torn-key-editor"><input data-role="torn-key-input" type="text" maxlength="16" autocomplete="off" placeholder="16-character Torn API key"><button type="button" data-role="torn-key-save">Save</button><button type="button" data-role="torn-key-cancel">Cancel</button><div class="credential-lock-message" data-role="torn-key-lock-message" role="status" hidden></div></div>
           <div class="note" data-role="note">LIVE: Hospital ≤2:00 + FF 2.00–3.40. Online targets are free for all. Low life (≤20%): FF up to 4.50. First successful DIBS wins; claimant can RELEASE.</div>
           <div class="controls"><button type="button" data-role="about-toggle" aria-expanded="false">About — data &amp; privacy</button></div>
           <div class="about-panel" data-role="about-panel">
             <div class="api-policy">
-              <strong>Torn API key:</strong> stored only locally, encrypted in this browser; sent only to api.torn.com. Torn API data is processed locally and is not sent to FFScouter. Purpose: faction member Hospital/status data, key-owner identity and life of opponents who are about to leave hospital (low-life DIBS). Access: Custom key requiring faction → members, wars and user → basic, profile; key → info is used to identify the key owner.
+              <strong>Torn API key:</strong> stored only locally, encrypted in this browser; sent to api.torn.com and, when signing in, to the KS War Room server, which asks Torn who the key belongs to and does not store or log it. Torn API data is processed locally and is not sent to FFScouter. Purpose: faction member Hospital/status data, key-owner identity, the names of your own faction's members (to show who holds a DIBS) and life of opponents who are about to leave hospital (low-life DIBS). Access: Custom key requiring faction → members, wars and user → basic, profile; key → info is used to identify the key owner.
               <br>
-              <strong>FFScouter key/integration:</strong> key stored only locally, encrypted in this browser; sent only to FFScouter. Visible target IDs from the actively viewed war page are sent to FFScouter for FF/Est lookup and Hit Calling. Claim/release data is shared with faction members through FFScouter Hit Calling.
+              <strong>FFScouter key/integration:</strong> key stored only locally, encrypted in this browser; sent only to FFScouter. Visible target IDs from the actively viewed war page are sent to FFScouter for FF/Est lookup only.
               <a data-role="ff-terms" target="_blank" rel="noopener noreferrer">FFScouter terms/data policy</a> · <a data-role="ff-privacy" target="_blank" rel="noopener noreferrer">Privacy</a>.
+              <br>
+              <strong>KS War Room (shared DIBS):</strong> claim/release data is shared with faction members through the KS War Room server (ks-war-room-claims.hans-viklund.workers.dev). Signing in returns a temporary sign-in token that is kept only in this page's memory and is never stored. Sent to the server: that token, the war ID, the target's Torn ID and the target's hospital end time. Calls: sign in, read the claim board (every 2.5 s on your own war page), claim, release, and a report when a claimed target is back in hospital. Kept on the server: target ID, the claimer's Torn ID, claim time and hospital end time, removed once the war has been untouched for 12 hours.
+              <br>
+              Data Storage: Temporary (&lt; 1 day) · Data Sharing: Faction · Purpose of Use: Competitive advantage · Key Storage &amp; Sharing: Not stored/shared · Key Access Level: Public
             </div>
           </div>
           <div class="danger-zone">
@@ -4908,7 +5598,7 @@
     if (button.disabled || button.dataset.ready !== "true") return;
     if (
       own || sharedWriteBusy || ffCredentialChangeBusy() ||
-      tornCredentialMutationInProgress || !newClaimStorageAuthorityReady() || !sharedApiKey
+      tornCredentialMutationInProgress || !newClaimStorageAuthorityReady() || !effectiveTornApiKey()
     ) return;
     beginSharedWriteFeedback();
     void claimSharedTarget(resolved.id, getPlayerName(resolved));
@@ -5040,7 +5730,7 @@
       countdown ||
       (decision?.state === TARGET_STATE.FREE && Number.isFinite(decision.seconds)) ||
       sharedClaim ||
-      sharedClaimsUnreadable.has(playerId) ||
+      sharedClaimUnknown(playerId) ||
       pendingTargetId === playerId ||
       own?.targetId === playerId
     );
@@ -5126,6 +5816,13 @@
       return;
     }
 
+    // No Torn key, no DIBS: the board cannot be read and nothing can be
+    // claimed or released. The cell says what is missing.
+    if (tornApiKeyMissing()) {
+      button.className = "unavailable"; button.dataset.state = "no-torn-key"; button.disabled = true;
+      label.textContent = countdown || "DIBS"; sub.textContent = "SET TORN KEY"; return;
+    }
+
     if (pendingTargetId === playerId) {
       button.className = "working"; button.dataset.state = "working"; button.disabled = true;
       label.textContent = claimFlowState === CLAIM_FLOW_STATE.RELEASING ? "RELEASING" : "CLAIMING"; sub.textContent = "WAIT"; return;
@@ -5135,14 +5832,14 @@
       quarantineAllowsExactOwnRelease(own)
     ) {
       const cleanup = own.cleanupRequired === true;
-      button.className = cleanup ? "cleanup" : "claimed"; button.dataset.state = cleanup ? "cleanup" : "claimed"; button.disabled = !sharedApiKey || sharedWriteBusy;
+      button.className = cleanup ? "cleanup" : "claimed"; button.dataset.state = cleanup ? "cleanup" : "claimed"; button.disabled = !effectiveTornApiKey() || sharedWriteBusy;
       label.textContent = cleanup ? "QUEUED" : "DIBBED"; sub.textContent = "RELEASE"; return;
     }
     if (decision.state === TARGET_STATE.FREE) {
       button.className = "free"; button.dataset.state = TARGET_STATE.FREE; button.disabled = true;
       label.textContent = countdown || "FREE"; sub.textContent = "ONLINE"; return;
     }
-    if (!sharedClaim && sharedClaimsUnreadable.has(playerId)) {
+    if (!sharedClaim && sharedClaimUnknown(playerId)) {
       button.className = "unavailable"; button.dataset.state = "unreadable"; button.disabled = true;
       label.textContent = "DIBS?"; sub.textContent = "UNKNOWN"; return;
     }
@@ -5163,7 +5860,7 @@
     // says why the number is not actionable yet.
     label.textContent = countdown || "DIBS";
     if (decision.state === TARGET_STATE.READY) {
-      button.disabled = !sharedApiKey || sharedWriteBusy;
+      button.disabled = !effectiveTornApiKey() || sharedWriteBusy;
       button.dataset.ready = button.disabled ? "false" : "true";
       if (decision.lowHp === true) {
         const life = freshLifeForTarget(playerId);
@@ -5245,7 +5942,7 @@
       rwPhase,
       ownershipUnresolved: Boolean(
         !newClaimStorageAuthorityReady() ||
-        (sharedApiKey && sharedClaimsVerifiedAt <= 0) ||
+        (effectiveTornApiKey() && sharedClaimsVerifiedAt <= 0) ||
         tornCredentialMutationInProgress ||
         currentClaimQuarantine() ||
         ambiguousOwnServerClaims
@@ -5553,7 +6250,7 @@
       return { state: "error", text: `Torn unavailable — ${tornStatusReasonText()}` };
     }
     if (sharedStatus.state !== "online" && sharedStatus.state !== "degraded") {
-      return { state: "syncing", text: "Claims offline — DIBS unavailable" };
+      return { state: "syncing", text: "War Room offline — DIBS unavailable" };
     }
     if (rwState.phase !== RW_PHASE.LIVE) return { state: "idle", text: "Waiting for the war to go live" };
     const memberCount = opponentMembersState.factionId === opponentFactionId ? opponentMembersState.members.size : 0;
@@ -5620,14 +6317,14 @@
       }
     }
     if ($("status")) {
-      // In VIEW, gmXhr blocks every FFScouter request by construction
-      // (viewOnlyBlocked), so sharedStatus's own "offline"/"HTTP 0" text
-      // would claim the transport is down when it is simply not used. A
-      // panel row must not say something it cannot know. sharedStatus
-      // itself is untouched -- this only changes what is displayed.
+      // In VIEW the claim board is not read at all (fetchSharedClaims
+      // returns at once and gmXhr would refuse it anyway), so sharedStatus
+      // has nothing true to say there. A panel row must not say something
+      // it cannot know. sharedStatus itself is untouched -- this only
+      // changes what is displayed.
       if (viewOnlyMode()) {
-        $("status").textContent = "Shared: not used in VIEW";
-        $("status").title = "Shared: not used in VIEW";
+        $("status").textContent = "War Room: not used in VIEW";
+        $("status").title = "War Room: not used in VIEW";
         if (sharedItem) sharedItem.dataset.state = "idle";
       } else {
         $("status").textContent = sharedStatus.message;
@@ -5649,37 +6346,33 @@
       $("life-status").textContent = lifeText;
       $("life-status").title = lifeText;
     }
-    const ffExternalLock = ffCredentialExternalLockActive();
+    const ffLockVerdict = evaluateFfCredentialExternalLock();
+    const ffExternalLock = ffLockVerdict.active;
     const ffChangeBusy = ffCredentialChangeBusy();
-    if (ffExternalLock) $("key-editor")?.classList.remove("open");
+    renderCredentialLockMessage($("key-lock-message"), ffLockVerdict, ffChangeBusy);
     if ($("key")) {
       $("key").textContent = sharedApiKey ? "Change FF key" : "Set FFScouter key";
-      setPanelControlState($("key"), {
-        locked: ffExternalLock || ffChangeBusy,
-        reason: FF_CREDENTIAL_LOCK_REASON
-      });
+      setPanelControlState($("key"));
     }
     setPanelControlState($("forget-ff"), {
       unavailable: !sharedApiKey,
       locked: ffCredentialForgetLockActive() || ffChangeBusy,
       reason: FF_CREDENTIAL_LOCK_REASON
     });
-    if ($("key-input")) $("key-input").disabled = ffExternalLock || ffChangeBusy;
+    setCredentialInputDisabled($("key-input"), ffExternalLock || ffChangeBusy);
     if ($("key-save")) $("key-save").disabled = ffExternalLock || ffChangeBusy;
     if ($("key-cancel")) $("key-cancel").disabled = ffChangeBusy;
-    const tornExternalLock = tornCredentialExternalLockActive();
+    const tornLockVerdict = evaluateTornCredentialExternalLock();
+    const tornExternalLock = tornLockVerdict.active;
     const tornChangeBusy = tornCredentialMutationInProgress;
-    if (tornExternalLock) $("torn-key-editor")?.classList.remove("open");
+    renderCredentialLockMessage($("torn-key-lock-message"), tornLockVerdict, tornChangeBusy);
     if ($("torn-key")) {
       if (injectedPdaTornApiKey()) {
         $("torn-key").textContent = "Torn key: PDA";
         setPanelControlState($("torn-key"), { unavailable: true });
       } else {
         $("torn-key").textContent = storedTornApiKey ? "Change Torn key" : "Set Torn key";
-        setPanelControlState($("torn-key"), {
-          locked: tornExternalLock || tornChangeBusy,
-          reason: TORN_CREDENTIAL_LOCK_REASON
-        });
+        setPanelControlState($("torn-key"));
       }
     }
     setPanelControlState($("forget-torn"), {
@@ -5687,7 +6380,7 @@
       locked: tornCredentialForgetLockActive() || tornChangeBusy,
       reason: TORN_CREDENTIAL_LOCK_REASON
     });
-    if ($("torn-key-input")) $("torn-key-input").disabled = tornExternalLock || tornChangeBusy;
+    setCredentialInputDisabled($("torn-key-input"), tornExternalLock || tornChangeBusy);
     if ($("torn-key-save")) $("torn-key-save").disabled = tornExternalLock || tornChangeBusy;
     if ($("torn-key-cancel")) $("torn-key-cancel").disabled = tornChangeBusy;
     const note = $("note");
@@ -5790,8 +6483,8 @@
         setSharedStatus(
           "error",
           recovered
-            ? "Shared: credential change failed; original state recovered"
-            : "Shared: credential change failed; secure recovery unresolved",
+            ? "War Room: FFScouter key change failed; original state recovered"
+            : "War Room: FFScouter key change failed; secure recovery unresolved",
           sharedClaims.size
         );
       }
@@ -5826,17 +6519,17 @@
     const shadow = presentationShadow();
     const input = shadow?.querySelector("[data-role='key-input']");
     const key = validateFfscouterKey(input?.value);
-    if (!key) { setSharedStatus("error", "Shared: invalid key format"); return; }
+    if (!key) { setSharedStatus("error", "War Room: invalid FFScouter key format"); return; }
     if (ffCredentialChangeBusy() || ffCredentialExternalLockActive()) {
       enforceFfCredentialLock();
-      setSharedStatus("error", "Shared: key change locked while DIBS ownership is active or unresolved");
+      setSharedStatus("error", "War Room: FFScouter key change locked while DIBS ownership is active or unresolved");
       return;
     }
     const recoveryEvidence = captureCredentialRecoveryEvidence();
     const recoveryFingerprint = credentialRecoveryEvidenceFingerprint(recoveryEvidence);
     if (credentialRecoveryEvidenceActive(recoveryEvidence)) {
       closeFfCredentialEditor();
-      setSharedStatus("error", "Shared: active DIBS must be released or expire before key replacement");
+      setSharedStatus("error", "War Room: active DIBS must be released or expire before FFScouter key replacement");
       return;
     }
     const oldKey = sharedApiKey;
@@ -5854,7 +6547,7 @@
         !operationEvidenceCurrent() || sharedWriteBusy || ambiguousOwnServerClaims ||
         claimAuthorityStorageUnresolved
       ) return false;
-      if (!oldKey || credentialRejectedAtStart) return true;
+      if (!credentialRecoveryEvidenceActive(recoveryEvidence) || !oldKey || credentialRejectedAtStart) return true;
       return selfAtStart === selfPlayerId && validTargetId(selfAtStart) &&
         ownershipProofVerifiedAt > 0 &&
         nowMs() - ownershipProofVerifiedAt <= CONFIG.sharedPollMs * 2 &&
@@ -5876,8 +6569,8 @@
     if (!candidateOperational || !operationForegroundCurrent()) {
       if (operationOwns()) ffCredentialMutationInProgress = false;
       if (runtimeActive && isRuntimeEligible()) {
-        setSharedStatus("error", "Shared: candidate key validation failed; key unchanged");
-        if (oldKey) void fetchSharedClaims();
+        setSharedStatus("error", "War Room: FFScouter key could not be validated; key unchanged");
+        void fetchSharedClaims();
       }
       return;
     }
@@ -5885,8 +6578,8 @@
     if (!journalReady) {
       if (operationOwns()) ffCredentialMutationInProgress = false;
       if (runtimeActive && isRuntimeEligible()) {
-        setSharedStatus("error", "Shared: existing key could not be secured for replacement");
-        if (oldKey) void fetchSharedClaims();
+        setSharedStatus("error", "War Room: existing FFScouter key could not be secured for replacement");
+        void fetchSharedClaims();
       }
       return;
     }
@@ -5902,10 +6595,10 @@
         setSharedStatus(
           "error",
           recovered
-            ? (stored ? "Shared: key change cancelled by a new DIBS lock" : "Shared: key could not be stored securely")
-            : "Shared: key change cancelled; original key recovery pending"
+            ? (stored ? "War Room: FFScouter key change cancelled by a new DIBS lock" : "War Room: FFScouter key could not be stored securely")
+            : "War Room: FFScouter key change cancelled; original key recovery pending"
         );
-        if (oldKey) void fetchSharedClaims();
+        void fetchSharedClaims();
       }
       return;
     }
@@ -5913,7 +6606,7 @@
     sharedCredentialRejected = false;
     ffCredentialMutationInProgress = false;
     invalidateSharedReads();
-    sharedClaims = new Map(); sharedClaimsUnreadable = new Set();
+    sharedClaims = new Map(); sharedClaimsUnreadable = new Set(); sharedClaimsDegraded = false;
     sharedBackoffUntil = 0;
     sharedTransportFailureStreak = 0;
     fairFightStats = new Map();
@@ -5924,8 +6617,8 @@
     setSharedStatus(
       ffCredentialStorageUnresolved ? "error" : "ready",
       ffCredentialStorageUnresolved
-        ? "Shared: key saved; secure cleanup unresolved"
-        : "Shared: key saved securely · syncing…",
+        ? "War Room: FFScouter key saved; secure cleanup unresolved"
+        : "War Room: FFScouter key saved securely",
       0
     );
     if (runtimeActive && isRuntimeEligible()) {
@@ -5940,7 +6633,7 @@
     const key = validateTornApiKey(input?.value);
     if (!key) { setTornStatusState("error", "Torn: invalid key format"); return; }
     if (tornCredentialMutationInProgress || tornCredentialExternalLockActive()) {
-      closeTornCredentialEditor();
+      closeCredentialEditorUnlessFocused("torn-key-editor");
       setTornStatusState("error", "Torn: key change locked while DIBS ownership is active or unresolved");
       return;
     }
@@ -5978,7 +6671,10 @@
       }
       if (claimAuthorityStorageUnresolved || ambiguousOwnServerClaims) return false;
       if (!effectiveKeyAtStart || credentialRejectedAtStart) return true;
-      if (!sharedKeyAtStart) return false;
+      // R4. Without an own claim and without a quarantine record a stale
+      // ownership check does not stop the change. (recoveryMode is false here,
+      // and the evidence is checked unchanged above.)
+      if (!credentialRecoveryEvidenceActive(recoveryEvidence)) return true;
       return validTargetId(selfAtStart) && ownershipProofVerifiedAt > 0 &&
         nowMs() - ownershipProofVerifiedAt <= CONFIG.sharedPollMs * 2 &&
         activeSharedClaimsForClaimer(selfAtStart).length === 0;
@@ -6005,7 +6701,7 @@
       if (operationOwns()) tornCredentialMutationInProgress = false;
       if (runtimeActive && isRuntimeEligible()) {
         setTornStatusState("error", "Torn: candidate identity or capabilities failed; key unchanged", 0);
-        if (sharedApiKey) void fetchSharedClaims();
+        if (effectiveTornApiKey()) void fetchSharedClaims();
         if (effectiveTornApiKey()) void fetchTornStatuses({ force: true });
       }
       return;
@@ -6026,7 +6722,7 @@
             ? (stored ? "Torn: key change cancelled by a new DIBS lock" : "Torn: key could not be stored securely")
             : "Torn: key change cancelled; original key recovery pending"
         );
-        if (sharedApiKey) void fetchSharedClaims();
+        if (effectiveTornApiKey()) void fetchSharedClaims();
         if (effectiveTornApiKey()) void fetchTornStatuses({ force: true });
       }
       return;
@@ -6038,6 +6734,9 @@
     apiKeyStorageReady = true;
     invalidateTornCredentialRequests();
     invalidateSharedReads();
+    // The key was saved again: the sign-in guard forgets the old refusal.
+    ksResetForTornKeyChange();
+    setSharedStatus("loading-key", "War Room: CHECKING…", 0);
     keyScopeReady = false;
     selfPlayerId = ""; selfPlayerName = ""; selfFactionId = ""; opponentFactionId = ""; tornUserBasicCapability = "unknown"; selfIdentityLastAttemptAt = 0;
     publicBasicStatusCache.clear();
@@ -6047,7 +6746,7 @@
     currentWarSurface = null;
     setTornStatusState("ready", "Torn: key saved · syncing…", 0);
     if (runtimeActive && isRuntimeEligible()) {
-      if (sharedApiKey) void fetchSharedClaims();
+      void fetchSharedClaims();
       void fetchTornStatuses({ force: true });
     }
   }
@@ -6056,7 +6755,9 @@
     if (!sharedApiKey) return;
     if (ffCredentialChangeBusy() || ffCredentialForgetLockActive()) {
       enforceFfCredentialLock();
-      window.alert("Resolve active or unverified DIBS before forgetting the FFScouter key.");
+      window.alert(credentialRecoveryEvidenceActive()
+        ? "Resolve active or unverified DIBS before forgetting the FFScouter key."
+        : "The FFScouter key cannot be forgotten while storage is unavailable or another operation is unresolved. Please try again once it is safe.");
       return;
     }
     if (!window.confirm("Forget the saved FFScouter key on this device?")) return;
@@ -6073,6 +6774,7 @@
       operationOwns() && apiKeyStorageReady && generation === runtimeGeneration && runtimeActive && isRuntimeEligible() &&
       sharedApiKey === oldKey && sharedAuthorityEpoch === operationAuthorityEpoch &&
       !ffCredentialClaimLockActive() && (
+        !credentialRecoveryEvidenceActive() ||
         (credentialRejectedAtStart && sharedCredentialRejected) || (
           selfAtStart === selfPlayerId && validTargetId(selfAtStart) && ownershipProofVerifiedAt > 0 &&
           nowMs() - ownershipProofVerifiedAt <= CONFIG.sharedPollMs * 2
@@ -6089,7 +6791,7 @@
     if (!journalReady) {
       if (operationOwns()) ffCredentialMutationInProgress = false;
       if (runtimeActive && isRuntimeEligible()) {
-        setSharedStatus("error", "Shared: existing key could not be secured before forget");
+        setSharedStatus("error", "War Room: existing FFScouter key could not be secured before forget");
         void fetchSharedClaims();
       }
       return;
@@ -6106,8 +6808,8 @@
         setSharedStatus(
           "error",
           recovered
-            ? (removed ? "Shared: forget cancelled by a new DIBS lock" : "Shared: saved key could not be removed")
-            : "Shared: forget cancelled; original key recovery pending"
+            ? (removed ? "War Room: FFScouter key forget cancelled by a new DIBS lock" : "War Room: saved FFScouter key could not be removed")
+            : "War Room: FFScouter key forget cancelled; original key recovery pending"
         );
         void fetchSharedClaims();
       }
@@ -6117,28 +6819,32 @@
     sharedCredentialRejected = false;
     ffCredentialMutationInProgress = false;
     invalidateSharedReads();
-    sharedClaims = new Map(); sharedClaimsUnreadable = new Set();
+    sharedClaims = new Map(); sharedClaimsUnreadable = new Set(); sharedClaimsDegraded = false;
     sharedBackoffUntil = 0;
     sharedTransportFailureStreak = 0;
     fairFightStats = new Map();
     fairFightLastFetchAt = 0;
     fairFightEverSucceeded = false;
     setSharedStatus(
-      ffCredentialStorageUnresolved ? "error" : "key-required",
+      ffCredentialStorageUnresolved ? "error" : "ready",
       ffCredentialStorageUnresolved
-        ? "Shared: key removed; secure cleanup unresolved"
-        : "Shared: key required",
+        ? "War Room: FFScouter key removed; secure cleanup unresolved"
+        : "War Room: FFScouter key removed",
       0
     );
     scanWarRows();
+    // The board never depended on the FFScouter key: read it again at once.
+    if (runtimeActive && isRuntimeEligible()) void fetchSharedClaims();
   }
 
   async function forgetTornKey() {
     if (injectedPdaTornApiKey()) { setTornStatusState("ready", "Torn: PDA API key is managed by Torn PDA", opponentMembersState.members.size); return; }
     if (!storedTornApiKey) return;
     if (tornCredentialMutationInProgress || tornCredentialForgetLockActive()) {
-      closeTornCredentialEditor();
-      window.alert("Resolve active or unverified DIBS before forgetting the Torn API key.");
+      closeCredentialEditorUnlessFocused("torn-key-editor");
+      window.alert(credentialRecoveryEvidenceActive()
+        ? "Resolve active or unverified DIBS before forgetting the Torn API key."
+        : "The Torn API key cannot be forgotten while storage is unavailable or another operation is unresolved. Please try again once it is safe.");
       return;
     }
     if (!window.confirm("Forget the saved Torn API key on this device?")) return;
@@ -6160,10 +6866,13 @@
       sharedAuthorityEpoch === operationSharedEpoch && !sharedWriteBusy &&
       !ffCredentialStorageUnresolved && !tornCredentialStorageUnresolved &&
       !claimAuthorityEvidenceUnresolved && !ffCredentialClaimLockActive() &&
-      Boolean(sharedKeyAtStart) && validTargetId(selfAtStart) &&
-      ownershipProofVerifiedAt > 0 &&
-      nowMs() - ownershipProofVerifiedAt <= CONFIG.sharedPollMs * 2 &&
-      activeSharedClaimsForClaimer(selfAtStart).length === 0
+      // R4. No own claim and no quarantine record: nothing to prove.
+      (!credentialRecoveryEvidenceActive() || (
+        Boolean(sharedKeyAtStart) && validTargetId(selfAtStart) &&
+        ownershipProofVerifiedAt > 0 &&
+        nowMs() - ownershipProofVerifiedAt <= CONFIG.sharedPollMs * 2 &&
+        activeSharedClaimsForClaimer(selfAtStart).length === 0
+      ))
     );
     tornCredentialMutationInProgress = true;
     invalidateTornCredentialRequests();
@@ -6187,7 +6896,7 @@
             ? (removed ? "Torn: forget cancelled by a new DIBS lock" : "Torn: saved key could not be removed")
             : "Torn: forget cancelled; original key recovery pending"
         );
-        if (sharedApiKey) void fetchSharedClaims();
+        if (effectiveTornApiKey()) void fetchSharedClaims();
         if (effectiveTornApiKey()) void fetchTornStatuses({ force: true });
       }
       return;
@@ -6199,6 +6908,10 @@
     apiKeyStorageReady = true;
     invalidateTornCredentialRequests();
     invalidateSharedReads();
+    // No Torn key, no session and no board: the row says what is missing.
+    ksResetForTornKeyChange();
+    sharedClaims = new Map(); sharedClaimsUnreadable = new Set(); sharedClaimsDegraded = false;
+    setSharedStatus("key-required", "War Room: KEY REQUIRED — set your Torn API key", 0);
     keyScopeReady = false; opponentMembersState = { factionId: "", members: new Map(), fetchedAt: 0 }; currentWarSurface = null;
     selfPlayerId = ""; selfPlayerName = ""; selfFactionId = ""; opponentFactionId = ""; tornUserBasicCapability = "unknown"; selfIdentityLastAttemptAt = 0;
     publicBasicStatusCache.clear();
@@ -6224,11 +6937,11 @@
     apiKeyStorageReady = true;
 
     if (claimAuthorityStorageUnresolved) {
-      setSharedStatus("error", "Shared: claim authority storage unresolved", 0);
-    } else if (ffCredentialStorageUnresolved) {
-      setSharedStatus("error", "Shared: secure storage recovery unresolved", 0);
-    } else if (sharedApiKey) setSharedStatus("ready", "Shared: saved key loaded", 0);
-    else setSharedStatus("key-required", "Shared: key required", 0);
+      setSharedStatus("error", "War Room: claim authority storage unresolved", 0);
+    } else if (tornCredentialStorageUnresolved) {
+      setSharedStatus("error", "War Room: secure storage unavailable", 0);
+    } else if (effectiveTornApiKey()) setSharedStatus("loading-key", "War Room: CHECKING…", 0);
+    else setSharedStatus("key-required", "War Room: KEY REQUIRED — set your Torn API key", 0);
     if (tornCredentialStorageUnresolved) {
       setTornStatusState("error", "Torn: secure storage unavailable", 0);
     } else if (effectiveTornApiKey()) {
@@ -6237,10 +6950,8 @@
     updatePanel();
 
     if (runtimeActive) {
-      if (sharedApiKey) { void fetchSharedClaims(); void fetchFairFightStats({ force: true }); }
-      if (effectiveTornApiKey()) {
-        void fetchTornStatuses({ force: true });
-      }
+      if (effectiveTornApiKey()) { void fetchSharedClaims(); void fetchTornStatuses({ force: true }); }
+      if (sharedApiKey) void fetchFairFightStats({ force: true });
     }
   }
 
@@ -6508,7 +7219,7 @@
   function startRuntimeTimers() {
     clearTimers();
     scheduleRowRefreshTick();
-    sharedPollTimer = window.setInterval(() => { if (sharedApiKey && runtimeActive && isRuntimeEligible()) void fetchSharedClaims(); }, CONFIG.sharedPollMs);
+    sharedPollTimer = window.setInterval(() => { if (effectiveTornApiKey() && runtimeActive && isRuntimeEligible()) void fetchSharedClaims(); }, CONFIG.sharedPollMs);
     fairFightTimer = window.setInterval(() => { if (sharedApiKey && runtimeActive && isRuntimeEligible()) void fetchFairFightStats(); }, CONFIG.fairFightRefreshMs);
     tornStatusTimer = window.setInterval(() => {
       if (!effectiveTornApiKey() || !runtimeActive || !isRuntimeEligible()) return;
@@ -6530,7 +7241,7 @@
     runtimeActive = false;
     runtimeGeneration += 1;
     invalidateSharedReads();
-    sharedClaims = new Map(); sharedClaimsUnreadable = new Set();
+    sharedClaims = new Map(); sharedClaimsUnreadable = new Set(); sharedClaimsDegraded = false;
     ambiguousOwnServerClaims = false;
     fairFightRequestSerial += 1;
     fairFightSyncing = false;
@@ -6557,8 +7268,8 @@
     startRuntimeTimers();
 
     if (apiKeyStorageReady) {
-      if (sharedApiKey) { void fetchSharedClaims(); void fetchFairFightStats({ force: true }); }
-      if (effectiveTornApiKey()) { void fetchTornStatuses({ force: true }); void runTornClockSyncBurst(); }
+      if (effectiveTornApiKey()) { void fetchSharedClaims(); void fetchTornStatuses({ force: true }); void runTornClockSyncBurst(); }
+      if (sharedApiKey) void fetchFairFightStats({ force: true });
     }
   }
 
@@ -6650,8 +7361,8 @@
     sharedBackoffUntil = 0;
     fairFightBackoffUntil = 0;
     tornStatusBackoffUntil = 0;
-    if (sharedApiKey) { void fetchSharedClaims(); void fetchFairFightStats({ force: true }); }
-    if (effectiveTornApiKey()) void fetchTornStatuses({ force: true });
+    if (effectiveTornApiKey()) { void fetchSharedClaims(); void fetchTornStatuses({ force: true }); }
+    if (sharedApiKey) void fetchFairFightStats({ force: true });
   }
 
   function installHistoryLifecycleHooks() {
