@@ -143,6 +143,9 @@
 
   .segmented button:last-child { border-right: 0; }
   .segmented button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+  .segmented button[disabled] { opacity: .5; cursor: default; }
+  .weight-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  input[type="text"].weight-input { width: 72px; }
 
   .btn {
     font-family: var(--display); font-weight: 600; font-size: 13px;
@@ -197,6 +200,8 @@
   }
 
   .roster.with-assists .row { grid-template-columns: 34px minmax(0, 2fr) 110px 90px minmax(0, 1fr) 90px 34px; }
+  .roster.weighted .row { grid-template-columns: 34px minmax(0, 2fr) 80px 70px 100px minmax(0, 1fr) 90px 34px; }
+  @media (min-width: 621px) { #basisField, #weightField { grid-column: span 2; } }
 
   .row.head { padding: 10px 18px; background: var(--surface-2); border-bottom: 1px solid var(--line-strong); }
 
@@ -266,6 +271,17 @@
     .roster.with-assists .row .payout { grid-column: 2 / 4; }
     .roster.with-assists .row .hold-toggle, .roster.with-assists .row .hold-head { grid-column: 4 / 6; }
     .roster.with-assists .row .drop, .roster.with-assists .row .drop-head { grid-column: 5; }
+    .roster.weighted .row { grid-template-columns: 34px repeat(3, minmax(0, 1fr)) 34px; }
+    .roster.weighted .row .name-input, .roster.weighted .row.head [data-sort="name"] { grid-column: 2 / 5; grid-row: 1; }
+    .roster.weighted .row .count-input, .roster.weighted .row #countHead { grid-column: 2; grid-row: 2; }
+    .roster.weighted .row .assists-input, .roster.weighted .row #assistsHead { grid-column: 3; grid-row: 2; }
+    .roster.weighted .row .respect-input, .roster.weighted .row #respectHead { grid-column: 4; grid-row: 2; }
+    .roster.weighted .row .payout { grid-column: 2 / 4; grid-row: 3; }
+    .roster.weighted .row .hold-toggle { grid-column: 4 / 6; grid-row: 3; }
+    .roster.weighted .row .drop, .roster.weighted .row .drop-head { grid-column: 5; grid-row: 1; }
+    .roster.weighted .row .hold-reason { grid-row: 4; }
+    .roster.weighted .row.head .hold-head { display: none; }
+    .roster.weighted .row.head button.num { justify-self: start; }
   }
 
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
@@ -378,13 +394,37 @@
           <span class="note" id="minHitsNote">Below this and a member is skipped.</span>
         </div>
 
-        <div class="field">
+        <div class="field" id="basisField">
           <span class="legend" id="basisLabel">Split by</span>
           <div class="segmented" role="group" aria-labelledby="basisLabel">
             <button type="button" data-basis="hits" aria-pressed="true">Hits</button>
             <button type="button" data-basis="respect" aria-pressed="false">Respect</button>
+            <button type="button" data-basis="weighted" aria-pressed="false">Weighted</button>
           </div>
-          <span class="note">The war report carries both, so you can compare instantly.</span>
+          <span class="note" id="basisNote">The war report carries both, so you can compare instantly.</span>
+        </div>
+
+        <div class="field" id="weightField" hidden>
+          <span class="legend" id="weightLabel">Weight hits / respect</span>
+          <div class="weight-row">
+            <div class="segmented" role="group" aria-labelledby="weightLabel">
+              <button type="button" data-weight="30" aria-pressed="false">30/70</button>
+              <button type="button" data-weight="50" aria-pressed="true">50/50</button>
+              <button type="button" data-weight="70" aria-pressed="false">70/30</button>
+            </div>
+            <label class="sr" for="weightHits">Hits percent</label>
+            <input type="text" id="weightHits" class="weight-input" inputmode="numeric" autocomplete="off" placeholder="50">
+          </div>
+          <span class="note" id="weightNote">Hits 50% · respect 50%.</span>
+        </div>
+
+        <div class="field" id="chainField" hidden>
+          <span class="legend" id="chainLabel">Chain bonus hits</span>
+          <div class="segmented" role="group" aria-labelledby="chainLabel">
+            <button type="button" data-chainbonus="true" aria-pressed="true">Normal FF 3.0 hit</button>
+            <button type="button" data-chainbonus="false" aria-pressed="false">Full bonus</button>
+          </div>
+          <span class="note" id="chainNote"></span>
         </div>
 
         <div class="field">
@@ -443,6 +483,7 @@
         <button type="button" data-sort="name">Member</button>
         <button type="button" class="num" data-sort="count" id="countHead">Hits</button>
         <button type="button" class="num" data-sort="assists" id="assistsHead">Assists</button>
+        <button type="button" class="num" data-sort="respect" id="respectHead" hidden>Respect</button>
         <button type="button" class="pay" data-sort="payout">Payout</button>
         <span class="hold-head" aria-hidden="true"></span>
         <span class="drop-head" aria-hidden="true"></span>
@@ -494,6 +535,9 @@
   <footer>
     <p><strong>Rounding.</strong> Every payout rounds down to a whole dollar, so the leftover stays
       in the bank rather than leaving you short on the last payment.</p>
+    <p><strong>Chain bonus hits.</strong> In Respect and Weighted, a chain bonus hit (10, 25, 50, 100 …)
+      can count as a normal hit: its bonus respect is replaced by what the same hit gives at fair fight
+      3.00, worked out from that target&rsquo;s other hits in the war.</p>
     <p><strong>Reading only.</strong> The page fetches war data when you press a button and never
       acts inside Torn.</p>
   </footer>
@@ -512,7 +556,8 @@
 
     var state = {
       pot: 0, bonus: 0, bonusNote: '', fixedRate: 0, cut: 0, minCount: 0,
-      basis: 'hits', mode: 'pool', payAssists: false, members: [], war: null
+      basis: 'hits', mode: 'pool', payAssists: false, members: [], war: null,
+      weightHits: 50, chainBonusFF3: true
     };
 
     var wars = [];
@@ -529,6 +574,8 @@
      'paidSub','remainder','addRow','clearRoster','pasteBox','importAdd','importReplace',
      'importToast','copyBtn','copyHtmlBtn','copyToast','loadAllMembers','rosterToast','paidHint','untickPaid']
       .forEach(function (id) { el[id] = document.getElementById(id); });
+    ['basisNote', 'weightField', 'weightHits', 'weightNote', 'chainField', 'chainNote', 'respectHead']
+      .forEach(function (id) { el[id] = document.getElementById(id); });
 
     /* ---------- helpers ---------- */
 
@@ -543,23 +590,55 @@
 
     function money(n) { return '$' + Math.round(n).toLocaleString('en-US'); }
     function plural(n, one, many) { return n === 1 ? one : many; }
-    function countWord() { return state.basis === 'hits' ? 'hits' : 'respect'; }
+    // 'weighted' counts hits for the minimum, the Hits column and sorting; respect has its own helpers.
+    function countWord() { return state.basis === 'respect' ? 'respect' : 'hits'; }
     function countWordFor(n) {
-      if (state.basis !== 'hits') return 'respect';
+      if (state.basis === 'respect') return 'respect';
       return n === 1 ? 'hit' : 'hits';
     }
-    function countWordSingular() { return state.basis === 'hits' ? 'hit' : 'respect'; }
+    function countWordSingular() { return state.basis === 'respect' ? 'respect' : 'hit'; }
+
+    function isWeighted() { return state.basis === 'weighted'; }
+
+    // Respect and chain data exist only after Load hits read the attack log (v6).
+    function logReady() {
+      return !!(state.war && state.war.log && state.war.log.ready === true);
+    }
+    function chainReady() { return logReady() && state.war.log.chainReady === true; }
+    function bonusActive() {
+      return state.basis !== 'hits' && state.chainBonusFF3 === true && chainReady();
+    }
+
+    function hitsOf(member) { return member.hits + (state.payAssists ? member.assists : 0); }
+
+    function respectOf(member) {
+      if (!bonusActive()) return member.score;
+      var adjusted = member.score - (member.bonusActual || 0) + (member.bonusValued || 0);
+      return adjusted > 0 ? adjusted : 0;
+    }
 
     function countOf(member) {
-      return state.basis === 'hits'
-        ? member.hits + (state.payAssists ? member.assists : 0) : member.score;
+      return state.basis === 'respect' ? respectOf(member) : hitsOf(member);
     }
 
+    function prettyRespect(n) { return n.toLocaleString('en-US', { maximumFractionDigits: 2 }); }
+
     function prettyCount(n) {
-      return state.basis === 'hits'
-        ? n.toLocaleString('en-US')
-        : n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+      return state.basis === 'respect' ? prettyRespect(n) : n.toLocaleString('en-US');
     }
+
+    function weightPair() {
+      var h = Math.min(Math.max(Math.round(state.weightHits), 0), 100);
+      return { hits: h, respect: 100 - h };
+    }
+
+    function splitText() {
+      var w = weightPair();
+      var text = isWeighted() ? w.hits + '% hits / ' + w.respect + '% respect' : '100% respect';
+      return 'Split: ' + text + (bonusActive() ? ' · chain bonus hits at FF 3.0' : '');
+    }
+
+    var WEIGHTED_BLOCKED = 'Weighted needs a war loaded with Load hits. Load one above, or pick Hits or Respect.';
 
     function show(box, message) { box.textContent = message; box.hidden = false; }
     function hide(box) { box.textContent = ''; box.hidden = true; }
@@ -604,9 +683,12 @@
         state.bonus = typeof saved.bonus === 'number' && Number.isFinite(saved.bonus) && saved.bonus >= 0
           ? saved.bonus : 0;
         state.bonusNote = typeof saved.bonusNote === 'string' ? saved.bonusNote.trim().slice(0, 80) : '';
-        state.basis = saved.basis === 'respect' ? 'respect' : 'hits';
-        state.mode = saved.mode === 'rate' ? 'rate' : 'pool';
+        state.basis = ['respect', 'weighted'].indexOf(saved.basis) !== -1 ? saved.basis : 'hits';
+        state.mode = saved.mode === 'rate' && state.basis !== 'weighted' ? 'rate' : 'pool';
         state.payAssists = saved.payAssists === true;
+        state.weightHits = typeof saved.weightHits === 'number' && Number.isFinite(saved.weightHits) &&
+          saved.weightHits >= 0 && saved.weightHits <= 100 ? Math.round(saved.weightHits) : 50;
+        state.chainBonusFF3 = saved.chainBonusFF3 !== false;
         var war = saved.war;
         state.war = war && typeof war === 'object' && !Array.isArray(war) &&
           typeof war.id === 'number' && typeof war.opponent === 'string' &&
@@ -614,7 +696,8 @@
           ? {
             id: war.id, opponent: war.opponent, start: war.start, outcome: war.outcome,
             ourScore: typeof war.ourScore === 'number' ? war.ourScore : null,
-            theirScore: typeof war.theirScore === 'number' ? war.theirScore : null
+            theirScore: typeof war.theirScore === 'number' ? war.theirScore : null,
+            log: readLog(war.log)
           } : null;
         if (Array.isArray(saved.members)) {
           state.members = saved.members.map(function (m) {
@@ -626,11 +709,31 @@
               score: typeof m.score === 'number' ? m.score : 0,
               paid: m.paid === true, hold: m.hold === true,
               holdReason: typeof m.holdReason === 'string' ? m.holdReason.trim().slice(0, 120) : '',
-              tornId: Number.isSafeInteger(m.tornId) && m.tornId > 0 ? m.tornId : null
+              tornId: Number.isSafeInteger(m.tornId) && m.tornId > 0 ? m.tornId : null,
+              bonusHits: nonNegative(m.bonusHits), bonusActual: nonNegative(m.bonusActual),
+              bonusValued: nonNegative(m.bonusValued)
             };
           });
         }
       } catch (err) { /* start clean */ }
+    }
+
+    function nonNegative(value) {
+      return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
+    }
+
+    // war.log (v6): what Load hits found in the attack log. Anything malformed means "not loaded".
+    function readLog(log) {
+      if (!log || typeof log !== 'object' || Array.isArray(log)) return null;
+      var counts = ['bonusHits', 'sameTarget', 'sameLevel', 'warAverage', 'chainGuess', 'mismatch'];
+      var out = { ready: log.ready === true, chainReady: log.ready === true && log.chainReady === true,
+        reason: typeof log.reason === 'string' ? log.reason.slice(0, 200) : '' };
+      for (var i = 0; i < counts.length; i += 1) {
+        var n = log[counts[i]];
+        if (!Number.isSafeInteger(n) || n < 0) return null;
+        out[counts[i]] = n;
+      }
+      return out;
     }
 
     /* ---------- torn api ---------- */
@@ -799,11 +902,150 @@
             if (assist) { member.assists += 1; assists += 1; }
           });
           return { members: members, hits: hits, assists: assists,
-            attacks: attacks.size, hiddenAttackers: hiddenAttackers };
+            attacks: attacks.size, hiddenAttackers: hiddenAttackers,
+            log: analyzeLog(attacks, opponentId) };
         }
         cursor = earliest - (attacks.size === before ? 1 : 0);
       }
       throw new Error('The attack log for this war is too long to read (over 8,000 attacks). Nothing was loaded.');
+    }
+
+    /* ---------- respect and chain bonus hits (v6) ---------- */
+
+    var BONUS_CHAINS = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000];
+    var MODIFIER_KEYS = ['fair_fight', 'war', 'retaliation', 'group', 'overseas', 'chain', 'warlord'];
+    var CHAIN_FF = 3;
+
+    function validModifiers(m) {
+      if (!m || typeof m !== 'object') return false;
+      for (var i = 0; i < MODIFIER_KEYS.length; i += 1) {
+        var v = m[MODIFIER_KEYS[i]];
+        if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) return false;
+      }
+      return true;
+    }
+
+    function hasChainData(a) {
+      return Number.isSafeInteger(a.chain) && a.chain >= 0 && validModifiers(a.modifiers);
+    }
+
+    // A bonus hit carries the bonus (10, 20, 40 …) as its chain modifier; a normal chain modifier stays far below 10.
+    function isBonusHit(a) {
+      return hasChainData(a) && BONUS_CHAINS.indexOf(a.chain) !== -1 && a.modifiers.chain >= 10;
+    }
+
+    function median(values) {
+      if (values.length === 0) return null;
+      var s = values.slice().sort(function (x, y) { return x - y; });
+      var mid = Math.floor(s.length / 2);
+      return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+    }
+
+    // Reads respect per member and re-values chain bonus hits from the war's attack log.
+    // Never throws: anything it cannot read turns the feature off with a reason (fail-closed).
+    function analyzeLog(attacks, opponentId) {
+      var hitResults = ['Attacked', 'Mugged', 'Hospitalized'];
+      var relevant = [];
+      var all = [];
+      attacks.forEach(function (a) {
+        all.push(a);
+        if (a.attacker && a.attacker.faction && Number(a.attacker.faction.id) === FACTION_ID &&
+            a.is_ranked_war === true && a.defender.faction &&
+            Number(a.defender.faction.id) === opponentId) relevant.push(a);
+      });
+      var respect = new Map();
+      var bonus = new Map();
+      var result = { ready: false, chainReady: false, reason: '', bonusHits: 0, sameTarget: 0,
+        sameLevel: 0, warAverage: 0, chainGuess: 0, mismatch: 0, respect: respect, bonus: bonus };
+      for (var i = 0; i < relevant.length; i += 1) {
+        var g = relevant[i].respect_gain;
+        if (typeof g !== 'number' || !Number.isFinite(g) || g < 0) {
+          result.reason = 'Torn did not send the respect for every hit in this war.';
+          return result;
+        }
+        var id = Number(relevant[i].attacker.id);
+        respect.set(id, (respect.get(id) || 0) + g);
+      }
+      result.ready = true;
+
+      // Base respect per target: respect_gain divided by all its modifiers, median over normal hits.
+      var perTarget = new Map();
+      var targetLevel = new Map();
+      relevant.forEach(function (a) {
+        if (hitResults.indexOf(a.result) === -1 || isBonusHit(a) || !validModifiers(a.modifiers) ||
+            !(a.respect_gain > 0) || !Number.isSafeInteger(Number(a.defender.id))) return;
+        var m = a.modifiers;
+        var base = a.respect_gain /
+          (m.fair_fight * m.war * m.retaliation * m.group * m.overseas * m.chain * m.warlord);
+        if (!Number.isFinite(base) || base <= 0) return;
+        var target = Number(a.defender.id);
+        if (!perTarget.has(target)) perTarget.set(target, []);
+        perTarget.get(target).push(base);
+        if (Number.isSafeInteger(a.defender.level)) targetLevel.set(target, a.defender.level);
+      });
+      var targetBase = new Map();
+      perTarget.forEach(function (list, target) { targetBase.set(target, median(list)); });
+      var warBase = median(Array.from(targetBase.values()));
+
+      var bonusHits = relevant.filter(function (a) {
+        return hitResults.indexOf(a.result) !== -1 && isBonusHit(a);
+      });
+      var suspect = relevant.filter(function (a) {
+        return hitResults.indexOf(a.result) !== -1 && BONUS_CHAINS.indexOf(a.chain) !== -1 && !hasChainData(a);
+      });
+      result.bonusHits = bonusHits.length;
+      if (suspect.length > 0) {
+        result.reason = 'Torn did not send the chain details for every hit in this war.';
+        return result;
+      }
+      if (bonusHits.length > 0 && warBase === null) {
+        result.reason = 'There are no normal hits in this war to value chain bonus hits from.';
+        return result;
+      }
+
+      var chainHits = all.filter(function (a) {
+        return hasChainData(a) && a.chain > 0 && !isBonusHit(a) && Number.isFinite(a.ended);
+      });
+      bonusHits.forEach(function (b) {
+        var target = Number(b.defender.id);
+        var base = targetBase.has(target) ? targetBase.get(target) : null;
+        if (base !== null) result.sameTarget += 1;
+        else {
+          var level = b.defender.level;
+          var sameLevel = [];
+          targetBase.forEach(function (v, t) { if (targetLevel.get(t) === level) sameLevel.push(v); });
+          base = median(sameLevel);
+          if (base !== null) result.sameLevel += 1;
+          else { base = warBase; result.warAverage += 1; }
+        }
+        // Chain multiplier from the nearest normal hit before it in the chain, else the nearest after it.
+        var before = null;
+        var after = null;
+        chainHits.forEach(function (a) {
+          if (a.chain < b.chain && a.ended <= b.ended &&
+              (!before || a.ended > before.ended || (a.ended === before.ended && a.chain > before.chain))) before = a;
+          if (a.chain > b.chain && a.ended >= b.ended &&
+              (!after || a.ended < after.ended || (a.ended === after.ended && a.chain < after.chain))) after = a;
+        });
+        var chainFactor = before ? before.modifiers.chain : after ? after.modifiers.chain : 1;
+        if (!before) result.chainGuess += 1;
+        var m = b.modifiers;
+        var valued = base * CHAIN_FF * m.war * m.retaliation * m.group * m.overseas * m.warlord * chainFactor;
+        var who = Number(b.attacker.id);
+        var entry = bonus.get(who) || { hits: 0, actual: 0, valued: 0 };
+        entry.hits += 1;
+        entry.actual += b.respect_gain;
+        entry.valued += valued;
+        bonus.set(who, entry);
+      });
+      result.chainReady = true;
+      return result;
+    }
+
+    function logSummary(log) {
+      return { ready: log.ready, chainReady: log.chainReady, reason: log.reason, bonusHits: log.bonusHits,
+        sameTarget: log.sameTarget, sameLevel: log.sameLevel, warAverage: log.warAverage,
+        chainGuess: log.chainGuess, mismatch: log.mismatch };
     }
 
     async function loadReport() {
@@ -854,6 +1096,7 @@
           theirScore: them && typeof them.score === 'number' ? them.score : null
         };
 
+        var log = counted.log;
         var reportIds = new Set();
         var loadedMembers = ours.members.map(function (m) {
           if (!m || !Number.isSafeInteger(Number(m.id)) || Number(m.id) <= 0) {
@@ -862,15 +1105,27 @@
           var id = Number(m.id);
           var counts = counted.members.get(id);
           reportIds.add(id);
+          var reportScore = typeof m.score === 'number' && Number.isFinite(m.score) ? m.score : 0;
+          var logScore = log.ready ? Math.round((log.respect.get(id) || 0) * 100) / 100 : reportScore;
+          if (log.ready && Math.abs(logScore - reportScore) > 0.005) log.mismatch += 1;
           return {
             tornId: id,
             name: counts ? counts.name : typeof m.name === 'string' ? m.name : String(m.id),
             hits: counts ? counts.hits : 0, assists: counts ? counts.assists : 0,
-            score: typeof m.score === 'number' && Number.isFinite(m.score) ? m.score : 0
+            score: logScore
           };
         });
         counted.members.forEach(function (m, id) {
-          if (!reportIds.has(id)) loadedMembers.push({ tornId: id, name: m.name, hits: m.hits, assists: m.assists, score: 0 });
+          if (!reportIds.has(id)) {
+            loadedMembers.push({ tornId: id, name: m.name, hits: m.hits, assists: m.assists,
+              score: log.ready ? Math.round((log.respect.get(id) || 0) * 100) / 100 : 0 });
+          }
+        });
+        loadedMembers.forEach(function (m) {
+          var b = log.chainReady ? log.bonus.get(m.tornId) : null;
+          m.bonusHits = b ? b.hits : 0;
+          m.bonusActual = b ? Math.round(b.actual * 100) / 100 : 0;
+          m.bonusValued = b ? Math.round(b.valued * 10000) / 10000 : 0;
         });
         loadedMembers = loadedMembers.filter(function (m) { return m.hits > 0 || m.assists > 0 || m.score > 0; });
         loadedMembers.sort(function (a, b) { return b.hits - a.hits || b.assists - a.assists; });
@@ -887,9 +1142,13 @@
           return {
             id: nextId++, name: m.name, hits: m.hits, assists: m.assists, score: m.score,
             tornId: m.tornId, paid: previous ? previous.paid === true : false,
-            hold: previous ? previous.hold === true : false, holdReason: previous ? previous.holdReason : ''
+            hold: previous ? previous.hold === true : false, holdReason: previous ? previous.holdReason : '',
+            bonusHits: m.bonusHits, bonusActual: m.bonusActual, bonusValued: m.bonusValued
           };
         });
+        loadedWar.log = logSummary(log);
+        if (!log.ready) console.warn('[KS payout] respect not read from the attack log:', log.reason);
+        else if (!log.chainReady) console.warn('[KS payout] chain bonus hits not valued:', log.reason);
         state.war = loadedWar;
         hide(el.cacheBox);
 
@@ -910,7 +1169,12 @@
           plural(counted.attacks, 'attack', 'attacks') + ' in the log.' +
           (counted.hiddenAttackers > 0 ? ' ' + counted.hiddenAttackers.toLocaleString('en-US') + ' ' +
             plural(counted.hiddenAttackers, 'attack had', 'attacks had') +
-            ' no attacker shown and ' + plural(counted.hiddenAttackers, 'was', 'were') + ' not counted.' : ''));
+            ' no attacker shown and ' + plural(counted.hiddenAttackers, 'was', 'were') + ' not counted.' : '') +
+          (log.ready && log.bonusHits > 0 ? ' ' + log.bonusHits.toLocaleString('en-US') + ' chain bonus ' +
+            plural(log.bonusHits, 'hit', 'hits') + ' found.' : '') +
+          (log.mismatch > 0 ? ' Respect in the attack log differs from the war report for ' + log.mismatch + ' ' +
+            plural(log.mismatch, 'member', 'members') + '; the attack log is used.' : '') +
+          (!log.ready ? ' ' + log.reason + ' Weighted and the chain bonus option are off for this war.' : ''));
         render();
         save();
       } catch (err) {
@@ -923,7 +1187,42 @@
 
     /* ---------- calculation ---------- */
 
+    // Weighted: share = hits% × member hits / all hits + respect% × member respect / all respect.
+    function calculateWeighted() {
+      var blocked = logReady() ? '' : WEIGHTED_BLOCKED;
+      var w = weightPair();
+      function eligibleFor(m) {
+        var h = hitsOf(m);
+        return !blocked && m.hold !== true && (h > 0 || respectOf(m) > 0) && h >= state.minCount;
+      }
+      var qualified = state.members.filter(eligibleFor);
+      var totalHits = qualified.reduce(function (sum, m) { return sum + hitsOf(m); }, 0);
+      var totalRespect = qualified.reduce(function (sum, m) { return sum + respectOf(m); }, 0);
+      var cutFraction = Math.min(state.cut, 100) / 100;
+      var distributable = state.pot * (1 - cutFraction) + state.bonus;
+      var hitsShare = distributable * w.hits / 100;
+      var respectShare = distributable * w.respect / 100;
+      var rate = totalHits > 0 ? hitsShare / totalHits : 0;
+      var rateRespect = totalRespect > 0 ? respectShare / totalRespect : 0;
+      var payouts = state.members.map(function (m) {
+        var eligible = eligibleFor(m);
+        var h = hitsOf(m);
+        var r = respectOf(m);
+        return { member: m, count: h, respect: r, eligible: eligible,
+          amount: eligible ? Math.floor(rate * h + rateRespect * r) : 0 };
+      });
+      var paid = payouts.reduce(function (sum, p) { return sum + p.amount; }, 0);
+      return {
+        weighted: true, blocked: blocked, qualifiedCount: qualified.length, totalCount: totalHits,
+        totalRespect: totalRespect, rate: rate, rateRespect: rateRespect,
+        hitsShare: hitsShare, respectShare: respectShare,
+        distributable: distributable, potNeeded: state.pot, factionCut: state.pot * cutFraction,
+        payouts: payouts, paid: paid, remainder: Math.max(state.pot + state.bonus - paid, 0)
+      };
+    }
+
     function calculate() {
+      if (isWeighted()) return calculateWeighted();
       var qualified = state.members.filter(function (m) {
         var c = countOf(m);
         return m.hold !== true && c > 0 && c >= state.minCount;
@@ -959,6 +1258,35 @@
     }
 
     /* ---------- rendering ---------- */
+
+    // The respect shown is the respect paid on; with chain bonus hits re-valued it differs from the report.
+    function respectText(member) {
+      return bonusActive() ? Math.round(respectOf(member) * 100) / 100 : member.score;
+    }
+
+    function setRespect(member, value) {
+      member.score = bonusActive()
+        ? value + (member.bonusActual || 0) - (member.bonusValued || 0) : value;
+    }
+
+    function chainNoteText() {
+      if (!state.war || !state.war.log) return 'Needs a war loaded with Load hits.';
+      var log = state.war.log;
+      if (!log.ready || !log.chainReady) return 'Not available for this war. ' + log.reason;
+      if (log.bonusHits === 0) return 'No chain bonus hits in this war.';
+      var parts = [];
+      if (log.sameTarget > 0) parts.push(log.sameTarget + ' from the same target');
+      if (log.sameLevel > 0) parts.push(log.sameLevel + ' estimated from targets of the same level');
+      if (log.warAverage > 0) parts.push(log.warAverage + ' estimated from the war average');
+      var text = log.bonusHits + ' chain bonus ' + plural(log.bonusHits, 'hit', 'hits') + ' in this war. ' +
+        'Respect worked out: ' + parts.join(', ') + '.';
+      if (log.chainGuess > 0) {
+        text += ' Chain multiplier estimated for ' + log.chainGuess + ' (no earlier hit in the chain in this log).';
+      }
+      return text + (state.chainBonusFF3
+        ? ' Each counts as one hit with the respect of a normal FF 3.00 hit.'
+        : ' Each counts with its full bonus respect, as in the war report.');
+    }
 
     function renderRows(result) {
       el.rows.textContent = '';
@@ -1000,15 +1328,29 @@
         count.type = 'text';
         count.className = 'count-input';
         count.inputMode = 'decimal';
-        var inputCount = state.basis === 'hits' ? member.hits : member.score;
+        var inputCount = state.basis === 'respect' ? respectText(member) : member.hits;
         count.value = inputCount ? String(inputCount) : '';
         count.placeholder = '0';
         count.setAttribute('aria-label', countWord());
         count.addEventListener('input', function () {
           var value = parseNumber(count.value);
-          if (state.basis === 'hits') member.hits = value; else member.score = value;
+          if (state.basis === 'respect') setRespect(member, value); else member.hits = value;
           render();
           save();
+        });
+
+        var respect = document.createElement('input');
+        respect.type = 'text';
+        respect.className = 'respect-input';
+        respect.inputMode = 'decimal';
+        var shownRespect = respectText(member);
+        respect.value = shownRespect ? String(shownRespect) : '';
+        respect.placeholder = '0';
+        respect.setAttribute('aria-label', 'Respect');
+        respect.hidden = !isWeighted();
+        respect.addEventListener('input', function () {
+          setRespect(member, parseNumber(respect.value));
+          render(); save();
         });
 
         var assists = document.createElement('input');
@@ -1018,7 +1360,7 @@
         assists.value = member.assists ? String(member.assists) : '';
         assists.placeholder = '0';
         assists.setAttribute('aria-label', 'Assists');
-        assists.hidden = state.basis !== 'hits';
+        assists.hidden = state.basis === 'respect';
         assists.addEventListener('input', function () {
           member.assists = parseNumber(assists.value);
           render(); save();
@@ -1052,6 +1394,7 @@
         row.appendChild(name);
         row.appendChild(count);
         row.appendChild(assists);
+        row.appendChild(respect);
         row.appendChild(payoutCell);
         row.appendChild(hold);
         row.appendChild(drop);
@@ -1078,16 +1421,47 @@
     function render() {
       var result = calculate();
 
-      el.countHead.textContent = state.basis === 'hits' ? 'Hits' : 'Respect';
-      el.assistsHead.hidden = state.basis !== 'hits';
+      el.countHead.textContent = state.basis === 'respect' ? 'Respect' : 'Hits';
+      el.assistsHead.hidden = state.basis === 'respect';
+      el.respectHead.hidden = !isWeighted();
       el.rows.parentElement.classList.toggle('with-assists', state.basis === 'hits');
+      el.rows.parentElement.classList.toggle('weighted', isWeighted());
       el.minHitsNote.textContent = 'Less ' + countWord() + ' than this and a member is skipped.';
       el.poolField.hidden = state.mode !== 'pool';
       el.bonusField.hidden = state.mode !== 'pool';
       el.bonusNoteField.hidden = state.mode !== 'pool';
       el.rateField.hidden = state.mode !== 'rate';
 
-      if (state.mode === 'rate') {
+      var w = weightPair();
+      el.weightField.hidden = !isWeighted();
+      el.weightNote.textContent = 'Hits ' + w.hits + '% · respect ' + w.respect + '%.';
+      document.querySelectorAll('[data-weight]').forEach(function (b) {
+        b.setAttribute('aria-pressed', String(Number(b.getAttribute('data-weight')) === w.hits));
+      });
+      if (document.activeElement !== el.weightHits) el.weightHits.value = String(w.hits);
+      el.chainField.hidden = state.basis === 'hits';
+      el.chainNote.textContent = chainNoteText();
+      document.querySelectorAll('[data-chainbonus]').forEach(function (b) {
+        b.disabled = !chainReady();
+        b.setAttribute('aria-pressed', String((b.getAttribute('data-chainbonus') === 'true') === state.chainBonusFF3));
+      });
+      document.querySelectorAll('[data-basis="weighted"]').forEach(function (b) {
+        b.disabled = !logReady() && !isWeighted();
+      });
+      document.querySelectorAll('[data-mode="rate"]').forEach(function (b) { b.disabled = isWeighted(); });
+      el.basisNote.textContent = isWeighted() && !logReady() ? WEIGHTED_BLOCKED
+        : isWeighted() ? 'Weighted works from the pot. Hits and respect each get their share.'
+        : logReady() ? 'The war report carries both, so you can compare instantly.'
+        : 'The war report carries both, so you can compare instantly. Weighted needs Load hits.';
+
+      if (result.weighted) {
+        el.leadKey.textContent = 'Per hit';
+        el.leadValue.textContent = money(Math.floor(result.rate));
+        el.leadSub.textContent = result.blocked ? result.blocked
+          : result.qualifiedCount > 0
+            ? '+ ' + money(Math.floor(result.rateRespect)) + ' per respect · ' + w.hits + '/' + w.respect + ' split'
+            : 'Enter the pot and load a war';
+      } else if (state.mode === 'rate') {
         el.leadKey.textContent = 'Pot needed';
         el.leadValue.textContent = money(result.potNeeded);
         el.leadSub.textContent = result.totalCount > 0
@@ -1144,7 +1518,7 @@
       }
       lines.push('');
 
-      if (state.mode === 'rate') {
+      if (state.mode === 'rate' && !result.weighted) {
         lines.push('Rate set at ' + money(state.fixedRate) + ' per ' + countWordSingular());
         lines.push('Pot needed: ' + money(result.potNeeded));
       } else {
@@ -1152,9 +1526,17 @@
         if (state.bonus > 0) {
           lines.push('Bonus: ' + money(state.bonus) + (state.bonusNote ? ' — ' + state.bonusNote : ''));
         }
-        lines.push('Rate: ' + money(Math.floor(result.rate)) + ' per ' + countWordSingular());
+        if (result.weighted) {
+          lines.push('Hits share: ' + money(result.hitsShare) + ' — ' + money(Math.floor(result.rate)) + ' per hit');
+          lines.push('Respect share: ' + money(result.respectShare) + ' — ' +
+            money(Math.floor(result.rateRespect)) + ' per respect');
+        } else {
+          lines.push('Rate: ' + money(Math.floor(result.rate)) + ' per ' + countWordSingular());
+        }
       }
-      var hasAssists = state.basis === 'hits' && state.members.reduce(function (sum, m) {
+      if (result.weighted || bonusActive()) lines.push(splitText());
+      var respectPart = result.weighted ? ' · ' + prettyRespect(result.totalRespect) + ' respect' : '';
+      var hasAssists = state.basis !== 'respect' && state.members.reduce(function (sum, m) {
         return sum + m.assists;
       }, 0) > 0;
       if (hasAssists && state.payAssists) {
@@ -1164,9 +1546,10 @@
         }, { hits: 0, assists: 0 });
         lines.push('Total counted: ' + prettyCount(totals.hits) + ' ' + plural(totals.hits, 'hit', 'hits') +
           ' + ' + prettyCount(totals.assists) + ' ' + plural(totals.assists, 'assist', 'assists') +
-          ' = ' + prettyCount(result.totalCount));
+          ' = ' + prettyCount(result.totalCount) + respectPart);
       } else {
-        lines.push('Total counted: ' + prettyCount(result.totalCount) + ' ' + countWordFor(result.totalCount));
+        lines.push('Total counted: ' + prettyCount(result.totalCount) + ' ' + countWordFor(result.totalCount) +
+          respectPart);
       }
       if (hasAssists) lines.push('Assists: ' + (state.payAssists ? 'paid as hits' : 'not paid'));
       if (state.cut > 0) lines.push('Faction keeps ' + state.cut + '%: ' + money(result.factionCut));
@@ -1182,6 +1565,7 @@
           description = prettyCount(p.member.hits) + ' ' + plural(p.member.hits, 'hit', 'hits') +
             ' + ' + prettyCount(p.member.assists) + ' ' + plural(p.member.assists, 'assist', 'assists');
         }
+        if (result.weighted) description += ' · ' + prettyRespect(p.respect) + ' respect';
         lines.push((p.member.name || 'Unnamed') + ' — ' + description + ' — ' + money(p.amount));
       });
 
@@ -1195,6 +1579,7 @@
             description = prettyCount(p.member.hits) + ' ' + plural(p.member.hits, 'hit', 'hits') +
               ' + ' + prettyCount(p.member.assists) + ' ' + plural(p.member.assists, 'assist', 'assists');
           }
+          if (result.weighted) description += ' · ' + prettyRespect(p.respect) + ' respect';
           lines.push((p.member.name || 'Unnamed') + ' — ' + description +
             (p.member.holdReason ? ' — ' + p.member.holdReason : ''));
         });
@@ -1247,7 +1632,7 @@
 
       gap();
       heading('THE POT');
-      if (state.mode === 'rate') {
+      if (state.mode === 'rate' && !result.weighted) {
         p('Rate set at ' + b(money(state.fixedRate)) + ' per ' + countWordSingular());
         p('Pot needed: ' + b(money(result.potNeeded)));
       } else {
@@ -1255,9 +1640,17 @@
         if (state.bonus > 0) {
           p('Bonus: ' + b(money(state.bonus)) + (state.bonusNote ? dash + escapeHtml(state.bonusNote) : ''));
         }
-        p('Rate: ' + b(money(Math.floor(result.rate))) + ' per ' + countWordSingular());
+        if (result.weighted) {
+          p('Hits share: ' + b(money(result.hitsShare)) + dash + b(money(Math.floor(result.rate))) + ' per hit');
+          p('Respect share: ' + b(money(result.respectShare)) + dash +
+            b(money(Math.floor(result.rateRespect))) + ' per respect');
+        } else {
+          p('Rate: ' + b(money(Math.floor(result.rate))) + ' per ' + countWordSingular());
+        }
       }
-      var hasAssists = state.basis === 'hits' && state.members.reduce(function (sum, m) {
+      if (result.weighted || bonusActive()) p(escapeHtml(splitText()).replace(/·/g, '&middot;'));
+      var respectPart = result.weighted ? ' &middot; ' + b(prettyRespect(result.totalRespect)) + ' respect' : '';
+      var hasAssists = state.basis !== 'respect' && state.members.reduce(function (sum, m) {
         return sum + m.assists;
       }, 0) > 0;
       if (hasAssists && state.payAssists) {
@@ -1267,20 +1660,22 @@
         }, { hits: 0, assists: 0 });
         p('Total counted: ' + prettyCount(totals.hits) + ' ' + plural(totals.hits, 'hit', 'hits') +
           ' + ' + prettyCount(totals.assists) + ' ' + plural(totals.assists, 'assist', 'assists') +
-          ' = ' + b(prettyCount(result.totalCount)));
+          ' = ' + b(prettyCount(result.totalCount)) + respectPart);
       } else {
-        p('Total counted: ' + b(prettyCount(result.totalCount)) + ' ' + countWordFor(result.totalCount));
+        p('Total counted: ' + b(prettyCount(result.totalCount)) + ' ' + countWordFor(result.totalCount) +
+          respectPart);
       }
       if (hasAssists) p('Assists: ' + (state.payAssists ? 'paid as hits' : 'not paid'));
       if (state.cut > 0) p('Faction keeps ' + state.cut + '%: ' + b(money(result.factionCut)));
       if (state.minCount > 0) p('Minimum to qualify: ' + state.minCount + ' ' + countWordFor(state.minCount));
 
       function describe(x) {
+        var extra = result.weighted ? ' &middot; ' + prettyRespect(x.respect) + ' respect' : '';
         if (hasAssists && state.payAssists && x.member.assists > 0) {
           return prettyCount(x.member.hits) + ' ' + plural(x.member.hits, 'hit', 'hits') +
-            ' + ' + prettyCount(x.member.assists) + ' ' + plural(x.member.assists, 'assist', 'assists');
+            ' + ' + prettyCount(x.member.assists) + ' ' + plural(x.member.assists, 'assist', 'assists') + extra;
         }
-        return prettyCount(x.count) + ' ' + countWordFor(x.count);
+        return prettyCount(x.count) + ' ' + countWordFor(x.count) + extra;
       }
 
       var eligible = result.payouts.filter(function (x) { return x.eligible; })
@@ -1332,8 +1727,8 @@
         if (!name || count <= 0) return;
         found.push({
           id: nextId++, name: name,
-          hits: state.basis === 'hits' ? count : 0,
-          score: state.basis === 'hits' ? 0 : count
+          hits: state.basis === 'respect' ? 0 : count,
+          score: state.basis === 'respect' ? count : 0
         });
       });
       return found;
@@ -1364,6 +1759,33 @@
         document.querySelectorAll('[data-basis]').forEach(function (other) {
           other.setAttribute('aria-pressed', String(other === button));
         });
+        if (isWeighted() && state.mode === 'rate') {
+          state.mode = 'pool';
+          document.querySelectorAll('[data-mode]').forEach(function (other) {
+            other.setAttribute('aria-pressed', String(other.getAttribute('data-mode') === 'pool'));
+          });
+        }
+        render(); save();
+      });
+    });
+
+    document.querySelectorAll('[data-weight]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        state.weightHits = Number(button.getAttribute('data-weight'));
+        el.weightHits.value = String(state.weightHits);
+        render(); save();
+      });
+    });
+
+    el.weightHits.addEventListener('input', function () {
+      state.weightHits = Math.min(Math.round(parseNumber(el.weightHits.value)), 100);
+      render(); save();
+    });
+    el.weightHits.addEventListener('blur', function () { render(); });
+
+    document.querySelectorAll('[data-chainbonus]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        state.chainBonusFF3 = button.getAttribute('data-chainbonus') === 'true';
         render(); save();
       });
     });
@@ -1400,6 +1822,8 @@
           state.members.sort(function (a, b) { return countOf(b) - countOf(a); });
         } else if (key === 'assists') {
           state.members.sort(function (a, b) { return b.assists - a.assists; });
+        } else if (key === 'respect') {
+          state.members.sort(function (a, b) { return respectOf(b) - respectOf(a); });
         } else {
           var amounts = {};
           result.payouts.forEach(function (p) { amounts[p.member.id] = p.amount; });
@@ -1511,6 +1935,11 @@
       if (blocked) {
         el.copyToast.className = 'msg err';
         show(el.copyToast, blocked);
+        return;
+      }
+      if (isWeighted() && !logReady()) {
+        el.copyToast.className = 'msg err';
+        show(el.copyToast, WEIGHTED_BLOCKED);
         return;
       }
       var text = build();
