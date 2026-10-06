@@ -1,4 +1,7 @@
 <!doctype html>
+<!-- warroom: the sharp War Room page. Built from warroom-3d build B2 (click fix + no page jump +
+     disabled-press fix). Same claim board and same DIBS rules as KS Torn War Dibs PC 1.1.10 and
+     PDA 1.5.186. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -133,6 +136,10 @@
   .btn.quiet:hover { color: var(--bad); border-color: var(--line); }
   .btn.small { font-size: 12px; padding: 6px 10px; }
   .btn.danger { border-color: var(--bad); color: var(--bad); }
+  /* A low-life target. The same three colours the KS Torn War Dibs scripts
+     put on their low-life button, so the pink means one thing everywhere. */
+  .btn.lowhp, .btn.lowhp:hover { border-color: #d53f8c; background: #702459; color: #fff5f7; }
+  a.btn { text-decoration: none; display: inline-block; }
 
   .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
   .grow { flex: 1 1 200px; min-width: 0; }
@@ -142,6 +149,11 @@
   .msg.ok { background: var(--good-soft); color: var(--good); }
   .msg.note { background: var(--surface-2); color: var(--muted); }
   .msg[hidden] { display: none; }
+  #actionMessage {
+    position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%);
+    width: calc(100% - 32px); max-width: 560px; z-index: 1000;
+    pointer-events: none;
+  }
 
   /* The password panel is a normal state of this page, not a fault. A member who has
      not been given the word yet must meet a calm request, never a red error. */
@@ -191,16 +203,40 @@
 
   .dibs { font-size: 13px; }
   .dibs .holder { font-weight: 600; }
-  .dibs .left { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+  /* The line under the state word is read, not shouted: it keeps its own face
+     also inside the Locked and Unknown words, which are set in capitals. */
+  .dibs .left { color: var(--muted); font-family: var(--mono); font-size: 12px;
+    font-weight: 400; letter-spacing: normal; text-transform: none; }
   .dibs.offline { font-family: var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--bad); font-weight: 600; }
   .dibs.locked { font-family: var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
   .dibs.unknown { font-family: var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--warn); font-weight: 600; }
   .dibs.free { color: var(--faint); }
+  /* A row nobody holds: the word with the hospital time beside it, and one
+     note under it. Neither line breaks, so every such row is the same height
+     whatever it says, and the list does not move as targets come into the
+     window and leave it. The one note that is a whole sentence may wrap. */
+  .dibs.rule, .dibs.rule .left { white-space: nowrap; }
+  .dibs.rule .left.sentence { white-space: normal; max-width: 30ch; height: auto; }
+  .dibs .when { margin-left: 8px; color: var(--muted); font-family: var(--mono); font-size: 12px;
+    font-weight: 400; letter-spacing: normal; text-transform: none; }
+  .dibs .when:empty { margin-left: 0; }
+  /* The two lines have a height of their own, in pixels, so that the face a
+     word happens to be set in - plain, bold, capitals - cannot make one row a
+     fraction taller than the next. A claimed row (holder over time left) is
+     the same two lines. */
+  .dibs .top, .dibs .holder { height: 20px; line-height: 20px; display: flex; align-items: center; white-space: nowrap; }
+  .dibs .left { height: 18px; line-height: 18px; }
 
-  /* One cell now holds the DIBS state and the button that acts on it. The
-     existing .toolbar does the wrapping: side by side when there is room,
-     the button under the state when there is not. */
-  td .toolbar { gap: 8px 10px; }
+  /* One cell holds the DIBS state and the button that acts on it. Where the
+     button sits is decided by the width of the window and by nothing in the
+     row: beside the state on a wide screen, under it on a narrow one. It used
+     to wrap wherever the text happened to be long, and then a row grew and
+     shrank with what it said - and a list whose rows change height moves
+     under the finger. */
+  td .toolbar { gap: 8px 10px; flex-wrap: nowrap; }
+  @media (max-width: 1000px) {
+    td .toolbar { flex-direction: column; align-items: flex-start; }
+  }
 
   /* Sortable headers. Same face and colour as before; a real button, so the
      list can be ordered from the keyboard, and the whole header cell is the
@@ -241,11 +277,27 @@
     background: var(--warn-soft); color: var(--warn); font-size: 13px;
   }
   .simreset .tid { color: var(--warn); }
+  /* Reserve both reset labels in this bar only; target rows keep their height. */
+  #simResetBar { display: grid; grid-template-columns: max-content minmax(0, 1fr); }
+  #simResetBtn, #simResetButtonSize { grid-area: 1 / 1; }
+  #simResetNote, #simResetIdleSize, #simResetArmedSize { grid-area: 1 / 2; }
+  .simreset-size { visibility: hidden; pointer-events: none; }
+  .simreset-size.btn { line-height: normal; }
+  @media (max-width: 600px) {
+    #simResetBar { grid-template-columns: minmax(0, 1fr); }
+    #simResetNote, #simResetIdleSize, #simResetArmedSize { grid-area: 2 / 1; }
+  }
 
   .stale {
     display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
     padding: 11px 18px; border-bottom: 1px solid var(--line);
     background: var(--warn-soft); color: var(--warn); font-size: 13px;
+  }
+
+  /* The DIBS rules, one line above the list. Always there, never a warning. */
+  .rulesline {
+    margin: 0; padding: 11px 18px; border-bottom: 1px solid var(--line);
+    color: var(--muted); font-size: 13px;
   }
 
   /* FF and EST. A figure is set in the mono face; a word - CHECKING, UNKNOWN -
@@ -272,9 +324,15 @@
     padding: 13px 18px; cursor: pointer;
   }
   summary:hover { color: var(--accent); }
-  details dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 14px; }
+  details dl { margin: 0; display: grid; grid-template-columns: minmax(0, max-content) minmax(0, 1fr); gap: 6px 16px; font-size: 14px; }
   details dt { font-weight: 600; color: var(--muted); }
-  details dd { margin: 0; }
+  /* A path or an address in the text may break anywhere: on a phone it used
+     to push the whole page wider than the screen. */
+  details dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+  @media (max-width: 600px) {
+    details dl { grid-template-columns: minmax(0, 1fr); gap: 2px 0; }
+    details dd { margin-bottom: 8px; }
+  }
   details.panel { border-top: 0; }
 
   pre.raw {
@@ -299,9 +357,10 @@
     <p>Claims go to a test war, not the real one. Nothing here affects war
       <span id="simRealWar">&mdash;</span> or anything the faction sees. Every call goes to
       <code id="simWireWar">&mdash;</code>, a board of its own.</p>
-    <p><strong>Take as other</strong> claims a target as Torn <code id="simOtherId">&mdash;</code>,
-      a made-up test member that cannot be anybody real. That is how the refusal is tried out:
-      take a target as the other, then take it yourself.</p>
+    <p><strong>There is no &ldquo;take as other&rdquo; any more.</strong> The server now takes the
+      Torn ID from the sign-in, not from the request, so this page cannot claim in anybody else's
+      name &mdash; not even a made-up one. Trying the refusal needs a second real member on his own
+      device; that is stage 3G.</p>
     <p>Leave the address without <code>?sim=1</code> to be back on the real board.</p>
   </div>
 
@@ -313,13 +372,14 @@
       <p>The other faction's roster during a Ranked War, and one shared board for who has called
         which target. It reads; it never attacks, opens or sends anything for you.</p>
     </div>
-    <span class="stamp">Beta &middot; not live yet</span>
+    <span class="stamp">Ranked War &middot; shared DIBS</span>
   </header>
 
   <section class="panel">
     <div class="panel-head">
       <h2>Sign in</h2>
-      <p class="hint">Three separate things: your own Torn key, an FFScouter key if you have one, and the faction's War Room password.</p>
+      <p class="hint">Two things: your own Torn key, and an FFScouter key if you have one. There is
+        no War Room password any more &mdash; your Torn key is what signs you in.</p>
     </div>
     <div class="panel-body">
 
@@ -330,12 +390,18 @@
                  placeholder="Paste your key">
           <button type="button" class="btn" id="toggleKey" aria-pressed="false">Show</button>
           <button type="button" class="btn primary" id="loadBtn">Load the war</button>
+          <a class="btn" id="createKey" target="_blank" rel="noopener noreferrer">Create custom API key</a>
           <button type="button" class="btn quiet" id="forgetKey">Forget key</button>
         </div>
+        <p class="fieldhint">The same key the KS Torn War Dibs scripts use: a custom key with
+          faction &rarr; members, wars and user &rarr; basic, profile. <strong>Create custom API
+          key</strong> opens Torn's own key page with exactly that filled in. A key without
+          profile still works for everything except low-life DIBS.</p>
+        <p class="fieldhint said" id="lifeSaid" hidden></p>
       </div>
 
       <div>
-        <label class="lbl" for="ffKey">Your FFScouter API key (optional)</label>
+        <label class="lbl" for="ffKey">Your FFScouter API key (required to call targets)</label>
         <div class="toolbar">
           <input type="password" id="ffKey" class="grow" autocomplete="off" spellcheck="false"
                  placeholder="Paste your FFScouter key">
@@ -343,31 +409,21 @@
           <button type="button" class="btn quiet" id="forgetFfKey">Forget key</button>
         </div>
         <p class="fieldhint">Not your Torn key. Get this from ffscouter.com. Without it the
-          FF and EST columns stay empty; everything else works as usual.</p>
+          FF and EST columns stay empty and <strong>no target can be called</strong> &mdash; the
+          page cannot check that a target is inside your FF range without it. The roster, the
+          hospital times and the board still load as usual.</p>
         <p class="fieldhint said" id="ffSaid" hidden></p>
       </div>
 
-      <div class="ask" id="passAsk">
-        <span class="title">Faction War Room password</span>
-        <p>This board needs the faction's War Room password. Kingshade hands it out &mdash; ask in
-          faction chat if you have not been given it. Nothing else here depends on it: the roster
-          below still loads without it, only the DIBS column stays locked.</p>
-        <p class="said" id="passSaid" hidden></p>
+      <div class="ask" id="sessionBox">
+        <span class="title">War Room sign-in</span>
+        <p>The board asks Torn who your key belongs to. Members of the faction are let in; nobody
+          else is. Nothing is stored for this &mdash; the sign-in lives in this tab only, and is
+          renewed from your key without you noticing.</p>
+        <p class="said" id="sessionSaid" hidden></p>
         <div class="toolbar">
-          <label class="lbl" for="warPass" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">War Room password</label>
-          <input type="password" id="warPass" class="grow" autocomplete="off" spellcheck="false"
-                 placeholder="Type the War Room password">
-          <button type="button" class="btn primary" id="passSave">Save on this device</button>
-        </div>
-      </div>
-
-      <div class="ask" id="passHave" hidden>
-        <span class="title">Faction War Room password</span>
-        <p>Stored in this browser, on this device only. It is sent to the claim server and nowhere
-          else, and it is never shown back to you.</p>
-        <div class="toolbar">
-          <button type="button" class="btn" id="passChange">Type a different one</button>
-          <button type="button" class="btn quiet" id="passForget">Forget password</button>
+          <span class="title" id="sessionState">CHECKING</span>
+          <button type="button" class="btn" id="sessionRetry">Sign in again</button>
         </div>
       </div>
 
@@ -378,27 +434,99 @@
     <details>
       <summary>What this page does, calls and stores</summary>
       <div class="panel-body">
+
+        <p class="hint">Torn asks every tool that takes a key to say these five things. Here they
+          are, and everything below them is the long version of the same answer.</p>
         <dl>
-          <dt>Key level</dt>
-          <dd>A Custom Key with faction &rarr; <strong>members</strong> and faction &rarr;
-            <strong>wars</strong>. Torn error 16 means one of those two boxes is not ticked.</dd>
+          <dt>Data Storage</dt><dd>Temporary (&lt; 1 day). A war's board is deleted by the server
+            after twelve hours without a change.</dd>
+          <dt>Data Sharing</dt><dd>Faction. Who holds which target is shown to this faction only.</dd>
+          <dt>Purpose of Use</dt><dd>Competitive advantage.</dd>
+          <dt>Key Storage &amp; Sharing</dt><dd>Not stored/shared. Your key is never stored on the
+            server, never written to its log, and never shown to another member.</dd>
+          <dt>Key Access Level</dt><dd>Public. A custom key with faction &rarr; members, wars and
+            user &rarr; basic, profile &mdash; the key the KS Torn War Dibs scripts use.</dd>
+        </dl>
+
+        <dl>
+          <dt>DIBS rules</dt>
+          <dd>The same rules as KS Torn War Dibs PC and PDA, decided the same way. A target can be
+            called only while the war is live, in hospital with 2:00 or less left, with a Fair
+            Fight of 2.00&ndash;3.40. A target with 20% life or less may be called up to Fair Fight
+            4.50. A target that is online is free for all and cannot be called; when its activity
+            is unknown or the reading is too old, DIBS applies as usual. One active DIBS per
+            member; the first successful DIBS wins and the holder can release it.</dd>
           <dt>Torn calls</dt>
           <dd><code>/v2/key/info</code> once, for your own Torn ID and faction.
             <code>/v2/faction/wars</code> for the war that is running right now.
-            <code>/v2/faction/{opponent}/members</code> for the other side's roster and their
-            hospital, jail and travel state. <code>/v2/faction/members</code> for our own names, so
-            a claim can say who holds it. Every request is tagged <code>KSWarRoom</code>.</dd>
+            <code>/v2/faction/{opponent}/members</code> for the other side's roster: their
+            hospital, jail and travel state, and whether they are online.
+            <code>/v2/faction/members</code> for our own names, so a claim can say who holds it.
+            <code>/v2/user/{target}/profile</code> for the life of a target that is about to leave
+            hospital, which is what low-life DIBS is decided on: only while the war is live (or
+            the page is in simulation) and this page is on screen, only for targets that are not
+            online and have 2:00 or less left, one at a time, each
+            target at most every ten seconds and at most thirty readings a minute &mdash; plus one
+            reading when you press Take DIBS on a target above Fair Fight 3.40.
+            <strong>When you press Take DIBS</strong> the page asks Torn twice before anything is
+            sent, as the scripts do: <code>/v2/faction/wars</code> (is the war still live) and
+            <code>/v2/user/{target}/basic</code> (is the target still in hospital with 2:00 or
+            less). If Torn says no, fails or does not answer within fifteen seconds, nothing is
+            sent. Every request is
+            tagged <code>KSWarRoom</code>, and the page stops itself at 100 requests a minute.
+            <strong>Nothing else.</strong> The hospital report described below is sent from the
+            roster reading this page already does &mdash; it never asks Torn again for it.</dd>
+          <dt>The clock</dt>
+          <dd>The 2:00 limit is never counted on this device's clock. It is counted on Torn's
+            time when Torn's answers give it, and otherwise on the KS War Room server's time,
+            which comes with every reading of the claim board. The page makes no request for
+            either &mdash; it reads the time off answers it already gets &mdash; and always takes
+            the earliest time those answers allow, so a target can open a moment late here but
+            not early by this device's doing. Until one of the two has been read, no target can
+            be called. If this device's clock is set forwards or back, the page notices, calls
+            nothing, and reads the time again with the next answer. Advanced says which clock
+            is in use.</dd>
+          <dt>Signing in</dt>
+          <dd>Your key is sent once to the claim server, which asks Torn whose key it is and whether
+            that person is in this faction. If so it hands back a signed slip that says your Torn ID
+            and when it runs out. The slip lives in this tab only &mdash; not in this browser's
+            storage &mdash; and is replaced from your key when it runs out. Your key is not kept by
+            the server for a moment longer than that one question.</dd>
           <dt>Claim server</dt>
-          <dd>Reads and writes the shared DIBS board at
-            <code>ks-war-room-claims.hans-viklund.workers.dev</code>. It is sent only the war ID, a
-            target's Torn ID, your Torn ID and the War Room password.</dd>
+          <dd>Reads and writes the shared DIBS board at <code id="aboutServer"></code>. That is
+            the KS War Room server &mdash; the one KS Torn War Dibs PC and PDA use, so this page and
+            the scripts show and write the same board. Every request is a
+            POST and carries the signed slip in its body: never in a web address, never in a header.
+            It is sent the war ID, a target's Torn ID, and the target's hospital end time as Torn
+            reported it. <strong>It is never sent your Torn key</strong> after the sign-in, and
+            never your FFScouter key.</dd>
+          <dt>Who a claim belongs to</dt>
+          <dd>The server takes your Torn ID from the signed slip, not from anything this page puts
+            in the request. This page cannot claim, release or empty in anybody else's name, and
+            neither can anyone else in yours.</dd>
+          <dt>Releasing a target automatically</dt>
+          <dd>When the roster reading above shows a called target back in hospital with a clearly
+            later end time than when it was called, this page tells the server so and the server
+            frees the claim. The reading is the one already on screen &mdash; no extra call to Torn
+            is made for it, and the time sent is the time of that reading, not of the message.
+            Nothing is reported from a reading made 45 seconds or less after the claim was taken:
+            Torn may still be showing the hospital time from before it.
+            The server decides; this page only reports.
+            <strong>Your own claim</strong> the page releases by itself in two cases, as the
+            scripts do: when the target comes online (it is then free for all), and when the
+            target is back in hospital with more than three minutes left (it has been beaten).
+            It says so in the box at the bottom. It never releases anybody else's claim, and it
+            asks Torn nothing extra for this either.</dd>
           <dt>Your API key</dt>
-          <dd>Stays in this browser. It goes to <code>api.torn.com</code> only, in a request header,
-            never in a web address. It is <strong>never</strong> sent to the claim server, and never
-            to FFScouter.</dd>
+          <dd>Stays in this browser. It goes to <code>api.torn.com</code> in a request header, and
+            to the claim server once at sign-in, in a request body. Never in a web address. Never to
+            FFScouter.</dd>
           <dt>Stored in this browser</dt>
-          <dd>Your Torn key, your FFScouter key if you gave one, and the War Room password, in this
-            device's local storage. Nothing else. Each has its own Forget button above.</dd>
+          <dd>Your Torn key and your FFScouter key if you gave one, in this browser's local storage
+            on this device, as plain text &mdash; this page does not encrypt them. They stay until
+            you press Forget key or clear the browser's site data. The column you last sorted the
+            list by is kept there too. Nothing else &mdash; and not the sign-in slip. Each key has
+            its own Forget button above.</dd>
           <dt>Writes</dt>
           <dd>Nothing in Torn, ever. No attacks, no clicks, no navigation, no page scraping, no
             background watching, nothing to do with captcha. The only thing this page writes is a
@@ -408,9 +536,10 @@
             key on this page, this browser asks <code>ffscouter.com</code> for Fair Fight and
             estimated battle stats for the targets on the list: one request for the whole list, at
             most every five minutes, only while the page is on screen. It sends that key and the
-            targets' Torn IDs, nothing else. Without a key the two columns show a dash and nothing
-            is sent. Figures older than fifteen minutes are marked stale; older than thirty they
-            are dropped and the cells say UNKNOWN.</dd>
+            targets' Torn IDs, nothing else. Without a key the two columns show a dash, nothing
+            is sent, and no target can be called &mdash; calling needs a target's FF to be known,
+            so that it can be checked against your FF range. Figures older than fifteen minutes
+            are marked stale; older than thirty they are dropped and the cells say UNKNOWN.</dd>
         </dl>
       </div>
     </details>
@@ -431,9 +560,13 @@
     </div>
     <div class="simreset" id="simResetBar" hidden>
       <button type="button" class="btn danger small" id="simResetBtn">Reset test war</button>
+      <span class="btn danger small simreset-size" id="simResetButtonSize" aria-hidden="true"></span>
       <span class="tid" id="simResetNote">Empties the test war's board so the whole run can be
         started over. The real war is not touched.</span>
+      <span class="tid simreset-size" id="simResetIdleSize" aria-hidden="true"></span>
+      <span class="tid simreset-size" id="simResetArmedSize" aria-hidden="true"></span>
     </div>
+    <p class="rulesline" id="rulesLine">LIVE: Hospital ≤2:00 + FF 2.00–3.40. Online targets are free for all. Low life (≤20%): FF up to 4.50. First successful DIBS wins; claimant can RELEASE.</p>
     <div class="stale" id="staleBar" hidden></div>
     <div class="stale" id="ffBar" hidden></div>
     <div id="targetHost"></div>
@@ -442,7 +575,7 @@
   <details class="panel" id="advanced">
     <summary>Advanced</summary>
     <div class="panel-body">
-      <p class="msg note">Technical state, raw answers and the wipe control. Nothing here is needed
+      <p class="msg note">Technical state and raw answers. Nothing here is needed
         to take a target.</p>
       <dl>
         <dt>Claim server</dt><dd id="advServer" class="tid"></dd>
@@ -451,15 +584,18 @@
         <dt>Claim board</dt><dd id="advClaims" class="tid"></dd>
         <dt>Roster</dt><dd id="advRoster" class="tid"></dd>
         <dt>FF and EST</dt><dd id="advFf" class="tid"></dd>
+        <dt>Life</dt><dd id="advLife" class="tid"></dd>
+        <dt>Clock</dt><dd id="advClock" class="tid"></dd>
         <dt>Last refusal</dt><dd id="advError" class="tid"></dd>
       </dl>
       <div>
         <label class="lbl">Last claim-board answer</label>
         <pre class="raw" id="advRaw">&mdash;</pre>
       </div>
-      <div class="toolbar">
-        <button type="button" class="btn danger small" id="wipeBtn" disabled>Wipe every claim in this war</button>
-        <span class="tid" id="wipeNote">Empties the whole war's claim board, for everyone in the faction.</span>
+      <div class="toolbar" id="advWipeNote" hidden>
+        <span class="tid">Emptying a war's board is only possible in simulation, and only for the
+          Torn IDs the server has been told may do it. Use <strong>Reset test war</strong> above the
+          list. Against a real war the server refuses it, for everyone.</span>
       </div>
     </div>
   </details>
@@ -475,13 +611,22 @@
   </footer>
 </div>
 
+<p class="msg ok" id="actionMessage" role="status" hidden></p>
+
 <script>
 (function () {
   'use strict';
 
+  // The KS War Room server. The one address the claim board is read and
+  // written at, and the same one KS Torn War Dibs PC and PDA use: the page and
+  // the scripts are three clients of one board. Written here once; the text on
+  // the page reads it from here.
   var CLAIM_SERVER = 'https://ks-war-room-claims.hans-viklund.workers.dev';
+  // Torn's own key page with the selections this page needs filled in. The
+  // exact address KS Torn War Dibs PC 1.1.10 opens (SCRIPT.tornCustomKeyUrl),
+  // so a key made from either place is the same key.
+  var TORN_CUSTOM_KEY_URL = "https://www.torn.com/preferences.php#tab=api?step=addNewKey&title=KS%20Torn%20War%20Dibs%20PC&faction=members,wars&user=basic,profile";
   var KEY_STORE = 'ks-leader-board-key';
-  var PASS_STORE = 'ks-war-room-pass';
   var SORT_STORE = 'ks-war-room-sort';
   // The FFScouter key, under a name of its own. It is not the Torn key and
   // does not share the Torn key's storage: the two are different strings, and
@@ -507,10 +652,55 @@
   // Twelve digits. The server takes Torn IDs of up to twelve, and no real Torn
   // account is anywhere near this number, so this can never collide with a
   // member. It is written in the banner so it is not a riddle.
-  var SIM_OTHER_ID = '999000111222';
+
+  // How long before the sign-in runs out the page fetches a new one. The slip
+  // lasts 600 seconds; a minute's margin means a claim is never refused for
+  // being a second too late.
+  var SESSION_RENEW_MARGIN_MS = 60000;
+
+  // The server frees a claim when the reported hospital end time lies this far
+  // past the one saved with the claim. Same number as the server's, and it is
+  // here for ONE reason: so the page can tell in advance whether a report would
+  // change anything, and stay quiet when it would not. The server decides.
+  var AUTO_RELEASE_MARGIN_SECONDS = 180;
+
+  // How old the roster reading may be for a report to be worth sending. The
+  // server refuses anything older, so sending it would only be noise.
+  var REPORT_MAX_AGE_MS = 30000;
+
+  // R1. A report may rest only on a roster reading made MORE than this long
+  // after the claim was taken. 45 = 30 s (Torn serves a cached answer for up
+  // to 30 s, so a younger reading can still show the hospital time from before
+  // the claim) + 15 s (the clock gap the server allows). The server has the
+  // same rule and answers stale_report / before_claim to anything earlier; the
+  // page keeps the rule on its own, like KS Torn War Dibs PC and PDA
+  // (KS_SERVER.reportMinSecondsAfterClaim).
+  var REPORT_MIN_SECONDS_AFTER_CLAIM = 45;
+
+  // What has to be true of a key before it is sent ANYWHERE.
+  //
+  // This is a shape check, not a claim about Torn's key format - the exact
+  // length is not written down in anything read for this work, so it is not
+  // guessed at. What it does is stop an empty box, a sentence, a pasted URL
+  // or a key with a space in it from ever leaving this page.
+  //
+  // It matters because of what Torn does with such an attempt: api.html says
+  // repeated requests with invalid keys may earn a temporary IP ban, and a
+  // key that is obviously not a key still counts as one of those attempts.
+  // The server has the same check for the same reason. The page needs its own
+  // because the page has its own way to Torn.
+  var TORN_API_KEY_PATTERN = /^[A-Za-z0-9]{8,64}$/;
 
   var CLAIM_POLL_MS = 5000;    // the claim board changes every few seconds during a war
-  var ROSTER_POLL_MS = 30000;  // hospital and jail timers do not need more than this
+  // The roster is read as often as KS Torn War Dibs PC reads it
+  // (CONFIG.tornStatusPollMs). It has to be: a reading older than
+  // CONFIG.opponentMembersMaxAgeMs no longer says who is online or in hospital,
+  // so a slower poll would leave the rules with nothing to decide on for part
+  // of every round.
+  var ROSTER_POLL_MS = 10000;
+  // After a call to Torn has failed, how long the regular polling leaves Torn
+  // alone (PC: CONFIG.tornStatusErrorBackoffMs).
+  var TORN_ERROR_BACKOFF_MS = 15000;
   var WAR_POLL_MS = 120000;    // which war is running changes twice a week, not twice a minute
   var OWN_MEMBERS_MS = 300000; // our own names, used only to label a claim holder
   var FF_POLL_MS = 300000;     // FFScouter caches for 5 minutes; asking sooner only spends calls
@@ -518,13 +708,566 @@
   var FF_STALE_MS = 900000;    // FF and EST older than 15 minutes are marked stale
   var FF_DROP_MS = 1800000;    // older than 30 minutes they are dropped and the cells say UNKNOWN
 
-  // The span of Fair Fight a member may call a target inside. Both ends count:
-  // a target sitting exactly on either end is allowed. These two lines are the
-  // only place the figures are written - the wording on the page reads them
-  // from here rather than repeating them, so moving the span moves every text
-  // with it, and searching the file for either figure finds one line.
-  var FF_CLAIM_MIN = 2.00;
-  var FF_CLAIM_MAX = 5.00;
+  // =========================================================================
+  // DIBS RULES - copied from KS Torn War Dibs PC 1.1.10, character for
+  // character where a line could be taken whole.
+  //
+  // A member must never be able to take a target here that the script would
+  // have locked, or the other way round: the page and the scripts write to one
+  // board. So the page does not have rules of its own. CONFIG below is the
+  // script's CONFIG (the entries this page uses, same names, same values), and
+  // classifyLiveTargetState is the script's function, unchanged. It is the
+  // ONE place on this page that decides whether a target may be called;
+  // nothing else compares a Fair Fight, a hospital time or an activity to a
+  // limit to decide that. To change a rule, change it in the script and copy
+  // it here again - never here alone.
+  // =========================================================================
+
+  const CONFIG = Object.freeze({
+    gateSeconds: 120,
+    minFairFight: 2.0,
+    maxFairFight: 3.4,
+    lowHpLifeMaxRatio: 0.20,
+    lowHpMaxFairFight: 4.5,
+    lifeMaxAgeMs: 15000,
+    lifeReadMinIntervalMs: 10000,
+    lifeReadsPerMinuteMax: 30,
+    tornCallsPerMinuteMax: 100,
+    opponentMembersMaxAgeMs: 30000,
+    tornClockMaxRoundTripMs: 10000,
+    tornClockDriftPpm: 500,
+    requestTimeoutMs: 15000,
+    autoReleaseHospitalSeconds: 180,
+    maxHospitalSeconds: 172800
+  });
+
+  const TARGET_STATE = Object.freeze({
+    CLAIMED: "claimed",
+    BLOCKED: "blocked",
+    UNAVAILABLE: "unavailable",
+    UNKNOWN: "unknown",
+    LOCKED: "locked",
+    READY: "ready",
+    FREE: "free"
+  });
+
+  const RW_PHASE = Object.freeze({
+    UNKNOWN: "unknown",
+    PREWAR: "prewar",
+    LIVE: "live"
+  });
+
+  function classifyLiveTargetState({ playerId, ownTargetId, isHospital, seconds, fairFight, rwPhase, activity = null, lowHp = false }) {
+    const ff = Number.isFinite(fairFight) ? Number(fairFight) : null;
+    if (ownTargetId) {
+      if (ownTargetId === playerId) return { state: TARGET_STATE.CLAIMED, seconds, fairFight: ff, reason: "active-own-dibs", mode: "live" };
+      return { state: TARGET_STATE.BLOCKED, seconds, fairFight: ff, reason: "another-active-dibs", mode: "live" };
+    }
+    if (rwPhase?.phase !== RW_PHASE.LIVE) {
+      return {
+        state: TARGET_STATE.LOCKED,
+        seconds,
+        fairFight: ff,
+        reason: rwPhase?.phase === RW_PHASE.PREWAR ? "rw-not-started" : "rw-phase-unverifiable",
+        mode: "prewar",
+        prewarHospital: isHospital,
+        rwPhase
+      };
+    }
+    if (!isHospital) return { state: TARGET_STATE.UNAVAILABLE, seconds: null, fairFight: ff, reason: "not-hospital", mode: "live" };
+    if (seconds === null) return { state: TARGET_STATE.UNKNOWN, seconds: null, fairFight: ff, reason: "hospital-timer-unverifiable", mode: "live" };
+    if (seconds > CONFIG.gateSeconds) return { state: TARGET_STATE.LOCKED, seconds, fairFight: ff, reason: "hospital-too-early", mode: "live" };
+    if (ff === null) return { state: TARGET_STATE.UNKNOWN, seconds, fairFight: null, reason: "fair-fight-unverifiable", mode: "live" };
+    if (ff < CONFIG.minFairFight) return { state: TARGET_STATE.LOCKED, seconds, fairFight: ff, reason: "fair-fight-too-low", mode: "live" };
+    if (ff > (lowHp === true ? CONFIG.lowHpMaxFairFight : CONFIG.maxFairFight)) return { state: TARGET_STATE.LOCKED, seconds, fairFight: ff, reason: "fair-fight-too-high", mode: "live" };
+    if (activity === "online") return { state: TARGET_STATE.FREE, seconds, fairFight: ff, reason: "online-free-for-all", mode: "live" };
+    return { state: TARGET_STATE.READY, seconds, fairFight: ff, reason: lowHp === true ? "hospital-window-low-life-fair-fight-open" : "hospital-window-and-fair-fight-open", mode: "live", ...(lowHp === true ? { lowHp: true } : {}) };
+  }
+
+  // ----------------------------------------------- what the rules are fed
+  //
+  // The four small functions below are the script's own as well
+  // (normalizeText, isHospitalStatusValue, hospitalUntilExpired,
+  // hospitalRemainingSeconds). They turn Torn's status into the two things the
+  // rule function is asked about a hospital stay: is the target in, and for
+  // how many more seconds.
+
+  function normalizeText(value) {
+    return String(value ?? "").replace(/\s+/g, " ").trim();
+  }
+
+  function isHospitalStatusValue(value) { return /hospital/i.test(normalizeText(value)); }
+
+  // A release timestamp that has passed means the target is out, whatever a
+  // cached or lagging status record still claims. Returns false when there is
+  // no usable timestamp, so a genuinely unknown release time is left alone.
+  function hospitalUntilExpired(until) {
+    const timestamp = Number(until);
+    if (!Number.isFinite(timestamp) || timestamp <= 0) return false;
+    return timestamp - getTornNowMs() / 1000 <= 0;
+  }
+
+  function hospitalRemainingSeconds(until) {
+    const timestamp = Number(until);
+    if (!Number.isFinite(timestamp) || timestamp <= 0) return null;
+    // Ceil only. Rounding up is deliberate: showing less than the real wait
+    // makes a caller attack early and the hit fails. The extra + 1 that used to
+    // sit here was measured against Torn as a full second of overshoot.
+    const remaining = Math.ceil(timestamp - getTornNowMs() / 1000);
+    return Number.isFinite(remaining) && remaining >= 0 && remaining < CONFIG.maxHospitalSeconds
+      ? remaining
+      : null;
+  }
+
+  // =========================================================================
+  // TORN'S CLOCK - copied from the scripts.
+  //
+  // A device clock must never be able to give anybody an advantage at a claim.
+  // So the 2:00 gate is not read off this device's clock. It is read off a
+  // clock bounded against Torn's own answers, the way the scripts do it:
+  //
+  //   A response that names the whole Torn second S proves that S was current
+  //   at some instant inside the round trip, and therefore that
+  //
+  //       offset  in  [ S - endedAt , S + 1000 - startedAt )
+  //
+  //   Every such response gives another interval and the truth lies in all of
+  //   them, so the running intersection can only narrow.
+  //
+  // The second S comes from two places, both of them answers this page has
+  // already asked for - no request is ever made for the clock's sake:
+  //   - the timestamp in the body of a Torn answer, when it carries one
+  //   - the Date header of a Torn answer, when the browser lets a page see it
+  //
+  // recordTornWholeSecondMs, recordTornClockOffset, tornDateHeaderMs and
+  // tornResponseIsFresh are KS Torn War Dibs PC 1.1.10's, character for
+  // character (PDA 1.5.186 has the same four). trackClockBoundsWrite,
+  // trackedRecordTornClockOffset and recordTornClockFromHeaders are PDA
+  // 1.5.186's, which count the samples and the resets for the line in Advanced.
+  //
+  // TWO MEASURES, NEVER MIXED. Torn does not always say what time it is in a
+  // way a web page can see: /v2/faction/wars carries no timestamp in its body
+  // (measured 2026-10-06), and a browser hides the Date header unless Torn
+  // lets it through. So there is a second measure, taken the same way off the
+  // KS War Room server: every answer from the claim board carries serverTime,
+  // the board is read every few seconds anyway, and no member can set that
+  // clock. The two measures have their own bounds and are never intersected
+  // with each other - one is Torn's clock and one is the server's.
+  //
+  //   getTornNowMs():  Torn's measure when there is one,
+  //                    otherwise the server's,
+  //                    otherwise nothing - see below.
+  //
+  // UNTIL THERE IS A MEASURE NOTHING CAN BE CALLED. The scripts always have
+  // one before a claim - the Date header comes with their first answer. A page
+  // may be without one, and then the honest state is "DIBS off", not "trust
+  // this device". See tornClockReady() and rwPhaseOf().
+  // =========================================================================
+
+  let tornClockLowMs = null;
+  let tornClockHighMs = null;
+  let tornClockBoundsAt = 0;
+  let tornClockSampleCount = 0;
+  let tornClockResetCount = 0;
+
+  // The server's measure: the same five, for the other clock.
+  let serverClockLowMs = null;
+  let serverClockHighMs = null;
+  let serverClockBoundsAt = 0;
+  let serverClockSampleCount = 0;
+  let serverClockResetCount = 0;
+
+  // Which measure the page is counting on right now ('torn', 'server' or ''),
+  // and how often that has changed or been thrown away. Both are shown as
+  // resets in Advanced, beside the measure's own.
+  let clockSourceInUse = '';
+  let clockSourceResets = 0;
+
+  // This device's clock against this device's own stopwatch, as it stood when
+  // the last measure was taken. See deviceClockMoved().
+  let deviceClockAnchor = null;
+  const DEVICE_CLOCK_STEP_MS = 500;
+
+  function nowMs() { return Date.now(); }
+
+  // Torn's HTTP Date header is the server's own clock and comes back with every
+  // response the page already makes.
+  function tornDateHeaderMs(headers) {
+    const text = String(headers ?? "");
+    if (!text) return null;
+    const match = /^[ \t]*date[ \t]*:[ \t]*(.+?)[ \t]*$/im.exec(text);
+    if (!match) return null;
+    const parsed = Date.parse(match[1]);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  // A reply replayed from a cache carries an old Date and would drag the offset
+  // backwards, so anything with a non-zero Age is refused.
+  function tornResponseIsFresh(headers) {
+    const match = /^[ \t]*age[ \t]*:[ \t]*(\d+)[ \t]*$/im.exec(String(headers ?? ""));
+    if (!match) return true;
+    return Number(match[1]) === 0;
+  }
+
+  function recordTornWholeSecondMs(secondStartMs, startedAt, endedAt) {
+    if (!Number.isFinite(secondStartMs) || secondStartMs <= 0) return;
+    if (!Number.isFinite(startedAt) || !Number.isFinite(endedAt)) return;
+    if (endedAt < startedAt) return;
+    // A round trip this long says almost nothing and may itself be stale.
+    if (endedAt - startedAt > CONFIG.tornClockMaxRoundTripMs) return;
+
+    const low = secondStartMs - endedAt;
+    const high = secondStartMs + 1000 - startedAt;
+
+    if (!Number.isFinite(tornClockLowMs) || !Number.isFinite(tornClockHighMs)) {
+      tornClockLowMs = low;
+      tornClockHighMs = high;
+      tornClockBoundsAt = endedAt;
+      return;
+    }
+
+    // Two crystals drift apart. Let the kept bounds relax by that much before
+    // intersecting, so a long session does not slowly contradict itself.
+    const age = Math.max(0, endedAt - tornClockBoundsAt);
+    const slack = (age * CONFIG.tornClockDriftPpm) / 1e6;
+    const nextLow = Math.max(low, tornClockLowMs - slack);
+    const nextHigh = Math.min(high, tornClockHighMs + slack);
+
+    if (nextLow >= nextHigh) {
+      // Contradiction: the PC clock stepped, or an old reply slipped through.
+      // The newest evidence wins outright rather than poisoning the running set.
+      tornClockLowMs = low;
+      tornClockHighMs = high;
+      tornClockBoundsAt = endedAt;
+      return;
+    }
+
+    tornClockLowMs = nextLow;
+    tornClockHighMs = nextHigh;
+    tornClockBoundsAt = endedAt;
+  }
+
+  function trackClockBoundsWrite(secondStartMs, startedAt, endedAt, invoke) {
+    const beforeLow = tornClockLowMs;
+    const beforeHigh = tornClockHighMs;
+    const beforeBoundsAt = tornClockBoundsAt;
+    invoke();
+    if (tornClockLowMs === beforeLow && tornClockHighMs === beforeHigh && tornClockBoundsAt === beforeBoundsAt) return;
+    tornClockSampleCount += 1;
+    if (!Number.isFinite(beforeLow) || !Number.isFinite(beforeHigh)) return;
+    const rawLow = secondStartMs - endedAt;
+    const rawHigh = secondStartMs + 1000 - startedAt;
+    const age = Math.max(0, endedAt - beforeBoundsAt);
+    const slack = (age * CONFIG.tornClockDriftPpm) / 1e6;
+    const wouldBeLow = Math.max(rawLow, beforeLow - slack);
+    const wouldBeHigh = Math.min(rawHigh, beforeHigh + slack);
+    if (wouldBeLow >= wouldBeHigh) tornClockResetCount += 1;
+  }
+
+  function recordTornClockOffset(result, body) {
+    const timestamp = Number(body?.timestamp);
+    if (!Number.isFinite(timestamp) || timestamp <= 0) return;
+    // Same whole-second evidence as the Date header, from the body instead.
+    // Torn reports the floor of its clock, so the value names the second start.
+    recordTornWholeSecondMs(timestamp * 1000, Number(result.startedAt), Number(result.endedAt));
+  }
+
+  function trackedRecordTornClockOffset(result, body) {
+    trackClockBoundsWrite(
+      Number(body?.timestamp) * 1000,
+      Number(result?.startedAt),
+      Number(result?.endedAt),
+      () => recordTornClockOffset(result, body)
+    );
+  }
+
+  function recordTornClockFromHeaders(result) {
+    if (!result?.ok || !tornResponseIsFresh(result.headers)) return;
+    const serverMs = tornDateHeaderMs(result.headers);
+    if (serverMs === null) return;
+    const startedAt = Number(result.startedAt);
+    const endedAt = Number(result.endedAt);
+    // Date is a whole second, so the value is that second's own start.
+    trackClockBoundsWrite(serverMs, startedAt, endedAt, () => recordTornWholeSecondMs(serverMs, startedAt, endedAt));
+  }
+
+  // A measure is an offset between this device's clock and somebody else's.
+  // If this device's clock is SET - by hand, or by the system - the offset is
+  // about a clock that no longer exists, and counting on it would move the
+  // 2:00 gate by exactly as much as the clock was moved. The scripts are
+  // covered by their last check before a claim, which reads Torn's clock
+  // again. This page may have only the server's measure, which arrives with
+  // the board every few seconds and not at the moment of a press - so between
+  // two board readings a clock set forward would have opened a target early.
+  //
+  // performance.now() is this device's stopwatch: it runs at the same rate as
+  // the clock but cannot be set. The difference between the two is therefore
+  // constant, and when it is not, the clock has been moved. Then both
+  // measures are thrown away - nothing can be called - until the next answer
+  // brings a new one. That is at most one board reading away.
+  function deviceClockMoved() {
+    if (deviceClockAnchor === null) return false;
+    return Math.abs((nowMs() - performance.now()) - deviceClockAnchor) > DEVICE_CLOCK_STEP_MS;
+  }
+
+  function dropMeasuresIfDeviceClockMoved() {
+    if (!deviceClockMoved()) return;
+    tornClockLowMs = null; tornClockHighMs = null; tornClockBoundsAt = 0;
+    serverClockLowMs = null; serverClockHighMs = null; serverClockBoundsAt = 0;
+    deviceClockAnchor = null;
+    clockSourceInUse = '';
+    clockSourceResets += 1;
+  }
+
+  // After a measure has been taken: the stopwatch is read again, so that slow
+  // drift between the two never adds up to something that looks like a step.
+  function anchorDeviceClock() {
+    deviceClockAnchor = nowMs() - performance.now();
+  }
+
+  // The measure the page counts on: Torn's when there is one, otherwise the
+  // server's, otherwise none. A change from one to the other in the middle of
+  // a session is counted - it is a reset of the clock the member is looking at.
+  function clockSource() {
+    dropMeasuresIfDeviceClockMoved();
+    const source = Number.isFinite(tornClockLowMs) ? 'torn' : (Number.isFinite(serverClockLowMs) ? 'server' : '');
+    if (source !== clockSourceInUse) {
+      if (source !== '' && clockSourceInUse !== '') clockSourceResets += 1;
+      if (source !== '') clockSourceInUse = source;
+    }
+    return source;
+  }
+
+  // The low edge of the interval, never the middle. The middle is unbiased but
+  // wrong in both directions, and one direction is unacceptable: a clock that
+  // runs ahead makes the cell show less time than there is and somebody attacks
+  // early. The low edge puts our clock as far behind Torn as the evidence
+  // permits, so the remaining time reads as high as the evidence permits. The
+  // cell can read high while the interval is still wide. It can never read low.
+  //
+  // The scripts' getTornNowMs with two differences. Theirs asks the Torn page
+  // it runs in for window.getCurrentTimestamp() before it falls back on the
+  // device; this page is not a Torn page and has no such function. And this
+  // one has the server's measure to fall back on before the device. Without
+  // any measure the device clock is what is left, and it is used for nothing
+  // but drawing - tornClockReady() keeps every decision shut until then.
+  function getTornNowMs() {
+    const source = clockSource();
+    if (source === 'torn') return nowMs() + tornClockLowMs;
+    if (source === 'server') return nowMs() + serverClockLowMs;
+    return nowMs();
+  }
+
+  function tornClockReady() { return clockSource() !== ''; }
+
+  // The low edge in use, for the one place that needs the offset itself: the
+  // time of a roster reading, told on the clock the page counts on.
+  function clockLowMs() {
+    const source = clockSource();
+    return source === 'torn' ? tornClockLowMs : (source === 'server' ? serverClockLowMs : null);
+  }
+
+  // The line in Advanced. It says which clock is being counted on, in the
+  // words the PDA script's panel uses for its own.
+  function tornClockLabel() {
+    const source = clockSource();
+    if (source === 'torn') {
+      const widthMs = Math.round(tornClockHighMs - tornClockLowMs);
+      return `Torn bounded clock (±${widthMs} ms · ${tornClockSampleCount} samples · ${tornClockResetCount + clockSourceResets} resets)`;
+    }
+    if (source === 'server') {
+      const widthMs = Math.round(serverClockHighMs - serverClockLowMs);
+      return `KS server clock (±${widthMs} ms · ${serverClockSampleCount} samples · ${serverClockResetCount + clockSourceResets} resets)`;
+    }
+    return 'UNSYNCED · DIBS is off';
+  }
+
+  // One Torn answer, handed to the clock. result is what the scripts' own
+  // request wrapper hands theirs: { ok, headers, startedAt, endedAt }, with
+  // the headers as the raw text "name: value" per line.
+  function recordTornClock(result, body) {
+    dropMeasuresIfDeviceClockMoved();
+    recordTornClockFromHeaders(result);
+    if (result.ok && body && typeof body === 'object' && !body.error) trackedRecordTornClockOffset(result, body);
+    if (Number.isFinite(tornClockLowMs)) anchorDeviceClock();
+  }
+
+  // The five variables of Torn's measure and the five of the server's change
+  // places. The functions that keep the bounds are the scripts' own, cut out
+  // whole, and they are written against one set of names; this is how the
+  // very same functions - not a second copy that could drift from the first -
+  // keep the server's bounds too. It is done and undone inside one call, with
+  // nothing in between that waits, so no other code ever sees the swapped
+  // state, and the two sets of bounds can never meet.
+  function swapClockMeasures() {
+    let kept;
+    kept = tornClockLowMs; tornClockLowMs = serverClockLowMs; serverClockLowMs = kept;
+    kept = tornClockHighMs; tornClockHighMs = serverClockHighMs; serverClockHighMs = kept;
+    kept = tornClockBoundsAt; tornClockBoundsAt = serverClockBoundsAt; serverClockBoundsAt = kept;
+    kept = tornClockSampleCount; tornClockSampleCount = serverClockSampleCount; serverClockSampleCount = kept;
+    kept = tornClockResetCount; tornClockResetCount = serverClockResetCount; serverClockResetCount = kept;
+  }
+
+  // One answer from the KS War Room server, handed to the clock. serverTime is
+  // the worker's own clock in milliseconds at the moment it answered. It goes
+  // through the scripts' own recordTornClockOffset, as a timestamp in seconds
+  // with its fraction kept: the function then takes that instant as the start
+  // of its interval, so
+  //
+  //     offset  in  [ serverTime - endedAt , serverTime + 1000 - startedAt )
+  //
+  // The instant was current at some moment inside the round trip, so the low
+  // edge - the only edge the page counts on - is exact to the round trip, and
+  // the high edge is a second looser than it need be, which costs nothing.
+  function recordServerClock(startedAt, endedAt, serverTime) {
+    if (!Number.isSafeInteger(serverTime) || serverTime < 1e11) return;
+    dropMeasuresIfDeviceClockMoved();
+    swapClockMeasures();
+    try {
+      trackedRecordTornClockOffset({ startedAt: startedAt, endedAt: endedAt }, { timestamp: serverTime / 1000 });
+    } finally {
+      swapClockMeasures();
+    }
+    if (Number.isFinite(serverClockLowMs)) anchorDeviceClock();
+  }
+
+  // ================================================= TORN'S CLOCK ends here ===
+
+  // Is a reading young enough to decide on? The script's limit and the
+  // script's comparison (freshOpponentStatusForTarget): a reading older than
+  // CONFIG.opponentMembersMaxAgeMs says nothing. Left out, the reading is the
+  // roster's.
+  function readingIsFresh(readAt) {
+    return !!readAt && nowMs() - readAt <= CONFIG.opponentMembersMaxAgeMs;
+  }
+
+  function rosterIsFresh() {
+    return readingIsFresh(Roster.stamps().targets);
+  }
+
+  // In hospital, and for how long - the script's computeHospitalSeconds, the
+  // half of it that reads Torn's API. The script's other half reads the row
+  // Torn itself has drawn on the war page; this page has no such row, so a
+  // reading that is too old is no evidence at all, exactly as it is for the
+  // script when Torn's row shows nothing.
+  //
+  // target is a row of the roster, or the status out of a fresh
+  // /v2/user/{id}/basic answer (see freshBasicStatus); readAt is when that
+  // reading arrived, and left out it is the roster's.
+  function hospitalOf(target, readAt) {
+    if (!target || !readingIsFresh(readAt === undefined ? Roster.stamps().targets : readAt)) return { isHospital: false, seconds: null };
+    var apiHospital =
+      isHospitalStatusValue(target.state) ||
+      isHospitalStatusValue(target.description) ||
+      isHospitalStatusValue(target.details);
+    if (!apiHospital) return { isHospital: false, seconds: null };
+    var remaining = hospitalRemainingSeconds(target.until);
+    if (Number.isFinite(remaining)) return { isHospital: true, seconds: remaining };
+    // The release time has passed: out, regardless of a stale state field.
+    if (hospitalUntilExpired(target.until)) return { isHospital: false, seconds: null };
+    return { isHospital: true, seconds: null };
+  }
+
+  // online | idle | offline | null. null when Torn did not say, and null when
+  // the reading is too old: an activity nobody has just confirmed is not
+  // "online", so DIBS applies (owner's decision 2026-09-28). The script's
+  // freshOpponentActivityForTarget.
+  function activityOf(target) {
+    return (target && rosterIsFresh() && target.activity) || null;
+  }
+
+  // The Fair Fight the rules are asked about, or null. Fail closed: anything
+  // that is not a figure this page has actually read - no key, first read
+  // still out, the source failed, or a value already dropped for being older
+  // than FF_DROP_MS - is null, and the rule function does not open a target on
+  // null. No request goes out from here; it reads the cache the FF cell on
+  // the same row has just read.
+  //
+  // The limit sits in the page and not in the server, and that is a decision,
+  // not an oversight. The server holds no FF and has no way to get one without
+  // fetching FFScouter itself. The owner took the call on 2026-09-10 on the
+  // ground that there is no sabotage risk inside the faction. Do not "correct"
+  // this into the server.
+  function fairFightOf(targetId) {
+    var columnState = statSource.state();
+    if (columnState === 'nokey' || columnState === 'checking' || columnState === 'error') return null;
+    var row = statSource.get(targetId);
+    if (!row || row.state !== 'ok' || row.ff === null) return null;
+    return row.ff;
+  }
+
+  // The war's phase as the rule function names it. In simulation the war's
+  // own state is not a gate - the whole point is to work the buttons before a
+  // war has started - so simulation is always "live" here. Nothing else is
+  // relaxed in simulation: hospital, Fair Fight, life and activity all apply.
+  //
+  // And before a clock has been read - Torn's, or the server's - there is no
+  // phase at all: the rule
+  // function then answers "locked, phase unverifiable" for every target, which
+  // is what keeps a device clock from opening anything.
+  function rwPhaseOf(war) {
+    if (!tornClockReady()) return { phase: RW_PHASE.UNKNOWN };
+    if (war && (SIM || war.state === 'live')) return { phase: RW_PHASE.LIVE };
+    if (war && war.state === 'prewar') return { phase: RW_PHASE.PREWAR };
+    return { phase: RW_PHASE.UNKNOWN };
+  }
+
+  // The target this member already holds, by the board the server has just
+  // confirmed, or ''. One active DIBS per member: while this is set the rule
+  // function answers CLAIMED for that target and BLOCKED for every other.
+  function ownTargetIdOf(board, me) {
+    var own = '';
+    if (board && me) {
+      Object.keys(board.claims).forEach(function (id) {
+        if (board.claims[id].memberId === me) own = id;
+      });
+    }
+    return own;
+  }
+
+  // Everything about the moment that is the same for every row.
+  function ruleContext() {
+    var identity = Roster.identity();
+    return {
+      ownTargetId: ownTargetIdOf(Claims.board(), identity ? identity.playerId : ''),
+      rwPhase: rwPhaseOf(Roster.war())
+    };
+  }
+
+  // The one question, asked the one way. Every row, the sort, the second
+  // hand and the click itself come through here.
+  //
+  // lowHpAssumed is for asking "and if the life were / were not low?". Left
+  // out, the answer rests on the life this page has actually read.
+  function decisionFor(target, ctx, lowHpAssumed) {
+    var hospital = hospitalOf(target);
+    return classifyLiveTargetState({
+      playerId: target.id,
+      ownTargetId: ctx.ownTargetId,
+      isHospital: hospital.isHospital,
+      seconds: hospital.seconds,
+      fairFight: fairFightOf(target.id),
+      rwPhase: ctx.rwPhase,
+      activity: activityOf(target),
+      lowHp: lowHpAssumed === undefined ? Life.lowHp(target.id) : lowHpAssumed
+    });
+  }
+
+  // m:ss, the way the scripts print a hospital time in their cell
+  // (formatCellCountdown).
+  function formatCellCountdown(totalSeconds) {
+    if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return "";
+    const seconds = Math.max(0, Math.floor(totalSeconds));
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const remainder = seconds % 60;
+    if (days > 0) return `${days}d${hours}h`;
+    if (hours > 0) return `${hours}h${String(minutes).padStart(2, "0")}`;
+    return `${minutes}:${String(remainder).padStart(2, "0")}`;
+  }
+
+  // ================================================== DIBS RULES end here ===
 
   // How long a refusal stays on the row that was clicked. Long enough to be
   // read: the page polls the claim board and redraws several times a minute,
@@ -533,12 +1276,14 @@
 
   var el = {};
   ['apiKey','toggleKey','loadBtn','forgetKey','errorBox','okBox',
+   'createKey','lifeSaid','aboutServer','advLife','advClock','advWipeNote',
    'ffKey','toggleFfKey','forgetFfKey','ffSaid','ffBar',
-   'passAsk','passSaid','warPass','passSave','passHave','passChange','passForget',
+   'sessionSaid','sessionState','sessionRetry',
    'warPanel','warWho','warMeta','warScore',
    'targetPanel','targetHint','staleBar','targetHost',
-   'simBanner','simRealWar','simWireWar','simOtherId','simResetBar','simResetBtn','simResetNote',
-   'advServer','advWar','advMe','advClaims','advRoster','advFf','advError','advRaw','wipeBtn','wipeNote']
+   'simBanner','simRealWar','simWireWar','simResetBar','simResetBtn','simResetNote',
+   'actionMessage','simResetButtonSize','simResetIdleSize','simResetArmedSize',
+   'advServer','advWar','advMe','advClaims','advRoster','advFf','advError','advRaw']
     .forEach(function (id) { el[id] = document.getElementById(id); });
 
   function read(store) { try { return localStorage.getItem(store) || ''; } catch (e) { return ''; } }
@@ -549,6 +1294,21 @@
 
   function show(box, message) { box.textContent = message; box.hidden = false; }
   function hide(box) { box.textContent = ''; box.hidden = true; }
+
+  var actionMessageTimer = null;
+  function hideActionMessage() {
+    clearTimeout(actionMessageTimer);
+    actionMessageTimer = null;
+    hide(el.actionMessage);
+  }
+  function showActionMessage(kind, message) {
+    hideActionMessage();
+    el.actionMessage.className = 'msg ' + kind;
+    el.actionMessage.setAttribute('role', kind === 'err' ? 'alert' : 'status');
+    show(el.actionMessage, message);
+    actionMessageTimer = setTimeout(hideActionMessage, 8000);
+  }
+  window.addEventListener('pagehide', hideActionMessage);
 
   // =========================================================================
   // ROSTER SOURCE - the only place that talks to Torn.
@@ -568,8 +1328,23 @@
     var ownNames = null;   // tornId -> name, our own faction, for labelling claim holders
     var stamps = { identity: 0, war: 0, targets: 0, ownNames: 0 };
     var lastError = '';
+    // Kept apart from lastError on purpose: this one carries the path and the
+    // Torn code, and it is only ever shown in Advanced.
+    var lastDiagnostic = '';
+    // When each request to Torn left this page, for the last minute. Torn
+    // allows 100 a minute across everything a member runs; the page stops
+    // itself at CONFIG.tornCallsPerMinuteMax and never queues what it refused.
+    var requestTimes = [];
 
     function key() { return el.apiKey.value.trim(); }
+
+    function reserveTornRequest() {
+      var now = Date.now();
+      requestTimes = requestTimes.filter(function (at) { return now - at < 60000; });
+      if (requestTimes.length >= CONFIG.tornCallsPerMinuteMax) return false;
+      requestTimes.push(now);
+      return true;
+    }
 
     function describeError(code) {
       if (code === 2) return 'Torn rejected the key. Check it was copied whole.';
@@ -584,21 +1359,62 @@
       return 'Torn returned error ' + code + '.';
     }
 
-    async function get(path) {
+    // The Date and Age headers of an answer, as the raw text the clock's
+    // functions read. A browser shows a page these two only when Torn says it
+    // may; when it does not, this is '' and the clock has the body to go on.
+    function clockHeaders(response) {
+      var lines = [];
+      try {
+        ['date', 'age'].forEach(function (name) {
+          var value = response.headers.get(name);
+          if (value !== null && value !== undefined) lines.push(name + ': ' + value);
+        });
+      } catch (e) { /* no readable headers: nothing for the clock from here */ }
+      return lines.join('\r\n');
+    }
+
+    // options.timeoutMs: give up after this long. Used by the last check
+    // before a claim, where an answer that comes late is as bad as none.
+    async function get(path, options) {
       var k = key();
       if (!k) throw new Error('No Torn key on this page yet.');
-      var joiner = path.indexOf('?') === -1 ? '?' : '&';
-      var response;
-      try {
-        response = await fetch('https://api.torn.com/v2' + path + joiner + 'comment=KSWarRoom',
-          { headers: { Authorization: 'ApiKey ' + k } });
-      } catch (networkFailure) {
-        throw new Error('Could not reach Torn.  [GET /v2' + path + ' — network or CORS failure]');
+      if (!reserveTornRequest()) {
+        var held = new Error('This page has made as many calls to Torn in the last minute as it allows itself. It will carry on by itself.');
+        held.diagnostic = '[GET /v2' + path + ' — not sent, own limit of ' + CONFIG.tornCallsPerMinuteMax + ' a minute]';
+        held.notSent = true;
+        throw held;
       }
-      var payload = await response.json();
+      var joiner = path.indexOf('?') === -1 ? '?' : '&';
+      var timeoutMs = options && options.timeoutMs;
+      var controller = (timeoutMs && typeof AbortController === 'function') ? new AbortController() : null;
+      var timer = controller ? setTimeout(function () { controller.abort(); }, timeoutMs) : null;
+      var response;
+      var payload;
+      var startedAt = nowMs();
+      try {
+        var init = { headers: { Authorization: 'ApiKey ' + k } };
+        if (controller) init.signal = controller.signal;
+        response = await fetch('https://api.torn.com/v2' + path + joiner + 'comment=KSWarRoom', init);
+        payload = await response.json();
+      } catch (networkFailure) {
+        var late = !!(controller && controller.signal.aborted);
+        var offline = new Error(late
+          ? 'Torn did not answer in time.'
+          : 'Could not reach Torn. Check your connection and try again.');
+        offline.diagnostic = '[GET /v2' + path + (late ? ' — no answer within ' + timeoutMs + ' ms]' : ' — network or CORS failure]');
+        throw offline;
+      } finally {
+        if (timer !== null) clearTimeout(timer);
+      }
+      // Every answer Torn gives is also a reading of Torn's clock. Nothing is
+      // asked for the clock's sake: this is the answer that was wanted anyway.
+      recordTornClock({ ok: response.ok, headers: clockHeaders(response), startedAt: startedAt, endedAt: nowMs() }, payload);
       if (payload && payload.error) {
-        var error = new Error(describeError(payload.error.code) + '  [GET /v2' + path +
-          ' → Torn error ' + payload.error.code + ']');
+        // The MESSAGE is what a member reads: one plain sentence, no code, no
+        // path. The DIAGNOSTIC is for Advanced, where whole answer bodies are
+        // already on show and the reader is looking for exactly this.
+        var error = new Error(describeError(payload.error.code));
+        error.diagnostic = '[GET /v2' + path + ' → Torn error ' + payload.error.code + ']';
         error.tornCode = payload.error.code;
         throw error;
       }
@@ -636,9 +1452,9 @@
       return identity;
     }
 
-    async function loadWar() {
+    async function loadWar(options) {
       if (!identity) await loadIdentity();
-      var payload = await get('/faction/wars');
+      var payload = await get('/faction/wars', options);
       var wars = payload && payload.wars;
       if (!wars || typeof wars !== 'object') {
         throw new Error('The wars answer did not have the shape this page expects.');
@@ -647,7 +1463,15 @@
       var ranked = wars.ranked;
       if (!ranked || typeof ranked !== 'object') { war = null; targets = null; return null; }
 
-      var now = Number(payload.timestamp) || Math.floor(Date.now() / 1000);
+      // Torn's own second when the answer carries one, otherwise the clock this
+      // page has bounded (the scripts' normalizeOwnWars). The first time, before
+      // any measure, that is still this device's clock - which is why nothing
+      // can be called until a measure exists, and why the war is asked about
+      // again, on a measured clock, at the moment of every claim.
+      var responseTimestamp = Number(payload.timestamp);
+      var now = Number.isSafeInteger(responseTimestamp) && responseTimestamp > 0
+        ? responseTimestamp
+        : Math.floor(getTornNowMs() / 1000);
       var warId = tornId(ranked.war_id);
       var sides = Array.isArray(ranked.factions) ? ranked.factions : [];
       var ours = null, theirs = null;
@@ -691,21 +1515,65 @@
       if (!rows) throw new Error('The opponent member list did not have the shape this page expects.');
       var out = [];
       rows.forEach(function (row) {
-        if (!row || typeof row !== 'object') return;
-        var id = tornId(row.id !== undefined ? row.id : row.player_id);
-        if (!id) return; // no readable Torn ID: never shown as something to click
-        var status = (row.status && typeof row.status === 'object') ? row.status : {};
-        out.push({
-          id: id,
-          name: text(row.name) || ('#' + id),
-          level: Number(row.level) || 0,
-          state: text(status.state),
-          until: Number(status.until) || 0
-        });
+        var target = targetFromRow(row);
+        if (target) out.push(target);
       });
       targets = out;
       stamps.targets = Date.now();
       return targets;
+    }
+
+    // One row of Torn's member list as this page keeps it, or null.
+    function targetFromRow(row) {
+      if (!row || typeof row !== 'object') return null;
+      var id = tornId(row.id !== undefined ? row.id : row.player_id);
+      if (!id) return null; // no readable Torn ID: never shown as something to click
+      // A status that is missing, empty, or carries an end time that is not a
+      // whole, non-negative number is unusable as a whole. The row is still
+      // listed, but nothing is decided on it - not its hospital stay and not
+      // its activity. The script drops such a member from its reading the
+      // same way (normalizeTornMemberStatus, normalizeTornMembers).
+      var rawStatus = row.status;
+      var usable = !!rawStatus && typeof rawStatus === 'object' && !Array.isArray(rawStatus);
+      var until = 0;
+      var hasUntil = false;
+      if (usable && rawStatus.until !== null && rawStatus.until !== undefined && rawStatus.until !== '') {
+        var numericUntil = Number(rawStatus.until);
+        if (!Number.isSafeInteger(numericUntil) || numericUntil < 0) usable = false;
+        else { until = numericUntil; hasUntil = true; }
+      }
+      if (usable && !hasUntil && !normalizeText(rawStatus.state) && !normalizeText(rawStatus.description) &&
+          !normalizeText(rawStatus.details)) usable = false;
+      var status = usable ? rawStatus : {};
+      // online | idle | offline, or null for anything else Torn might say.
+      // The script reads the same field the same way (normalizeTornMembers).
+      var action = row.last_action;
+      var rawActivity = (action && typeof action.status === 'string') ? action.status.trim().toLowerCase() : '';
+      var activity = (rawActivity === 'online' || rawActivity === 'idle' || rawActivity === 'offline')
+        ? rawActivity : null;
+      return {
+        id: id,
+        name: text(row.name) || ('#' + id),
+        level: Number(row.level) || 0,
+        state: usable ? text(status.state) : '',
+        description: usable ? text(status.description) : '',
+        details: usable ? text(status.details) : '',
+        until: usable ? until : 0,
+        activity: usable ? activity : null
+      };
+    }
+
+    // One target's life, for low-life DIBS. The answer is handed back whole:
+    // what it means, and how often it may be asked for, is decided in Life,
+    // just below. This is only the call.
+    function loadLife(targetId) {
+      return get('/user/' + targetId + '/profile');
+    }
+
+    // One target's status, asked for at the moment of a claim. Whole, like the
+    // life: what it means is decided where the claim is decided.
+    function loadBasic(targetId, options) {
+      return get('/user/' + targetId + '/basic', options);
     }
 
     async function loadOwnNames() {
@@ -730,20 +1598,263 @@
       nameOf: function (id) { return (ownNames && ownNames[id]) || ''; },
       stamps: function () { return stamps; },
       lastError: function () { return lastError; },
-      setError: function (message) { lastError = message || ''; },
+      lastDiagnostic: function () { return lastDiagnostic; },
+      setError: function (message, diagnostic) {
+        lastError = message || '';
+        lastDiagnostic = diagnostic || '';
+      },
       loadIdentity: loadIdentity,
       loadWar: loadWar,
       loadTargets: loadTargets,
       loadOwnNames: loadOwnNames,
+      loadLife: loadLife,
+      loadBasic: loadBasic,
       forget: function () {
         identity = null; war = null; targets = null; ownNames = null;
         stamps = { identity: 0, war: 0, targets: 0, ownNames: 0 };
-        lastError = '';
+        lastError = ''; lastDiagnostic = '';
       }
     };
   })();
 
   // ============================================== ROSTER SOURCE ends here ===
+
+  // =========================================================================
+  // LIFE - how much life a target that is about to leave hospital has.
+  //
+  // Low-life DIBS rests on it: a target at CONFIG.lowHpLifeMaxRatio or under
+  // may be called up to CONFIG.lowHpMaxFairFight. This is the script's own
+  // life reading (KS Torn War Dibs PC 1.1.10: readTargetLife, runLifeReadQueue,
+  // freshLifeForTarget, lowHpForTarget, lifeHospitalSecondsForTarget), with
+  // the same Torn call, the same pace and the same ceilings:
+  //
+  //   - /v2/user/{target}/profile, with the member's own key, through Roster
+  //   - one reading at a time, never two out together
+  //   - only targets inside the hospital window that are not online
+  //   - a target at most every CONFIG.lifeReadMinIntervalMs
+  //   - at most CONFIG.lifeReadsPerMinuteMax readings a minute
+  //   - a value older than CONFIG.lifeMaxAgeMs is no value
+  //   - only while the war is live (or in simulation) and the page is on screen
+  //
+  // A press on Take DIBS for a target above CONFIG.maxFairFight makes one
+  // reading of its own, outside the spacing and the per-minute ceiling (it is
+  // still counted, and Torn's 100 a minute still holds), so the claim rests on
+  // a value read for it and is never held up by the queue.
+  //
+  // The values live in memory and nowhere else.
+  // =========================================================================
+
+  var Life = (function () {
+    var cache = {};            // targetId -> { current, maximum, ratio, fetchedAt, source, schemaVersion }
+    var attempts = {};         // targetId -> when its last reading started
+    var readTimes = [];        // when each reading of the last minute started
+    var pending = null;        // the one reading that is out, or null
+    var claimReads = 0;        // presses on Take DIBS waiting for, or making, their reading
+    var queueRunning = false;
+    var profileMissing = false;  // Torn code 16: the key has no profile selection
+    var keyFailureCode = null;   // Torn code 2, 10, 13 or 18: the key is dead
+    var retryAfter = 0;          // Torn code 5, 9 or 17: leave it alone until then
+    var capabilityKey = '';
+    var contextSerial = 0;
+
+    // A new key is a new question: what Torn said about the old one is gone.
+    function syncCredential() {
+      var key = el.apiKey.value.trim();
+      if (key && key !== capabilityKey) {
+        capabilityKey = key;
+        profileMissing = false;
+        keyFailureCode = null;
+        retryAfter = 0;
+        contextSerial += 1;
+        cache = {};
+      }
+      return key;
+    }
+
+    function runtimeReady() {
+      var war = Roster.war();
+      return !!(Roster.identity() && war && (SIM || war.state === 'live') && !document.hidden && tornClockReady());
+    }
+
+    function targetById(targetId) {
+      var targets = Roster.targets() || [];
+      for (var i = 0; i < targets.length; i++) {
+        if (targets[i].id === targetId) return targets[i];
+      }
+      return null;
+    }
+
+    // Seconds left for a target whose life is worth reading, or null. The
+    // script's lifeHospitalSecondsForTarget: fresh status, not online, in
+    // hospital, inside the window.
+    function hospitalSecondsFor(targetId) {
+      var target = targetById(targetId);
+      if (!target || !rosterIsFresh() || target.activity === 'online') return null;
+      if (!isHospitalStatusValue(target.state) && !isHospitalStatusValue(target.description) && !isHospitalStatusValue(target.details)) return null;
+      if (hospitalUntilExpired(target.until)) return null;
+      var seconds = hospitalRemainingSeconds(target.until);
+      return Number.isFinite(seconds) && seconds >= 0 && seconds <= CONFIG.gateSeconds ? seconds : null;
+    }
+
+    function normalize(payload, targetId, fetchedAt) {
+      var profile = payload && payload.profile;
+      if (!profile || typeof profile !== 'object' || !Number.isSafeInteger(profile.id) || String(profile.id) !== String(targetId)) return null;
+      var current = profile.life ? profile.life.current : undefined;
+      var maximum = profile.life ? profile.life.maximum : undefined;
+      if (!Number.isSafeInteger(current) || current < 0 || !Number.isSafeInteger(maximum) || maximum <= 0 || current > maximum) return null;
+      if (!Number.isFinite(fetchedAt)) return null;
+      return { current: current, maximum: maximum, ratio: current / maximum, fetchedAt: fetchedAt, source: 'torn-profile', schemaVersion: 1 };
+    }
+
+    function fresh(targetId) {
+      var entry = cache[String(targetId)];
+      if (!entry || entry.source !== 'torn-profile' || entry.schemaVersion !== 1) return null;
+      var age = Date.now() - entry.fetchedAt;
+      return Number.isFinite(age) && age >= 0 && age <= CONFIG.lifeMaxAgeMs ? entry : null;
+    }
+
+    function lowHp(targetId) {
+      var entry = fresh(targetId);
+      return Boolean(entry && Number.isFinite(entry.ratio) && entry.ratio <= CONFIG.lowHpLifeMaxRatio);
+    }
+
+    async function read(targetId, options) {
+      var forClaim = !!(options && options.forClaim);
+      var id = String(targetId);
+      var key = syncCredential();
+      if (!key || profileMissing || keyFailureCode !== null || Date.now() < retryAfter || !runtimeReady() || pending) return null;
+      // A press on Take DIBS is waiting for its reading: the queue stands back
+      // (the script holds its queue the same way while a claim is being written).
+      if (claimReads > 0 && !forClaim) return null;
+      if (hospitalSecondsFor(id) === null) return null;
+      var startedAt = Date.now();
+      Object.keys(attempts).forEach(function (previousId) {
+        if (startedAt - attempts[previousId] >= 60000) delete attempts[previousId];
+      });
+      // A DIBS click is one deliberate read: it skips the 10 s spacing and the
+      // queue's 30/min cap (it is still counted), so the claim is never delayed.
+      // The 100/min Torn budget in Roster still applies.
+      var lastAttempt = attempts[id];
+      if (!forClaim && Number.isFinite(lastAttempt) && startedAt - lastAttempt < CONFIG.lifeReadMinIntervalMs) return null;
+      readTimes = readTimes.filter(function (at) { return startedAt - at < 60000; });
+      if (!forClaim && readTimes.length >= CONFIG.lifeReadsPerMinuteMax) return null;
+      var serial = contextSerial;
+      var current = function () {
+        return serial === contextSerial && key === el.apiKey.value.trim() && runtimeReady();
+      };
+      attempts[id] = startedAt;
+      readTimes.push(startedAt);
+      var operation = (async function () {
+        try {
+          var payload = await Roster.loadLife(id);
+          if (!current()) return null;
+          // The start time is conservative: a delayed response cannot gain freshness.
+          var entry = normalize(payload, id, startedAt);
+          if (!entry || (cache[id] && cache[id].fetchedAt > entry.fetchedAt)) return null;
+          cache[id] = entry;
+          return fresh(id);
+        } catch (error) {
+          if (!current()) return null;
+          var apiCode = Number(error && error.tornCode);
+          if (apiCode === 2 || apiCode === 10 || apiCode === 13 || apiCode === 18) {
+            // The key is dead. It is not tried again for this.
+            keyFailureCode = apiCode;
+            cache = {};
+          } else if (apiCode === 5 || apiCode === 9 || apiCode === 17) {
+            retryAfter = Date.now() + 60000;
+          } else if (apiCode === 16) {
+            profileMissing = true;
+            cache = {};
+          }
+          return null;
+        }
+      })();
+      pending = operation;
+      try {
+        return await operation;
+      } finally {
+        if (pending === operation) pending = null;
+      }
+    }
+
+    // Soonest out first, one after another. Started after every roster
+    // reading; a queue that is already running is left to finish.
+    async function runQueue(onChange) {
+      syncCredential();
+      if (queueRunning || claimReads > 0 || profileMissing || keyFailureCode !== null || Date.now() < retryAfter || !runtimeReady()) return false;
+      var serial = contextSerial;
+      queueRunning = true;
+      try {
+        var due = (Roster.targets() || [])
+          .map(function (target) { return { id: target.id, seconds: hospitalSecondsFor(target.id) }; })
+          .filter(function (target) { return target.seconds !== null; })
+          .sort(function (a, b) { return a.seconds - b.seconds || Number(a.id) - Number(b.id); });
+        for (var i = 0; i < due.length; i++) {
+          if (serial !== contextSerial || claimReads > 0 || !runtimeReady() || profileMissing || keyFailureCode !== null || Date.now() < retryAfter) break;
+          var before = cache[due[i].id];
+          await read(due[i].id);
+          if (onChange && (cache[due[i].id] !== before || profileMissing || keyFailureCode !== null)) onChange();
+        }
+        return true;
+      } finally {
+        queueRunning = false;
+      }
+    }
+
+    // The one reading a press on Take DIBS makes for itself, or null when it
+    // could not be made. A reading that is already out is waited for first -
+    // there is never a second one beside it - and from the moment the press
+    // starts waiting the queue starts nothing new, so the press cannot lose
+    // its place to the queue's next target.
+    async function readForClaim(targetId) {
+      claimReads += 1;
+      try {
+        syncCredential();
+        var serial = contextSerial;
+        var current = function () {
+          return serial === contextSerial && runtimeReady() && !profileMissing && keyFailureCode === null && Date.now() >= retryAfter;
+        };
+        if (!current()) return null;
+        while (pending) await pending;
+        if (!current()) return null;
+        return await read(targetId, { forClaim: true });
+      } finally {
+        claimReads -= 1;
+      }
+    }
+
+    function statusLine() {
+      syncCredential();
+      if (keyFailureCode !== null) return 'API key rejected · low-life DIBS unavailable';
+      if (profileMissing) return 'key lacks profile · low-life DIBS unavailable';
+      var ids = Object.keys(cache);
+      var newest = Math.max.apply(null, ids.map(function (id) { return cache[id].fetchedAt; }));
+      return Number.isFinite(newest)
+        ? ids.length + ' targets read · newest ' + Math.max(0, Math.floor((Date.now() - newest) / 1000)) + ' s ago'
+        : '0 targets read · newest unknown';
+    }
+
+    return {
+      fresh: fresh,
+      lowHp: lowHp,
+      read: read,
+      readForClaim: readForClaim,
+      runQueue: runQueue,
+      profileMissing: function () { syncCredential(); return profileMissing; },
+      keyFailed: function () { syncCredential(); return keyFailureCode !== null; },
+      statusLine: statusLine,
+      // The values go with the key. The times of the readings already made do
+      // not: forgetting a key must not be a way round the spacing or the
+      // per-minute ceiling.
+      forget: function () {
+        cache = {}; capabilityKey = '';
+        profileMissing = false; keyFailureCode = null; retryAfter = 0;
+        contextSerial += 1;
+      }
+    };
+  })();
+
+  // ====================================================== LIFE ends here ===
 
   // =========================================================================
   // FF SOURCE - the only place that talks to FFScouter.
@@ -913,6 +2024,269 @@
 
   // ------------------------------------------------------------ claim layer
 
+  // --------------------------------------------------------- what to say
+  //
+  // EVERY sentence a member reads about a refusal is written here, in
+  // English, and it is chosen on the CODE in the answer - never on the
+  // server's own words.
+  //
+  // The server answers in Swedish. That is deliberate and it stays: those
+  // exact strings are read back by the acceptance suite, and rewriting them
+  // to fix a wording would tear up a locked decision for no gain.
+  //
+  // But only one person in the faction reads Swedish, and this page is open
+  // on everybody's screen during a war. A member who cannot read what went
+  // wrong cannot fix it while the war is running. So the page does its own
+  // talking, and the server's text is never shown.
+  //
+  // Three rules for the sentences below:
+  //   - no error code, no HTTP status, no path. A member is not debugging.
+  //   - when there is something to do about it, say what.
+  //   - when the answer cannot be explained, say THAT. Never a guess, and
+  //     never something that sounds like a verdict.
+  var Says = (function () {
+    function minutes(seconds) {
+      var m = Math.ceil((Number(seconds) || 0) / 60);
+      return m > 0 ? m : 1;
+    }
+
+    // The last resort. Fail-closed applies to words too: this says it did not
+    // work and that we cannot say why - it never invents a reason.
+    var UNKNOWN = 'The server refused that, and did not say why in a way this page ' +
+      'can explain. Nothing was changed.';
+
+    function of(http, body) {
+      var error = (body && typeof body.error === 'string') ? body.error : '';
+      var reason = (body && typeof body.reason === 'string') ? body.reason : '';
+      var status = (body && typeof body.status === 'string') ? body.status : '';
+
+      // ---- signing in -------------------------------------------------
+      if (reason === 'key_malformed' || error === 'invalid_key') {
+        return 'That does not look like a Torn API key. Copy the whole key from ' +
+          'Torn, with no spaces around it.';
+      }
+      if (error === 'key_rejected') {
+        if (reason === 'invalid_key') {
+          return 'Torn did not accept that key. Check that you copied all of it, ' +
+            'or make a new one in Torn.';
+        }
+        if (reason === 'key_owner_in_federal_jail') {
+          return 'That key cannot be used while its owner is in federal jail.';
+        }
+        if (reason === 'key_owner_inactive') {
+          return 'Torn has switched that key off after seven days without a login. ' +
+            'Log in to Torn and make a new key.';
+        }
+        if (reason === 'key_access_too_low') {
+          return 'That key does not have enough access. A key at level Public is ' +
+            'enough - make a new one in Torn.';
+        }
+        if (reason === 'key_paused') {
+          return 'That key is paused. Turn it back on in Torn, or make a new one.';
+        }
+        // retryable:true - Torn was busy, off, or would not answer about the key
+        return 'Torn could not check that key just now. Try again in a minute.';
+      }
+      if (error === 'not_a_member') {
+        return 'Torn says that key does not belong to this faction. Only members ' +
+          'can use the board.';
+      }
+      if (error === 'login_blocked') {
+        return 'Too many failed sign-ins from here. Wait about ' +
+          minutes(body && body.retryAfterSeconds) + ' minute(s) and try again.';
+      }
+      if (error === 'login_paused') {
+        return 'The board has paused new sign-ins for a moment, so that Torn does ' +
+          'not shut the whole faction out. Wait about ' +
+          minutes(body && body.retryAfterSeconds) + ' minute(s) and try again.';
+      }
+      if (error === 'server_not_configured') {
+        return 'The claim server is not set up yet. Tell Kingshade - nobody can ' +
+          'sign in until that is done.';
+      }
+      if (error === 'torn_unreadable') {
+        return 'Torn answered something the server could not read. Try again in a minute.';
+      }
+      if (error === 'torn_unreachable') {
+        return 'The server could not reach Torn. Try again in a minute.';
+      }
+
+      // ---- being signed in --------------------------------------------
+      if (error === 'unauthorized') {
+        if (reason === 'expired') {
+          return 'Your sign-in ran out. Press Load the war to sign in again.';
+        }
+        return 'You are not signed in. Paste your Torn key and press Load the war.';
+      }
+
+      // ---- the board ---------------------------------------------------
+      if (error === 'wipe_not_allowed') {
+        return 'Your Torn ID is not on the list of people who may empty a war.';
+      }
+      if (error === 'wipe_real_war_forbidden') {
+        return 'A real war is never emptied. Only a test war can be.';
+      }
+      if (error === 'storage_error' || status === 'unreadable') {
+        return 'The server cannot tell who holds what right now, so it will not ' +
+          'hand anything out. Leave those rows alone until it can.';
+      }
+      if (error === 'method_not_allowed' || error === 'not_found' ||
+          error === 'bad_request') {
+        return 'The page asked the server something it did not understand. ' +
+          'Reload the page and try again.';
+      }
+      if (error === 'internal_error') {
+        return 'Something went wrong at the server’s end. Try again in a moment.';
+      }
+
+      // ---- answers that are not refusals, but are shown -----------------
+      if (status === 'already_claimed') {
+        return 'That target was already yours. The time on it has not changed.';
+      }
+      if (status === 'already_holding') {
+        return 'You already hold another target. Release it before calling another.';
+      }
+      if (status === 'taken') {
+        return 'Someone else got there first.';
+      }
+      if (status === 'not_owner') {
+        return 'That claim belongs to somebody else, and it was not released.';
+      }
+
+      if (http === 0) return 'The claim server could not be reached. Try again in a moment.';
+      return UNKNOWN;
+    }
+
+    return { of: of, unknown: UNKNOWN };
+  })();
+
+  // ------------------------------------------------------------- sign-in
+  //
+  // What replaced the faction password. The member's own Torn key is sent to
+  // OUR server once; the server asks Torn whose key it is, checks the faction,
+  // and hands back a slip it has signed itself. Every later request carries
+  // that slip instead of a shared word.
+  //
+  // The slip lives HERE, in a variable, and nowhere else. Not in local storage.
+  // The key is already a deliberate exception that is kept in this browser; a
+  // second long-lived credential sitting beside it is a second thing that can
+  // leak, and this one does not need to survive a reload - it can always be
+  // fetched again from the key.
+  //
+  // It travels in the BODY of a POST, never in a header and never in the
+  // address. Cloudflare's log keeps the address and every header of a request,
+  // but not its body. A slip in a header would sit in plain sight in any log
+  // anyone happened to save.
+  var Session = (function () {
+    var token = '';
+    var expiresAt = 0;
+    var tornId = '';
+    var state = 'idle';   // idle | checking | signed_in | not_a_member | key_rejected | offline
+    var said = '';
+    var inFlight = null;
+
+    // The five words the page is allowed to show, and nothing else.
+    var WORDS = {
+      idle: 'CHECKING',
+      checking: 'CHECKING',
+      signed_in: 'SIGNED IN',
+      not_a_member: 'NOT A MEMBER',
+      key_rejected: 'KEY REJECTED',
+      offline: 'SERVER OFFLINE'
+    };
+
+    function word() { return WORDS[state] || 'SERVER OFFLINE'; }
+
+    function forget() {
+      token = ''; expiresAt = 0; tornId = '';
+      state = 'idle'; said = '';
+    }
+
+    // Good for a while yet? The margin is deliberate: a slip that expires
+    // between the check and the answer is a refusal the member did nothing to
+    // deserve.
+    function fresh() {
+      return token !== '' && Date.now() < expiresAt - SESSION_RENEW_MARGIN_MS;
+    }
+
+    async function signIn() {
+      // Two clicks, or a click on top of the automatic renewal, must not send
+      // the key twice. The second caller waits for the first one's answer.
+      if (inFlight) return inFlight;
+      inFlight = (async function () {
+        var key = el.apiKey.value.trim();
+        if (!key) { forget(); said = 'Paste your Torn key first.'; return false; }
+        if (!TORN_API_KEY_PATTERN.test(key)) {
+          // Stopped here. Not sent to our server, and above all not sent to
+          // Torn, where it would have counted as a try with a bad key.
+          forget();
+          state = 'key_rejected';
+          said = 'That does not look like a Torn API key. Copy the whole key from ' +
+            'Torn, with no spaces around it.';
+          return false;
+        }
+        state = 'checking'; said = '';
+        var response;
+        try {
+          response = await fetch(CLAIM_SERVER + '/session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ apiKey: key })
+          });
+        } catch (networkFailure) {
+          token = ''; expiresAt = 0;
+          state = 'offline';
+          said = 'The claim server could not be reached.';
+          return false;
+        }
+        var body = null;
+        try { body = await response.json(); } catch (e) { body = null; }
+
+        if (response.status === 200 && body && body.ok === true && typeof body.session === 'string') {
+          token = body.session;
+          expiresAt = Number(body.expiresAt) || 0;
+          tornId = typeof body.tornId === 'string' ? body.tornId : '';
+          state = 'signed_in'; said = '';
+          return true;
+        }
+
+        token = ''; expiresAt = 0;
+        // The server's own `detail` is NOT used. It is written in Swedish for
+        // whoever runs the server; what a member reads is written by Says, in
+        // English, chosen on the code in this answer.
+        said = Says.of(response.status, body);
+        if (response.status === 403) {
+          state = 'not_a_member';
+        } else if (response.status === 401 || response.status === 400) {
+          state = 'key_rejected';
+        } else {
+          state = 'offline';
+        }
+        return false;
+      })();
+      try { return await inFlight; } finally { inFlight = null; }
+    }
+
+    return {
+      token: function () { return token; },
+      tornId: function () { return tornId; },
+      state: function () { return state; },
+      word: word,
+      said: function () { return said; },
+      fresh: fresh,
+      signedIn: function () { return token !== ''; },
+      forget: forget,
+      signIn: signIn,
+      // The slip every request needs. Renews itself when it is about to run
+      // out, so the member never sees a sign-in screen mid-war.
+      ensure: async function () {
+        if (fresh()) return token;
+        await signIn();
+        return token;
+      }
+    };
+  })();
+
   var Claims = (function () {
     // board is null whenever the server has not just confirmed the picture.
     // Nothing refills it from memory: a stale board that looks fresh is exactly
@@ -921,8 +2295,6 @@
     var status = 'idle';   // idle | ok | offline | unauthorized
     var lastError = '';
     var lastRaw = '';
-
-    function password() { return read(PASS_STORE); }
 
     // ---------------------------------------------------------------- the wall
     //
@@ -947,21 +2319,41 @@
       return wire;
     }
 
-    async function call(method, warId, op, body) {
+    // Every request is a POST with a JSON body, the reading of the board
+    // included. Not a style choice: a GET would have forced the sign-in slip
+    // out into a header or into the address, and Cloudflare's log keeps both
+    // of those and never the body. Nothing is lost by it - the answers were
+    // already no-store, so there was no caching to give up.
+    //
+    // `retrying` is the one and only second attempt: a slip that ran out
+    // between the check and the answer is fetched again and the request made
+    // once more. Never a loop.
+    async function call(warId, op, fields, retrying) {
       var wire = wireWarId(warId, op);
-      var pass = password();
-      if (!pass) {
-        board = null; status = 'idle';
-        throw new Error('No War Room password on this device yet.');
+      var slip = await Session.ensure();
+      if (!slip) {
+        board = null; status = 'unauthorized';
+        lastError = Session.said() || 'Not signed in to the War Room.';
+        var noSlip = new Error(lastError);
+        noSlip.unauthorized = true;
+        throw noSlip;
       }
-      var init = { method: method, headers: { 'X-KS-Auth': pass } };
-      if (body) {
-        init.headers['Content-Type'] = 'application/json';
-        init.body = JSON.stringify(body);
+
+      var body = { session: slip };
+      if (fields) {
+        Object.keys(fields).forEach(function (k) {
+          if (fields[k] !== undefined && fields[k] !== null) body[k] = fields[k];
+        });
       }
+
       var response;
+      var askedAt = nowMs();
       try {
-        response = await fetch(CLAIM_SERVER + '/war/' + encodeURIComponent(wire) + '/' + op, init);
+        response = await fetch(CLAIM_SERVER + '/war/' + encodeURIComponent(wire) + '/' + op, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
       } catch (networkFailure) {
         board = null; status = 'offline';
         lastError = 'The claim server could not be reached.';
@@ -970,14 +2362,24 @@
       }
       var payload = null;
       try { payload = await response.json(); } catch (e) { payload = null; }
-      // The password is not part of this and never will be.
+      // Every answer the server gives with its own time on it is also a
+      // reading of the server's clock - the reserve for Torn's. Nothing is
+      // asked for the clock's sake: this is the answer that was wanted anyway.
+      if (response.status === 200 && payload && typeof payload === 'object') {
+        recordServerClock(askedAt, nowMs(), payload.serverTime);
+      }
+      // The slip is not part of what is shown here, and never will be.
       lastRaw = JSON.stringify({ op: op, http: response.status, body: payload }, null, 2);
 
       if (response.status === 401) {
-        // 401 says exactly one thing: the word was not accepted. Nothing else
-        // is guessed from it.
+        if (!retrying && payload && payload.reason === 'expired') {
+          // It ran out while we were asking. One fresh slip, one more try.
+          Session.forget();
+          if (await Session.signIn()) return call(warId, op, fields, true);
+        }
         board = null; status = 'unauthorized';
-        lastError = 'The claim server did not accept the War Room password.';
+        Session.forget();
+        lastError = 'The claim server did not accept the sign-in.';
         var refusal = new Error(lastError);
         refusal.unauthorized = true;
         throw refusal;
@@ -991,12 +2393,11 @@
     }
 
     async function refresh(warId) {
-      var result = await call('GET', warId, 'claims', null);
+      var result = await call(warId, 'claims', null);
       var body = result.body;
       if (result.http !== 200 || body.ok !== true || !Array.isArray(body.claims)) {
         board = null; status = 'offline';
-        lastError = 'The claim server could not say who holds what' +
-          (typeof body.error === 'string' ? ' (' + body.error + ')' : '') + '.';
+        lastError = Says.of(result.http, body);
         throw new Error(lastError);
       }
       var claims = {};
@@ -1032,37 +2433,44 @@
       wireWarId: wireWarId,
       lastError: function () { return lastError; },
       lastRaw: function () { return lastRaw; },
-      hasPassword: function () { return password() !== ''; },
       drop: function () { board = null; status = 'idle'; },
       refresh: refresh,
-      claim: function (warId, targetId, memberId) {
-        return call('POST', warId, 'claim', { targetId: targetId, memberId: memberId });
+      // No memberId anywhere below. The server reads it off the sign-in slip
+      // and never off the request, so sending one would only be a comforting
+      // lie about what decides who a claim belongs to.
+      claim: function (warId, targetId, hospitalUntil) {
+        return call(warId, 'claim', { targetId: targetId, hospitalUntil: hospitalUntil });
       },
-      unclaim: function (warId, targetId, memberId) {
-        return call('POST', warId, 'unclaim', { targetId: targetId, memberId: memberId });
+      unclaim: function (warId, targetId) {
+        return call(warId, 'unclaim', { targetId: targetId });
       },
-      wipe: function (warId, memberId) {
-        return call('POST', warId, 'wipe', { memberId: memberId });
+      report: function (warId, targetId, hospitalUntil, observedAt) {
+        return call(warId, 'report', {
+          targetId: targetId, hospitalUntil: hospitalUntil, observedAt: observedAt
+        });
+      },
+      wipe: function (warId) {
+        return call(warId, 'wipe', null);
       }
     };
   })();
 
   // ------------------------------------------------------------------- view
 
-  function passRender() {
-    var have = Claims.hasPassword();
-    el.passHave.hidden = !have;
-    el.passAsk.hidden = have;
+  function sessionRender() {
+    el.sessionState.textContent = Session.word();
+    var said = Session.said();
+    el.sessionSaid.textContent = said;
+    el.sessionSaid.hidden = !said;
   }
 
-  function passRejected() {
-    write(PASS_STORE, '');
+  // The sign-in was refused, or ran out and could not be replaced. The board is
+  // dropped with it: a board nobody is signed in for is a board the server has
+  // not just confirmed, and that is never shown as current.
+  function sessionRejected() {
+    Session.forget();
     Claims.drop();
-    el.warPass.value = '';
-    el.passSaid.textContent = 'That word was not accepted. Type it again, or ask Kingshade for the ' +
-      'one the faction is using now.';
-    el.passSaid.hidden = false;
-    passRender();
+    sessionRender();
   }
 
   // The server owns the clock. This is the browser's guess at how much of the
@@ -1083,13 +2491,20 @@
     return '~' + Math.floor(seconds / 60) + 'm ' + (seconds % 60) + 's left';
   }
 
+  function statusText(target) {
+    var state = target.state || 'Unknown';
+    var left = target.until ? target.until - Math.floor(getTornNowMs() / 1000) : 0;
+    if (state === 'Okay') return 'Okay';
+    return state + (left > 0 ? ' ' + (left < 60 ? left + 's' : Math.ceil(left / 60) + 'm') : '');
+  }
+
   function statusPill(target) {
     var span = document.createElement('span');
     var state = target.state || 'Unknown';
-    var left = target.until ? target.until - Math.floor(Date.now() / 1000) : 0;
-    if (state === 'Okay') { span.className = 'pill good'; span.textContent = 'Okay'; return span; }
-    span.className = state === 'Hospital' ? 'pill bad' : (state === 'Jail' ? 'pill warn' : 'pill');
-    span.textContent = state + (left > 0 ? ' ' + (left < 60 ? left + 's' : Math.ceil(left / 60) + 'm') : '');
+    span.className = state === 'Okay' ? 'pill good'
+      : (state === 'Hospital' ? 'pill bad' : (state === 'Jail' ? 'pill warn' : 'pill'));
+    span.setAttribute('data-status-id', target.id);
+    span.textContent = statusText(target);
     return span;
   }
 
@@ -1145,7 +2560,7 @@
     // and stays plain.
     //
     // The colour says how hard the target is. It says nothing about whether it
-    // may be called: that is the FF range in ffAllowsClaim(), a separate rule
+    // may be called: that is classifyLiveTargetState(), a separate rule
     // deliberately kept in a separate place.
     var hue = ffHue(row.ff);
     if (hue !== null) {
@@ -1156,45 +2571,24 @@
   }
 
   // The span, written out from the constants. The figures are never typed into
-  // a string anywhere on this page.
+  // a string in this script; the one line of rules above the list is the
+  // script's own wording, taken whole.
   function ffRangeText() {
-    return FF_CLAIM_MIN.toFixed(2) + '-' + FF_CLAIM_MAX.toFixed(2);
+    return CONFIG.minFairFight.toFixed(2) + '-' + CONFIG.maxFairFight.toFixed(2);
   }
 
-  // May this member call this target, as far as his own Fair Fight goes?
-  // Three answers - 'ok', 'out_of_range', 'unknown' - and the row asks once.
+  // Whether a Fair Fight is inside the span is NOT decided here any more.
+  // ffAllowsClaim() used to do it, on the two decimals the FF cell prints. It
+  // is gone: classifyLiveTargetState() compares the figure as FFScouter sent
+  // it, the way the scripts do, and a second comparison beside it would be a
+  // second rule. (On two decimals 3.404 was inside 3.40; for the scripts it is
+  // outside. One board, one answer.) What is left of the old function is
+  // fairFightOf(), which only reads the figure.
   //
-  // The limit sits in the page and not in the server, and that is a decision,
-  // not an oversight. The server holds no FF and has no way to get one without
-  // fetching FFScouter itself, which would tear down the line statSource is
-  // drawn along: one place reads FF, everything else asks it a question. The
-  // owner took the call on 2026-09-10 on the ground that there is no sabotage
-  // risk inside the faction. Do not "correct" this into the server.
-  //
-  // Fail closed. Anything that is not a figure this page has actually read -
-  // no key, first read still out, the source failed, or a value already dropped
-  // for being older than FF_DROP_MS - is 'unknown', and 'unknown' does not
-  // claim. Stale but under FF_DROP_MS does claim: battle stats move slowly and
-  // the page already drops the figure at thirty minutes, so the limit follows
-  // that lifetime instead of inventing a second one. Owner's decision,
-  // 2026-09-10.
-  //
-  // No request goes out from here. It reads the same cache the FF cell on this
-  // very row has just read.
-  function ffAllowsClaim(targetId) {
-    var columnState = statSource.state();
-    if (columnState === 'nokey' || columnState === 'checking' || columnState === 'error') {
-      return 'unknown';
-    }
-    var row = statSource.get(targetId);
-    if (!row || row.state !== 'ok' || row.ff === null) return 'unknown';
-    // Compared on the same two decimals the FF cell prints. A row showing the
-    // lower end in one column and refusing in the next, because the figure
-    // behind it is a shade under, would be the page contradicting itself on
-    // one line.
-    var shown = Number(row.ff.toFixed(2));
-    return (shown >= FF_CLAIM_MIN && shown <= FF_CLAIM_MAX) ? 'ok' : 'out_of_range';
-  }
+  // Stale but under FF_DROP_MS still counts as a figure: battle stats move
+  // slowly and the page already drops the figure at thirty minutes, so the
+  // limit follows that lifetime instead of inventing a second one. Owner's
+  // decision, 2026-09-10.
 
   // The line above the list that says why FF and EST are not simply there.
   // Silent when they are. No longer silent when there is no key: the FF range
@@ -1281,13 +2675,18 @@
     }
   }
 
-  // Usefulness, not the alphabet: free first, then the ones you hold, then
-  // someone else's, then everything that cannot be taken at all.
+  // Usefulness, not the alphabet: the ones that can be called now first, then
+  // the ones you hold, then someone else's, then everything that cannot be
+  // taken at all. Whether a free target can be called is the rule function's
+  // answer for the row, handed in - it is not worked out again here.
   function dibsRank(target, ctx) {
     if (!ctx.boardUsable || !ctx.board) return 4;   // Locked or Offline
     if (ctx.board.unreadable[target.id]) return 4;  // Unknown
     var claim = ctx.board.claims[target.id];
-    if (!claim) return 1;                           // Free
+    if (!claim) {
+      var decision = ctx.decisions ? ctx.decisions[target.id] : null;
+      return (decision && decision.state === TARGET_STATE.READY) ? 1 : 4;
+    }
     return claim.memberId === ctx.me ? 2 : 3;
   }
 
@@ -1390,10 +2789,244 @@
     if (status === 'taken') return 'Someone else got there first';
     if (status === 'not_owner') return 'That claim is not yours';
     if (status === 'unreadable') return 'The server cannot read this row';
-    return 'Refused - see the message at the top';
+    return 'Refused - see the message at the bottom';
   }
 
+  // The hospital time in a DIBS cell, counted in seconds the way the scripts
+  // show it, or '' when the rule function was given no time.
+  function hospitalText(decision) {
+    return Number.isFinite(decision.seconds) ? 'Hospital ' + formatCellCountdown(decision.seconds) : '';
+  }
+
+  // What a row nobody holds says and whether its button works - read off the
+  // rule function's answer, and off nothing else. No figure is compared to a
+  // limit here: where the row needs to know more than the answer says ("would
+  // low life open this one?", "and if I held nothing?") it asks the rule
+  // function that question.
+  //
+  //   word, wordClass  the state word in the cell, and its face
+  //   note             the one line under it
+  //   wrap             the note is a sentence and may take more than one line
+  //   callable         the button takes a press
+  //   lowHp            the life in per cent for the pink button, or null
+  //   decision         the answer the row is drawn from
+  //   key              everything above but the running time, so the second
+  //                    hand can tell a row that only counted down from one
+  //                    that has to be drawn again
+  //
+  // A row always has the same two lines - the word with the hospital time
+  // beside it, and the note - whatever it says. A list whose rows change
+  // height as targets move in and out of the window moves under the finger.
+  //
+  // While this member holds a target the rule function answers BLOCKED for
+  // every other row. Those rows are then drawn as they would be if he held
+  // nothing: taking a target must not redraw the whole list in another shape
+  // around the row that was pressed, and what the row said about the target is
+  // still true. A press on one of them is answered by the page itself - see
+  // claimStillAllowed() - and nothing is sent.
+  function rulePresentation(target, decision, ctx) {
+    var out = { word: 'Free', wordClass: 'dibs free', note: '', wrap: false, callable: false, lowHp: null,
+      decision: decision, key: '' };
+    if (decision.state === TARGET_STATE.BLOCKED) {
+      decision = decisionFor(target, { ownTargetId: '', rwPhase: ctx.rwPhase });
+      out.decision = decision;
+    }
+    var reason = decision.reason;
+    if (decision.state === TARGET_STATE.READY) {
+      out.callable = true;
+      if (decision.lowHp === true) {
+        var life = Life.fresh(target.id);
+        if (life) {
+          out.lowHp = Math.round(life.ratio * 100);
+          out.note = 'DIBS open · low life';
+        } else {
+          // The reading aged out between the answer and the drawing.
+          out.callable = false;
+          out.note = 'checking life';
+        }
+      } else {
+        out.note = 'DIBS open';
+      }
+    } else if (decision.state === TARGET_STATE.FREE) {
+      out.word = 'Online';
+      out.note = 'free for all - no DIBS';
+    } else if (decision.state === TARGET_STATE.LOCKED) {
+      if (reason === 'hospital-too-early') {
+        out.word = 'Locked';
+        out.wordClass = 'dibs locked';
+        out.note = 'DIBS opens at ' + formatCellCountdown(CONFIG.gateSeconds);
+      } else if (reason === 'fair-fight-too-low' || reason === 'fair-fight-too-high') {
+        out.note = 'Outside your FF range (' + ffRangeText() + ')';
+        // Would 20% life or less have opened it? Asked of the rule function,
+        // not worked out here.
+        if (decisionFor(target, { ownTargetId: '', rwPhase: ctx.rwPhase }, true).state === TARGET_STATE.READY) {
+          var seen = Life.fresh(target.id);
+          if (Life.profileMissing()) {
+            out.note = 'Low-life DIBS needs a new key (Create custom API key)';
+            out.wrap = true;
+          } else if (Life.keyFailed()) {
+            out.note += ' · no life reading';
+          } else {
+            out.note += ' · HP ' + (seen ? Math.round(seen.ratio * 100) + '%' : '?');
+          }
+        }
+      }
+      // rw-not-started and rw-phase-unverifiable: the line above the list
+      // already says there is no live war. The row adds nothing.
+    } else if (decision.state === TARGET_STATE.UNAVAILABLE) {
+      out.note = rosterIsFresh() ? 'Not in hospital - no DIBS' : 'Roster reading too old - no DIBS';
+    } else if (decision.state === TARGET_STATE.UNKNOWN) {
+      if (reason === 'hospital-timer-unverifiable') {
+        out.word = 'Unknown';
+        out.wordClass = 'dibs unknown';
+        out.note = 'Hospital time unknown';
+      } else {
+        out.note = 'FF unknown - cannot check';
+      }
+    }
+    out.key = [decision.state, reason, out.callable ? 1 : 0, out.lowHp === null ? '' : out.lowHp,
+      out.word, out.note, hospitalText(decision) ? 1 : 0].join('|');
+    return out;
+  }
+
+  // The second hand changes text only. Torn IDs keep updates tied to a player
+  // even when the table has been sorted or a full redraw is waiting for a click.
+  //
+  // One thing more than text: a hospital time that has just passed the 2:00
+  // gate, a life reading that has just aged out. Then the row is not the same
+  // row any more, and the table is drawn again - through renderTargets(), so a
+  // press that is under way still holds it.
+  function updateTargetTimes() {
+    var board = Claims.board();
+    var targets = Roster.targets();
+    if (!board || !targets) return;
+    var byId = Object.create(null);
+    targets.forEach(function (target) { byId[target.id] = target; });
+    el.targetHost.querySelectorAll('[data-status-id]').forEach(function (cell) {
+      var target = byId[cell.getAttribute('data-status-id')];
+      if (target) cell.textContent = statusText(target);
+    });
+    el.targetHost.querySelectorAll('[data-claim-id]').forEach(function (cell) {
+      var claim = board.claims[cell.getAttribute('data-claim-id')];
+      if (claim) cell.textContent = leftText(estimateLeft(claim, board));
+    });
+    var ctx = ruleContext();
+    var redraw = false;
+    el.targetHost.querySelectorAll('tr[data-rule]').forEach(function (tr) {
+      var target = byId[tr.getAttribute('data-target-id')];
+      if (!target) return;
+      var shown = rulePresentation(target, decisionFor(target, ctx), ctx);
+      if (shown.key !== tr.getAttribute('data-rule')) { redraw = true; return; }
+      var cell = tr.querySelector('[data-hosp-id]');
+      if (cell) cell.textContent = hospitalText(shown.decision);
+    });
+    if (redraw) renderTargets();
+    else scheduleGateWake();
+  }
+
+  // The second hand runs once a second from whenever the page happened to
+  // start, so on its own a row that reaches the 2:00 gate is redrawn up to a
+  // second late - and a member on this page would get the button up to a
+  // second after a member on the script. This wakes the page at the moment the
+  // next locked target reaches the gate, by the measured clock. It decides
+  // nothing: it only makes updateTargetTimes() look now instead of at the next
+  // whole second, and the rule function gives the answer as always.
+  var gateTimer = null;
+  function scheduleGateWake() {
+    clearTimeout(gateTimer);
+    gateTimer = null;
+    var targets = Roster.targets();
+    if (!targets || !tornClockReady()) return;
+    var byId = Object.create(null);
+    targets.forEach(function (target) { byId[target.id] = target; });
+    var soonest = Infinity;
+    el.targetHost.querySelectorAll('tr[data-rule^="locked|hospital-too-early|"]').forEach(function (tr) {
+      var target = byId[tr.getAttribute('data-target-id')];
+      if (!target) return;
+      // The instant the remaining time, rounded up, first reads the gate.
+      var ms = (target.until - CONFIG.gateSeconds) * 1000 - getTornNowMs();
+      if (isFinite(ms) && ms < soonest) soonest = ms;
+    });
+    if (soonest === Infinity) return;
+    gateTimer = setTimeout(function () {
+      gateTimer = null;
+      updateTargetTimes();
+    }, Math.max(0, Math.ceil(soonest)) + 1);
+  }
+
+  var targetFocusKey = '';
+  var targetPresses = new Set();
+  var targetPressLocked = false;
+  var targetRenderPending = false;
+  var targetPressTimer = null;
+  var targetFlushTimer = null;
+
+  function targetButtonKey(node) {
+    var button = node && node.closest ? node.closest('button[data-focus-key]') : null;
+    return button && el.targetHost.contains(button) ? button.getAttribute('data-focus-key') : '';
+  }
+
+  // Remember focus through the disabled pending button, but never take it back
+  // after the member has focused or pressed something else.
+  document.addEventListener('focusin', function (event) {
+    targetFocusKey = targetButtonKey(event.target);
+  });
+  document.addEventListener('pointerdown', function (event) {
+    if (targetButtonKey(event.target) !== targetFocusKey) targetFocusKey = '';
+  }, true);
+
+  function finishTargetPress(repaint) {
+    clearTimeout(targetPressTimer);
+    clearTimeout(targetFlushTimer);
+    targetPressTimer = null;
+    targetFlushTimer = null;
+    targetPresses.clear();
+    targetPressLocked = false;
+    var pending = targetRenderPending;
+    targetRenderPending = false;
+    if (pending && repaint !== false) renderTargets();
+  }
+
+  el.targetHost.addEventListener('pointerdown', function (event) {
+    // Only a press that can end in a click holds the table still. A disabled
+    // button gets pointerdown but never click, so locking on it would hold
+    // every redraw for the full three seconds.
+    var hit = event.target && event.target.closest ? event.target.closest('button, a[href]') : null;
+    if (!hit || !el.targetHost.contains(hit) || hit.disabled) return;
+    clearTimeout(targetFlushTimer);
+    targetFlushTimer = null;
+    if (!targetPressLocked) targetPressTimer = setTimeout(finishTargetPress, 3000);
+    targetPressLocked = true;
+    targetPresses.add(event.pointerId);
+  }, true);
+
+  function releaseTargetPress(event) {
+    if (!targetPresses.has(event.pointerId)) return;
+    // Touch captures its pointer implicitly. Hit testing detects a release
+    // outside even when pointerup is still addressed to the original button.
+    if (event.type === 'pointerup' && el.targetHost.contains(
+        document.elementFromPoint(event.clientX, event.clientY))) return;
+    targetPresses.delete(event.pointerId);
+    // A click's handler runs before this timer: replacing a button during
+    // pointerup, or in click capture, would discard the activation itself.
+    if (!targetPresses.size && targetFlushTimer === null) {
+      targetFlushTimer = setTimeout(finishTargetPress, 0);
+    }
+  }
+  document.addEventListener('pointerup', releaseTargetPress, true);
+  document.addEventListener('pointercancel', releaseTargetPress, true);
+  document.addEventListener('click', releaseTargetPress, true);
+
   function renderTargets() {
+    if (targetPressLocked) {
+      targetRenderPending = true;
+      var pendingButton = pendingTarget && el.targetHost.querySelector(
+        '[data-focus-key="action:' + pendingTarget + '"]');
+      if (pendingButton) { pendingButton.disabled = true; pendingButton.textContent = '…'; }
+      return;
+    }
+    var focusedKey = targetButtonKey(document.activeElement);
+    if (focusedKey) targetFocusKey = focusedKey;
     var war = Roster.war();
     var targets = Roster.targets();
     var board = Claims.board();
@@ -1415,17 +3048,24 @@
     if (SIM) hint.push('simulation · claims go to ' + Claims.wireWarId(war ? war.warId : '', 'claims'));
     if (!me) hint.push('your own Torn ID could not be read, so DIBS is off');
     else if (!SIM && (!war || war.state !== 'live')) hint.push('no live war, so DIBS is off');
-    else if (claimStatus === 'unauthorized') hint.push('the password was not accepted, so DIBS is off');
-    else if (claimStatus === 'idle') hint.push('no War Room password yet, so DIBS is locked');
+    else if (!tornClockReady()) hint.push('no clock but this device’s has been read yet, so DIBS is off');
+    else if (claimStatus === 'unauthorized') hint.push('not signed in to the War Room, so DIBS is off');
+    else if (claimStatus === 'idle') hint.push('not signed in yet, so DIBS is locked');
     else if (claimStatus !== 'ok') hint.push('the claim board is not answering');
     else if (board && board.degraded) hint.push('the server could not read every claim');
     el.targetHint.textContent = hint.join(' · ');
+
+    // The rule function is asked once per target per drawing. The row, and
+    // the DIBS sort, both read this answer; neither works one out of its own.
+    var ruleCtx = ruleContext();
+    var decisions = Object.create(null);
+    targets.forEach(function (target) { decisions[target.id] = decisionFor(target, ruleCtx); });
 
     // Sorting is a view over the rows Torn already gave us. It never changes
     // which targets exist and never reorders Roster's own array, so losing the
     // sort falls straight back to the order the roster arrived in.
     var rows = sortRows(targets, { boardUsable: boardUsable, board: board, me: me,
-      dir: sortState ? sortState.dir : 'asc' });
+      decisions: decisions, dir: sortState ? sortState.dir : 'asc' });
     // Decided once for the whole column; each cell then reads its own row.
     var ffState = statSource.state();
     // Read once for the whole table, and matched to a row by Torn ID below -
@@ -1443,6 +3083,7 @@
       th.scope = 'col';
       var trigger = document.createElement('button');
       trigger.type = 'button';
+      trigger.setAttribute('data-focus-key', 'sort:' + column.id);
       var label = document.createElement('span');
       label.textContent = column.label;
       var mark = document.createElement('span');
@@ -1491,9 +3132,6 @@
 
       var tdFf = ffCell(target, 'ff', ffState);
       var tdEst = ffCell(target, 'est', ffState);
-      // Asked once for the row and read twice below: by the free branch and by
-      // the simulation button at the end of the row.
-      var ffSays = ffAllowsClaim(target.id);
 
       var tdStatus = document.createElement('td');
       tdStatus.appendChild(statusPill(target));
@@ -1510,6 +3148,7 @@
 
       var button = document.createElement('button');
       button.type = 'button';
+      button.setAttribute('data-focus-key', 'action:' + target.id);
       button.className = 'btn small';
       button.textContent = 'Take DIBS';
       button.disabled = true;
@@ -1540,35 +3179,60 @@
           who.textContent = 'Taken by ' + holder;
           var left = document.createElement('div');
           left.className = 'left';
+          left.setAttribute('data-claim-id', target.id);
           left.textContent = leftText(estimateLeft(claim, board));
           dibsState.appendChild(who);
           dibsState.appendChild(left);
           if (mine) {
             tr.className = 'mine';
             button.textContent = 'Release';
-            button.disabled = !canClaim;
+            button.disabled = !canClaim || actBusy;
             button.onclick = function () { act('unclaim', target.id); };
           } else {
             button.textContent = 'Taken';
           }
         } else {
-          dibsState.className = 'dibs free';
-          dibsState.textContent = 'Free';
+          // Nobody holds it. Whether it can be called is the rule function's
+          // answer for this row - the same answer the scripts give on Torn's
+          // own war page - and what the cell says is read off that answer.
+          var shown = rulePresentation(target, decisions[target.id], ruleCtx);
+          tr.setAttribute('data-rule', shown.key);
+          dibsState.className = shown.wordClass + ' rule';
+          // The word stays Free whenever the target is free on the board:
+          // another member with another FF may take it. FF is personal - two
+          // members see different figures on the same row, and that is right.
+          // Saying Taken here would be the page telling a lie about the board.
+          // Two lines, always: the hospital time beside the word, and the
+          // note under it. Both are there even when they have nothing to say,
+          // so every row is the same height and the second hand has a place
+          // to write.
+          var top = document.createElement('div');
+          top.className = 'top';
+          var word = document.createElement('span');
+          word.className = 'word';
+          word.textContent = shown.word;
+          top.appendChild(word);
+          var when = document.createElement('span');
+          when.className = 'when';
+          when.setAttribute('data-hosp-id', target.id);
+          when.textContent = hospitalText(shown.decision);
+          top.appendChild(when);
+          dibsState.appendChild(top);
+          var why = document.createElement('div');
+          // "sentence", not "wrap": .wrap is the page's own outer frame.
+          why.className = shown.wrap ? 'left sentence' : 'left';
+          why.textContent = shown.note || '\u00a0';
+          dibsState.appendChild(why);
           button.className = 'btn small primary';
-          if (ffSays === 'ok') {
-            button.disabled = !canClaim;
+          if (shown.callable) {
+            if (shown.lowHp !== null) {
+              // The scripts' low-life button: pink, and it says the life.
+              button.className = 'btn small lowhp';
+              button.textContent = 'Take DIBS · HP ' + shown.lowHp + '%';
+            }
+            button.disabled = !canClaim || actBusy;
             button.onclick = function () { act('claim', target.id); };
           } else {
-            // The word stays Free, because the target is free: another member
-            // with another FF may take it. FF is personal - two members see
-            // different figures on the same row, and that is right. Saying
-            // Taken here would be the page telling a lie about the board.
-            var ffWhy = document.createElement('div');
-            ffWhy.className = 'left';
-            ffWhy.textContent = ffSays === 'out_of_range'
-              ? 'Outside your FF range (' + ffRangeText() + ')'
-              : 'FF unknown - cannot check';
-            dibsState.appendChild(ffWhy);
             // No handler is attached at all, rather than a live one behind a
             // disabled button.
             button.disabled = true;
@@ -1593,24 +3257,14 @@
       dibsCell.appendChild(button);
 
       // Simulation only, and only on a target nobody holds: claiming one that
-      // is already held would be asking the server something it has answered.
-      // This is how the refusal is tried - take as the other, then take it
-      // yourself and watch your own button go dead.
-      if (SIM) {
-        var other = document.createElement('button');
-        other.type = 'button';
-        other.className = 'btn small';
-        other.textContent = 'Take as other';
-        var free = boardUsable && !board.unreadable[target.id] && !board.claims[target.id];
-        // The FF range holds here too. Taking a target in somebody else's name
-        // must not be the way around the check, or the check is a door with a
-        // window beside it.
-        other.disabled = !(canClaim && free && ffSays === 'ok') || pendingTarget === target.id;
-        if (!other.disabled) {
-          other.onclick = function () { act('claim', target.id, SIM_OTHER_ID); };
-        }
-        dibsCell.appendChild(other);
-      }
+      // "Take as other" used to sit here in simulation: a button that claimed
+      // a target as a made-up member, so the refusal could be tried out alone.
+      // It is GONE, and it cannot come back. The server now reads the Torn ID
+      // off the sign-in slip and ignores anything the request says, so the
+      // button would have claimed the target as the member himself while the
+      // screen said somebody else held it - a lie in the one place this page
+      // must never lie. Two real members on two devices is the only way to try
+      // that refusal now, and that is stage 3G.
 
       tdDibs.appendChild(dibsCell);
 
@@ -1626,9 +3280,12 @@
     table.appendChild(tbody);
     el.targetHost.textContent = '';
     el.targetHost.appendChild(table);
+    var focusButton = targetFocusKey && table.querySelector('[data-focus-key="' + targetFocusKey + '"]');
+    if (focusButton && !focusButton.disabled) focusButton.focus({ preventScroll: true });
 
     var readAt = Roster.stamps().targets;
-    if (readAt && Date.now() - readAt > ROSTER_POLL_MS * 3) {
+    // The same age at which the rules stop deciding on the reading.
+    if (readAt && Date.now() - readAt > CONFIG.opponentMembersMaxAgeMs) {
       el.staleBar.hidden = false;
       el.staleBar.textContent = 'Roster is stale. Last read from Torn at ' +
         new Date(readAt).toLocaleTimeString() + ' — the levels and hospital times below are ' +
@@ -1637,6 +3294,7 @@
       el.staleBar.hidden = true;
     }
     renderFfBar(rows, ffState);
+    scheduleGateWake();
   }
 
   function renderWar() {
@@ -1686,36 +3344,73 @@
         new Date(Roster.stamps().targets).toLocaleTimeString()
       : 'not loaded';
     el.advFf.textContent = ffAdvancedLine();
-    el.advError.textContent = Claims.lastError() || Roster.lastError() || 'none';
+    el.advLife.textContent = Life.statusLine();
+    el.advClock.textContent = tornClockLabel();
+    var advErr = Claims.lastError() || Roster.lastError() || '';
+    var advDiag = Roster.lastDiagnostic();
+    el.advError.textContent = advErr
+      ? (advErr + (advDiag ? '  ' + advDiag : ''))
+      : 'none';
     el.advRaw.textContent = Claims.lastRaw() || '—';
-    el.wipeBtn.disabled = !(war && identity && Claims.hasPassword());
-    // In simulation the reset above the list is the wipe that is used. Leaving
-    // a second wipe here would only invite a mistake about which board it hits.
-    el.wipeBtn.hidden = SIM;
-    if (SIM) el.wipeNote.textContent = 'Use Reset test war above the list. This one is off while ' +
-      'the page is simulating.';
+    // The wipe button for a real war is gone. Emptying a board is a simulation
+    // affair now - Reset test war above the list - and the server refuses it
+    // against a real war for everybody regardless of what any page shows.
+  }
+
+  // Invisible copies share the reset cells, so arming it changes no geometry.
+  // Read the already-rendered simulation ID; this helper makes no requests.
+  function sizeResetLayout() {
+    el.simResetButtonSize.textContent = 'Confirm: reset ' + el.simWireWar.textContent;
+    el.simResetIdleSize.textContent = SIM_RESET_NOTE;
+    el.simResetArmedSize.textContent = 'This frees every target on the test board, including the ones ' +
+      'the test member holds. Click again within six seconds to do it.';
+  }
+
+  // Under the Torn key field. Said once Torn has answered that the key has no
+  // profile selection: everything else works, low-life DIBS does not, and the
+  // member is told what to do about it - the scripts say the same.
+  function lifeKeyRender() {
+    var text = '';
+    if (Life.profileMissing()) {
+      text = 'Low-life DIBS needs a new key (Create custom API key). This key has no profile ' +
+        'selection, so the page cannot read a target’s life. Everything else works as usual.';
+    } else if (Life.keyFailed()) {
+      text = 'Torn refused this key when the page asked for a target’s life, so low-life DIBS is ' +
+        'off and the page has stopped asking.';
+    }
+    el.lifeSaid.textContent = text;
+    el.lifeSaid.hidden = !text;
   }
 
   function render() {
-    passRender();
+    sessionRender();
     ffKeyRender();
+    lifeKeyRender();
     renderWar();
+    sizeResetLayout();
     renderTargets();
     renderAdvanced();
   }
 
   // ---------------------------------------------------------------- actions
 
-  // actorId is whose claim this is. It is the member's own Torn ID everywhere
-  // except the simulation's Take as other, which is the only caller that ever
-  // passes anything else - and only ever the made-up test ID.
-  async function act(op, targetId, actorId) {
+  // Whose claim this is is not decided here any more, and cannot be. The
+  // server reads it off the sign-in slip. This function no longer takes an
+  // actor, because there is no longer anything true it could do with one.
+  //
+  // One write at a time. From the press until the server has answered - the
+  // whole chain of last checks included - no other press starts anything, on
+  // this row or on any other. One press is at most one claim. (The scripts
+  // hold theirs the same way: sharedWriteBusy.)
+  var actBusy = false;
+
+  async function act(op, targetId) {
     var war = Roster.war();
     var identity = Roster.identity();
     if (!war || !identity) return;
-    var actor = (SIM && actorId === SIM_OTHER_ID) ? SIM_OTHER_ID : identity.playerId;
-    var asOther = actor !== identity.playerId;
-    hide(el.errorBox); hide(el.okBox);
+    if (actBusy) return;
+    actBusy = true;
+    hideActionMessage();
     // A new click clears the old refusal before anything is sent. Two messages
     // on screen at once is worse than none, and the member is asking about
     // this row now, not the one before it.
@@ -1723,9 +3418,25 @@
     pendingTarget = targetId;
     render();
     try {
+      var checked = null;
+      if (op === 'claim') {
+        // The button was drawn some seconds ago. Torn is asked again now -
+        // is the war still live, is the target still in hospital with 2:00 or
+        // less - and nothing is sent unless every answer is still yes.
+        checked = await claimStillAllowed(targetId, war.warId);
+        if (checked.refused) {
+          lastRefusal = { targetId: targetId, text: checked.refused.row, at: Date.now() };
+          showActionMessage('err', checked.refused.box);
+          return;
+        }
+      }
+      // The target's hospital end time, in seconds, as Torn gave it in the
+      // check just made. It is what the server later measures a new hospital
+      // stay against; without it a claim can never be freed automatically, so
+      // it is sent with every claim.
       var result = op === 'claim'
-        ? await Claims.claim(war.warId, targetId, actor)
-        : await Claims.unclaim(war.warId, targetId, actor);
+        ? await Claims.claim(war.warId, targetId, checked.hospitalUntil)
+        : await Claims.unclaim(war.warId, targetId);
       var body = result.body;
 
       // Refused or not is decided once, here, so the branches below stay what
@@ -1735,87 +3446,218 @@
         : { targetId: targetId, text: refusalLine(body.status), at: Date.now() };
 
       if (result.http === 200 && body.ok === true) {
-        if (body.status === 'claimed' || body.status === 'renewed') {
-          show(el.okBox, asOther
-            ? 'Torn ' + actor + ' holds ' + targetId + '. Your own button on that row is now off.'
-            : 'You hold ' + targetId + '.');
+        if (body.status === 'claimed') {
+          showActionMessage('ok', 'You hold ' + targetId + '.');
+        } else if (body.status === 'already_claimed') {
+          // The server no longer pushes the clock forward on a repeat. Saying
+          // "you hold it" again would look like it had.
+          showActionMessage('ok', targetId + ' was already yours. The time on it is unchanged.');
         } else {
-          show(el.okBox, targetId + ' is free again.');
+          showActionMessage('ok', targetId + ' is free again.');
         }
       } else if (result.http === 409 && body.status === 'already_holding') {
         // The target the member is already on comes back in the answer, so the
         // box can name it instead of repeating the server's word at him.
         var held = (body.claim && body.claim.targetId) || 'another target';
-        show(el.errorBox, asOther
-          ? 'Torn ' + actor + ' already holds ' + held + '.'
-          : 'You already hold ' + held + '. Release it before calling another target.');
+        showActionMessage('err', 'You already hold ' + held + '. Release it before calling another target.');
       } else if (result.http === 409 && body.status === 'taken') {
         // Who holds it. Not who was quicker - the server cannot know that.
         var holder = body.claim && body.claim.memberId;
-        show(el.errorBox, targetId + ' is held by ' +
+        showActionMessage('err', targetId + ' is held by ' +
           (holder === identity.playerId ? 'you' : (Roster.nameOf(holder) || ('Torn ' + holder))) + '.');
       } else if (result.http === 409 && body.status === 'not_owner') {
         var other = body.claim && body.claim.memberId;
-        show(el.errorBox, targetId + ' is held by ' +
+        showActionMessage('err', targetId + ' is held by ' +
           (Roster.nameOf(other) || ('Torn ' + other)) + ' and was not released.');
       } else if (result.http === 409 && body.status === 'unreadable') {
-        show(el.errorBox, 'The server cannot read who holds ' + targetId +
+        showActionMessage('err', 'The server cannot read who holds ' + targetId +
           ', so it will not hand it out. Leave that one alone.');
       } else {
-        show(el.errorBox, 'The claim server refused this: ' +
-          (body.error || body.status || ('HTTP ' + result.http)) + '.');
+        showActionMessage('err', Says.of(result.http, body));
       }
     } catch (error) {
-      if (error.unauthorized) passRejected();
-      else show(el.errorBox, error.message);
+      if (error.unauthorized) sessionRejected();
+      else showActionMessage('err', error.message);
     } finally {
       pendingTarget = '';
+      actBusy = false;
       await pollClaims();
       render();
     }
   }
 
-  var wipeArmed = false;
-  var wipeIdle = 'Wipe every claim in this war';
-
-  el.wipeBtn.addEventListener('click', async function () {
-    var war = Roster.war();
-    var identity = Roster.identity();
-    if (!war || !identity) return;
-    if (!wipeArmed) {
-      wipeArmed = true;
-      el.wipeBtn.textContent = 'Confirm: wipe war ' + war.warId;
-      el.wipeNote.textContent = 'This empties the whole war board for the entire faction, not just ' +
-        'your own claims. Click again within six seconds to do it.';
-      setTimeout(function () {
-        wipeArmed = false;
-        el.wipeBtn.textContent = wipeIdle;
-        el.wipeNote.textContent = 'Empties the whole war’s claim board, for everyone in the faction.';
-      }, 6000);
-      return;
+  // The last look before a claim leaves the page. Answers { hospitalUntil }
+  // when it may go, or { refused: { row, box } } - the two lines that say why
+  // it may not, one for the row and one for the box.
+  //
+  // The order is the scripts' (claimSharedTarget in KS Torn War Dibs PC
+  // 1.1.10):
+  //   1. the rule function, on what the page already knows
+  //   2. Torn: /v2/faction/wars, asked now - is this war still live
+  //   3. Torn: /v2/user/{target}/basic, asked now - is the target in hospital
+  //      with 2:00 or less, by the measured clock (when the answer carries
+  //      Torn's time it is also a reading of it)
+  //   4. online? then it is free for all
+  //   5. if the yes rests on low life: the life, read once more for this claim
+  //   6. the rule function again, on the fresh answer and on the roster
+  // Two calls to Torn for a press, three when low life is what opens the
+  // target. All of them go through the page's own 100-a-minute limit. If Torn
+  // refuses, fails or does not answer in time, nothing is sent.
+  //
+  // The scripts add Torn's cache-bypass to calls 2 and 3. This page does not:
+  // the project's own rule is never to use one. An answer here can therefore
+  // be one Torn has kept for up to thirty seconds.
+  async function claimStillAllowed(targetId, warIdAtPress) {
+    var no = function (row, box) { return { refused: { row: row, box: box + ' Nothing was sent.' } }; };
+    var NOT_NOW = no('Cannot be called right now', 'That target cannot be called right now.');
+    var ONLINE = no('Online - free for all', 'That target is online, so it is free for all and cannot be called.');
+    var LOW_LIFE = no('Low life could not be confirmed', 'Low life could not be confirmed for that target, so it was not called.');
+    var target = targetFor(targetId);
+    if (!target) return NOT_NOW;
+    var ctx = ruleContext();
+    var first = decisionFor(target, ctx);
+    if (first.state === TARGET_STATE.FREE) return ONLINE;
+    if (first.state === TARGET_STATE.BLOCKED) {
+      // One active DIBS per member. The words are the ones the page has always
+      // used for the server's own refusal of this; here the page can give
+      // them itself, and names the target that is held.
+      return { refused: { row: 'You already hold another target',
+        box: 'You already hold ' + ctx.ownTargetId + '. Release it before calling another target.' } };
     }
-    wipeArmed = false;
-    el.wipeBtn.textContent = wipeIdle;
-    hide(el.errorBox); hide(el.okBox);
+    if (first.state !== TARGET_STATE.READY) return NOT_NOW;
+    // Does the yes rest on low life - would it not be a yes without it?
+    var restsOnLowLife = decisionFor(target, ctx, false).state !== TARGET_STATE.READY;
+
+    // 2. The war, from Torn, now.
     try {
-      var result = await Claims.wipe(war.warId, identity.playerId);
-      if (result.http === 200 && result.body.ok === true) {
-        show(el.okBox, 'Wiped. The server removed ' + result.body.removed + ' claims from war ' + war.warId + '.');
-      } else {
-        show(el.errorBox, 'The claim server refused the wipe: ' +
-          (result.body.error || result.body.status || ('HTTP ' + result.http)) + '.');
-      }
+      await Roster.loadWar({ timeoutMs: CONFIG.requestTimeoutMs });
     } catch (error) {
-      if (error.unauthorized) passRejected();
-      else show(el.errorBox, error.message);
+      return no('Torn did not confirm the war', 'Torn could not confirm that the war is live just now (' +
+        tornSays(error) + '), so the target was not called.');
     }
-    await pollClaims();
-    render();
-  });
+    var war = Roster.war();
+    if (!war || war.warId !== warIdAtPress) {
+      return no('The war has changed', 'Torn no longer reports the war this list was read for, so the target was not called.');
+    }
+    if (!SIM && war.state !== 'live') {
+      return no('The war is not live', 'Torn says the war is not live, so the target was not called.');
+    }
 
-  // The reset that belongs to the simulation. It sends a wipe like the one in
-  // Advanced, but only ever through the wall, which refuses a wipe that is not
-  // aimed at a sim- war. Two clicks, same as the other one.
+    // 3. The target, from Torn, now.
+    var fresh;
+    try {
+      fresh = freshBasicStatus(await Roster.loadBasic(targetId, { timeoutMs: CONFIG.requestTimeoutMs }), targetId, nowMs());
+    } catch (error) {
+      return no('Torn did not confirm the target', 'Torn could not confirm that target just now (' +
+        tornSays(error) + '), so it was not called.');
+    }
+    if (!fresh) {
+      return no('Torn did not confirm the target', 'Torn’s answer about that target could not be read, so it was not called.');
+    }
+    target = targetFor(targetId);
+    if (!target) return NOT_NOW;
+    var onFresh = freshRefusal(decisionOnFresh(target, fresh, ruleContext()), no);
+    if (onFresh) return onFresh;
+
+    // 4. Online is free for all.
+    if (activityOf(target) === 'online') return ONLINE;
+
+    // 5. Low life, read for this claim.
+    if (restsOnLowLife) {
+      var life = await Life.readForClaim(targetId);
+      target = targetFor(targetId);
+      if (!target) return NOT_NOW;
+      if (activityOf(target) === 'online') return ONLINE;
+      if (!life || !Life.lowHp(targetId)) return LOW_LIFE;
+    }
+
+    // 6. Once more, on the fresh answer (still young, still inside 2:00) and
+    // on the roster. Only two yeses send anything.
+    ctx = ruleContext();
+    var onFreshLast = freshRefusal(decisionOnFresh(target, fresh, ctx), no);
+    if (onFreshLast) return onFreshLast;
+    var last = decisionFor(target, ctx);
+    if (last.state === TARGET_STATE.FREE) return ONLINE;
+    if (last.state !== TARGET_STATE.READY) return NOT_NOW;
+    return { hospitalUntil: Math.floor(fresh.until) };
+  }
+
+  // A failed call to Torn in a few words for the box: the sentence the page
+  // already has for it, without its full stop.
+  function tornSays(error) {
+    return String((error && error.message) || 'no answer').replace(/[.\s]+$/, '');
+  }
+
+  // The status out of a /v2/user/{id}/basic answer, as the rule function's
+  // feeders read a roster row - or null when the answer is not about this
+  // target or carries no status. The reading of the answer is the scripts'
+  // (verifyFreshTargetBasicForClaim): status under profile or at the top, the
+  // identity checked when the answer names one, hospital told from state or
+  // description. Whether the time is inside the gate is NOT decided here: the
+  // status goes to the rule function like every other.
+  function freshBasicStatus(payload, targetId, fetchedAt) {
+    const body = payload || {};
+    const status = body?.profile?.status ?? body?.status;
+    if (body?.error || !status || typeof status !== "object") return null;
+    const returnedIdentity = body?.profile?.player_id ?? body?.profile?.id ?? body?.player_id ?? body?.id;
+    if (returnedIdentity !== undefined && String(Number(returnedIdentity)) !== String(Number(targetId))) return null;
+    return {
+      state: typeof status.state === 'string' ? status.state : '',
+      description: typeof status.description === 'string' ? status.description : '',
+      details: '',
+      until: Number(status.until),
+      fetchedAt: fetchedAt
+    };
+  }
+
+  // The rule function's answer for a target whose hospital stay is read off
+  // the fresh answer instead of the roster. Everything else - Fair Fight,
+  // activity, life, the war's phase - is what it is for the row.
+  function decisionOnFresh(target, fresh, ctx) {
+    var hospital = hospitalOf(fresh, fresh.fetchedAt);
+    return classifyLiveTargetState({
+      playerId: target.id,
+      ownTargetId: ctx.ownTargetId,
+      isHospital: hospital.isHospital,
+      seconds: hospital.seconds,
+      fairFight: fairFightOf(target.id),
+      rwPhase: ctx.rwPhase,
+      activity: activityOf(target),
+      lowHp: Life.lowHp(target.id)
+    });
+  }
+
+  // Why a fresh answer does not allow the claim, or null when it does. Online
+  // is left to the caller, which has its own words for it.
+  function freshRefusal(decision, no) {
+    if (decision.state === TARGET_STATE.READY || decision.state === TARGET_STATE.FREE) return null;
+    if (decision.state === TARGET_STATE.UNAVAILABLE) {
+      return no('No longer in hospital', 'Torn says that target is no longer in hospital, so it was not called.');
+    }
+    if (decision.reason === 'hospital-too-early') {
+      return no('More than ' + formatCellCountdown(CONFIG.gateSeconds) + ' left', 'Torn says that target has ' +
+        formatCellCountdown(decision.seconds) + ' left in hospital - DIBS opens at ' +
+        formatCellCountdown(CONFIG.gateSeconds) + ' - so it was not called.');
+    }
+    if (decision.reason === 'hospital-timer-unverifiable') {
+      return no('Hospital time unknown', 'Torn’s answer did not say how long that target has left in hospital, so it was not called.');
+    }
+    return no('Cannot be called right now', 'That target cannot be called right now.');
+  }
+
+  function targetFor(targetId) {
+    var targets = Roster.targets() || [];
+    for (var i = 0; i < targets.length; i++) {
+      if (targets[i].id === targetId) return targets[i];
+    }
+    return null;
+  }
+
+  // The reset that belongs to the simulation. Since the wipe button for a real
+  // war was taken out, this is the ONLY way this page can empty a board at
+  // all - and it still goes through the wall, which refuses a wipe that is not
+  // aimed at a sim- war. The server refuses it a second time, on the Torn ID
+  // in the sign-in and on the war's name. Two clicks, as before.
   var simResetArmed = false;
   var SIM_RESET_IDLE = 'Reset test war';
   var SIM_RESET_NOTE = 'Empties the test war’s board so the whole run can be started over. ' +
@@ -1825,6 +3667,7 @@
     var war = Roster.war();
     var identity = Roster.identity();
     if (!SIM || !war || !identity) return;
+    hideActionMessage();
     if (!simResetArmed) {
       simResetArmed = true;
       el.simResetBtn.textContent = 'Confirm: reset ' + Claims.wireWarId(war.warId, 'wipe');
@@ -1840,19 +3683,17 @@
     simResetArmed = false;
     el.simResetBtn.textContent = SIM_RESET_IDLE;
     el.simResetNote.textContent = SIM_RESET_NOTE;
-    hide(el.errorBox); hide(el.okBox);
     try {
-      var result = await Claims.wipe(war.warId, identity.playerId);
+      var result = await Claims.wipe(war.warId);
       if (result.http === 200 && result.body.ok === true) {
-        show(el.okBox, 'Test war reset. The server removed ' + result.body.removed +
+        showActionMessage('ok', 'Test war reset. The server removed ' + result.body.removed +
           ' claims from ' + Claims.wireWarId(war.warId, 'wipe') + '. The real war was not touched.');
       } else {
-        show(el.errorBox, 'The claim server refused the reset: ' +
-          (result.body.error || result.body.status || ('HTTP ' + result.http)) + '.');
+        showActionMessage('err', Says.of(result.http, result.body));
       }
     } catch (error) {
-      if (error.unauthorized) passRejected();
-      else show(el.errorBox, error.message);
+      if (error.unauthorized) sessionRejected();
+      else showActionMessage('err', error.message);
     }
     await pollClaims();
     render();
@@ -1862,33 +3703,240 @@
 
   async function pollClaims() {
     var war = Roster.war();
-    if (!war || !Claims.hasPassword()) { Claims.drop(); return; }
+    if (!war || !Session.signedIn()) { Claims.drop(); return; }
     try {
       await Claims.refresh(war.warId);
     } catch (error) {
-      if (error.unauthorized) passRejected();
+      if (error.unauthorized) sessionRejected();
       // Any other failure has already dropped the board. The column says so.
     }
   }
 
+  // --------------------------------------------- reporting a new hospital stay
+  //
+  // The server frees a claim when a target it holds has gone back into hospital
+  // since it was called. It cannot see that by itself - it never talks to Torn
+  // except to check a key - so somebody who is looking has to say so. That is
+  // this.
+  //
+  // THREE THINGS ABOUT IT THAT ARE NOT DETAILS:
+  //
+  // 1. It makes NO call to Torn. Every number it uses comes out of the roster
+  //    reading this page already does every thirty seconds for the table on
+  //    screen. Torn's rules allow data from the API or from a page you are
+  //    looking at, and this is the former, already fetched, already on screen.
+  //
+  // 2. observedAt is the time of THAT READING, not the time this message is
+  //    sent - and it is told on the measured clock, not this device's.
+  //    Roster.stamps().targets is when the answer came back from Torn.
+  //    Sending Date.now() instead would make a reading half a minute old look
+  //    like it happened this second, and the server's own freshness rule -
+  //    which exists so an old number cannot free somebody's claim - would be
+  //    worth nothing.
+  //
+  // 3. It stays quiet unless it has something to say. The board now carries
+  //    each claim's saved hospital time, so the page can work out for itself
+  //    whether the server would free anything, and only speaks when the answer
+  //    is yes. The server decides; this only keeps the page from asking a
+  //    question it already knows the answer to.
+  //
+  // It reports other members' claims too. That is the point: the member who
+  // called the target may have closed the tab, and then it is somebody else's
+  // screen that has to set it free.
+  var reportedAt = {};   // targetId -> the reading we already reported from
+
+  // ------------------------------------------------- letting go of one's own
+  //
+  // The scripts release their own claim by themselves in two cases, and the
+  // page does the same for the claim this member holds (KS Torn War Dibs PC
+  // 1.1.10: maybeAutoReleaseBeatenTarget, ownClaimTargetIsOnline,
+  // ownClaimTargetIsBeaten):
+  //
+  //   - the target has come online. Online is free for all; a claim on it
+  //     helps nobody and locks the row for the faction.
+  //   - the target is back in hospital with more than
+  //     CONFIG.autoReleaseHospitalSeconds left. A claim can only be taken with
+  //     2:00 or less left and a hospital time never grows by itself, so that
+  //     is a new stay: the target has been beaten, by us or by somebody else.
+  //
+  // Fail closed at every step: a roster reading young enough to decide on, the
+  // board the server has just confirmed, a measured clock, a live war, never
+  // while another write is under way - and ONE attempt per claim. It only ever
+  // releases the claim the server says is this member's; the server takes the
+  // owner from the sign-in, so nobody else's can be released from here. It
+  // makes no call to Torn: it reads the roster this page already has.
+  var autoReleaseAttempted = '';   // the own claim already tried: targetId:claimedAt
+
+  function ownClaimTargetIsOnline(target, war) {
+    return !!(war && (SIM || war.state === 'live') && activityOf(target) === 'online');
+  }
+
+  function ownClaimTargetIsBeaten(target) {
+    var hospital = hospitalOf(target);
+    return hospital.isHospital && Number.isFinite(hospital.seconds) && hospital.seconds > CONFIG.autoReleaseHospitalSeconds;
+  }
+
+  async function autoReleaseOwnClaim() {
+    var war = Roster.war();
+    var identity = Roster.identity();
+    var board = Claims.board();
+    if (!war || !identity || !board || Claims.status() !== 'ok' || actBusy || !tornClockReady()) return false;
+    var targetId = ownTargetIdOf(board, identity.playerId);
+    if (!targetId) return false;
+    var claimKey = targetId + ':' + board.claims[targetId].claimedAt;
+    if (autoReleaseAttempted === claimKey) return false;
+    var target = targetFor(targetId);
+    if (!target) return false;
+    var online = ownClaimTargetIsOnline(target, war);
+    if (!online && !ownClaimTargetIsBeaten(target)) return false;
+
+    autoReleaseAttempted = claimKey;
+    actBusy = true;
+    pendingTarget = targetId;
+    render();
+    try {
+      var result = await Claims.unclaim(war.warId, targetId);
+      if (result.http === 200 && result.body.ok === true) {
+        showActionMessage('ok', online
+          ? 'Released ' + targetId + ' — target came online (free for all).'
+          : 'Released ' + targetId + ' — target is back in hospital.');
+      } else {
+        showActionMessage('err', targetId + ' could not be released for you (' +
+          (online ? 'target came online' : 'target is back in hospital') + '). Press Release.');
+      }
+      return true;
+    } catch (error) {
+      if (error.unauthorized) sessionRejected();
+      else showActionMessage('err', targetId + ' could not be released for you: ' + error.message);
+      return false;
+    } finally {
+      pendingTarget = '';
+      actBusy = false;
+    }
+  }
+
+  async function reportHospital() {
+    var war = Roster.war();
+    var targets = Roster.targets();
+    var board = Claims.board();
+    if (!war || !targets || !board || !Session.signedIn()) return;
+
+    var readAt = Roster.stamps().targets;
+    if (!readAt) return;
+    // Older than the server will accept. Sending it would only be noise.
+    if (Date.now() - readAt > REPORT_MAX_AGE_MS) return;
+    // The moment the reading arrived, on the clock the page counts on (Torn's,
+    // or the server's) - never this device's. With no measure nothing is
+    // reported (the scripts' reportHospitalUpdatesToKsServer does the same).
+    if (!tornClockReady()) return;
+    var observedAt = Math.floor((readAt + clockLowMs()) / 1000);
+
+    for (var i = 0; i < targets.length; i++) {
+      var target = targets[i];
+      var claim = board.claims[target.id];
+      if (!claim) continue;
+      // No saved time on the claim means the server will never free it this
+      // way, whatever we send. An old claim, or one made by a client that did
+      // not send one.
+      if (typeof claim.hospitalUntil !== 'number') continue;
+
+      // R1. The reading must be from MORE than 45 s after the claim was taken.
+      // claimedAt is the server's own time for the claim, in milliseconds;
+      // observedAt is whole seconds. Strictly more, as in the scripts: a
+      // reading at exactly claimedAt + 45 s can still be a second too early by
+      // the server's rule. A claim without a readable claimedAt is not
+      // reported on at all - never guessed to be old enough.
+      if (typeof claim.claimedAt !== 'number' || !isFinite(claim.claimedAt)) continue;
+      if (!(observedAt * 1000 > claim.claimedAt + REPORT_MIN_SECONDS_AFTER_CLAIM * 1000)) continue;
+
+      var reported = Number(target.until) || 0;
+      // The same test the server makes. Same or lower, or only a little
+      // higher, is the same hospital stay seen through Torn's cache and a
+      // different clock - not a new one.
+      if (reported <= claim.hospitalUntil + AUTO_RELEASE_MARGIN_SECONDS) continue;
+
+      // One report per target per reading. A new reading is a new fact.
+      if (reportedAt[target.id] === observedAt) continue;
+      reportedAt[target.id] = observedAt;
+
+      try {
+        await Claims.report(war.warId, target.id, reported, observedAt);
+      } catch (error) {
+        if (error.unauthorized) { sessionRejected(); return; }
+        // Anything else: the board is already dropped or will be re-read on
+        // the next tick. A report that did not arrive frees nothing, and
+        // nothing is shown as free because of it.
+      }
+    }
+  }
+
+  // THE ORDER HERE IS THE POINT, and it was wrong once.
+  //
+  // The sign-in goes FIRST, before this page says a word to Torn. Two reasons,
+  // and both of them were found by a member clicking the page, not by a test:
+  //
+  //   The words on screen. If Torn is asked first, a bad key makes that call
+  //   throw, and everything after it - the sign-in included - never runs. The
+  //   box then keeps whatever it said before: CHECKING in a fresh window,
+  //   SIGNED IN in one that had already signed in. KEY REJECTED and
+  //   NOT A MEMBER were unreachable, which is to say the five words S1 asks
+  //   for were three.
+  //
+  //   The calls to Torn. If our server has already asked Torn about this key
+  //   and been told it is wrong, asking Torn the same question again from
+  //   here adds nothing and spends a second bad-key attempt. Those are what
+  //   api.html warns can end in an IP ban.
+  //
+  // So: shape check, then sign in, then - only if the key is not already
+  // known to be dead - Torn.
   async function loadAll() {
     hide(el.errorBox); hide(el.okBox);
     var key = el.apiKey.value.trim();
     if (!key) { show(el.errorBox, 'Paste your Torn key first.'); return; }
-    write(KEY_STORE, key);
     el.loadBtn.disabled = true;
     el.loadBtn.textContent = 'Loading';
     try {
+      // Asks our server, which asks Torn once. Never throws - a refusal is an
+      // answer, and the answer is what the box on screen shows.
+      var signedIn = await Session.signIn();
+      sessionRender();
+
+      if (Session.state() === 'key_rejected') {
+        // Torn itself said this key is no good, or it never looked like one.
+        // The roster below would fail on the very same key. Asking is a
+        // wasted call and a second bad-key attempt, so we do not ask.
+        Claims.drop();
+        Roster.forget();
+        el.targetPanel.hidden = true;
+        el.warPanel.hidden = true;
+        show(el.errorBox, Session.said() || 'The key was not accepted.');
+        return;
+      }
+
+      // Past this point the key is one Torn accepted. Worth keeping, and
+      // worth using. A key that never got that far is not written down.
+      write(KEY_STORE, key);
+      if (!signedIn) {
+        // Not a member, or our server is not answering. The roster still
+        // loads - it always did - and only the DIBS column stays shut.
+        show(el.errorBox, Session.said() || 'The War Room sign-in did not go through.');
+      }
+
+      // A press on Load the war is the member saying "try this key": whatever
+      // stopped the polling for the key before it no longer applies.
+      tornHalted = false;
+      tornBackoffUntil = 0;
       await Roster.loadIdentity();
       await Roster.loadWar();
       if (Roster.war()) {
         await Roster.loadTargets();
+        lifeQueueKick();
         try { await Roster.loadOwnNames(); } catch (e) { /* names are decoration, not identity */ }
         await pollClaims();
       }
       Roster.setError('');
     } catch (error) {
-      Roster.setError(error.message);
+      Roster.setError(error.message, error.diagnostic);
       show(el.errorBox, error.message);
     } finally {
       el.loadBtn.disabled = false;
@@ -1899,23 +3947,74 @@
     }
   }
 
+  // The regular polling's own brakes on Torn. Two, and both are what Torn's
+  // API terms ask of a tool:
+  //
+  //   tornHalted        Torn has said the key itself is no good (code 2, 10,
+  //                     13 or 18). The polling stops asking Torn anything
+  //                     with it until the member presses Load the war. A dead
+  //                     key is not tried again every few seconds.
+  //   tornBackoffUntil  any other failure - Torn busy, the network, the page's
+  //                     own per-minute limit. The polling leaves Torn alone
+  //                     for TORN_ERROR_BACKOFF_MS and then carries on.
+  //
+  // Neither touches the claim board: that is our own server, and it is still
+  // read every CLAIM_POLL_MS.
+  var tornHalted = false;
+  var tornBackoffUntil = 0;
+
+  // Asks the life queue whether anything is due. Called once a second by the
+  // second hand and after a roster reading; the queue itself keeps the pace
+  // (one reading at a time, a target at most every ten seconds, thirty a
+  // minute), so asking often costs nothing and a value is replaced before it
+  // ages out. Not awaited: a life reading never holds up the roster, the board
+  // or a click. The rows are redrawn by the second hand when a reading changes
+  // what one of them says.
+  function lifeQueueKick() {
+    Life.runQueue(function () { renderAdvanced(); lifeKeyRender(); });
+  }
+
   async function tick() {
     if (!Roster.identity()) return;
     var now = Date.now();
     var stamps = Roster.stamps();
-    try {
-      if (now - stamps.war > WAR_POLL_MS) await Roster.loadWar();
-      if (Roster.war() && now - Roster.stamps().targets > ROSTER_POLL_MS) await Roster.loadTargets();
-      if (Roster.war() && now - Roster.stamps().ownNames > OWN_MEMBERS_MS) {
-        try { await Roster.loadOwnNames(); } catch (e) { /* decoration only */ }
+    if (!tornHalted && now >= tornBackoffUntil) {
+      try {
+        if (now - stamps.war > WAR_POLL_MS) await Roster.loadWar();
+        // This runs every CLAIM_POLL_MS, and the stamp is set when Torn's
+        // answer arrives - a moment after the tick that asked. Waiting for the
+        // reading to be strictly older than ROSTER_POLL_MS would therefore
+        // skip a tick every time. It is due when it would be overdue before
+        // the next tick is half way.
+        if (Roster.war() && now - Roster.stamps().targets + CLAIM_POLL_MS / 2 >= ROSTER_POLL_MS) {
+          await Roster.loadTargets();
+          lifeQueueKick();
+        }
+        if (Roster.war() && now - Roster.stamps().ownNames > OWN_MEMBERS_MS) {
+          try { await Roster.loadOwnNames(); } catch (e) { /* decoration only */ }
+        }
+        Roster.setError('');
+      } catch (error) {
+        // The rows already on screen stay, and the stale bar says how old they
+        // are. Nothing old is ever redrawn as if it were current.
+        Roster.setError(error.message, error.diagnostic);
+        if (error.tornCode === 2 || error.tornCode === 10 || error.tornCode === 13 || error.tornCode === 18) {
+          tornHalted = true;
+          show(el.errorBox, error.message + ' The page has stopped asking Torn with this key. ' +
+            'Paste a working key and press Load the war.');
+        } else {
+          tornBackoffUntil = Date.now() + TORN_ERROR_BACKOFF_MS;
+        }
       }
-      Roster.setError('');
-    } catch (error) {
-      // The rows already on screen stay, and the stale bar says how old they
-      // are. Nothing old is ever redrawn as if it were current.
-      Roster.setError(error.message);
     }
     await pollClaims();
+    // This member's own claim first: if its target has come online or is back
+    // in hospital it is let go, and the board is read again so that what
+    // follows - and what is drawn - is what the server holds now.
+    if (await autoReleaseOwnClaim()) await pollClaims();
+    // After the board, so the comparison is made against claims the server has
+    // just confirmed and not against a picture from five seconds ago.
+    await reportHospital();
     render();
   }
 
@@ -1978,6 +4077,10 @@
     write(KEY_STORE, '');
     el.apiKey.value = '';
     Roster.forget();
+    // What Torn said about targets' life was read with that key. It goes too.
+    Life.forget();
+    // The sign-in was made from that key. It goes with it.
+    Session.forget();
     Claims.drop();
     el.targetPanel.hidden = true;
     el.warPanel.hidden = true;
@@ -2020,46 +4123,26 @@
     render();
   });
 
-  el.passSave.addEventListener('click', function () {
-    var value = el.warPass.value;
-    if (!value) {
-      el.passSaid.textContent = 'Nothing typed yet.';
-      el.passSaid.hidden = false;
-      return;
-    }
-    write(PASS_STORE, value);
-    // Emptied at once. The word is never put back into the box, never written
-    // into the page and never logged.
-    el.warPass.value = '';
-    el.passSaid.hidden = true;
-    passRender();
-    pollClaims().then(render);
-  });
-  el.warPass.addEventListener('keydown', function (e) { if (e.key === 'Enter') el.passSave.click(); });
 
-  el.passChange.addEventListener('click', function () {
-    write(PASS_STORE, '');
-    Claims.drop();
-    el.passSaid.hidden = true;
-    passRender();
-    el.warPass.focus();
-    render();
-  });
-
-  el.passForget.addEventListener('click', function () {
-    write(PASS_STORE, '');
-    Claims.drop();
-    el.passSaid.hidden = true;
-    passRender();
-    show(el.okBox, 'War Room password removed from this browser.');
+  el.sessionRetry.addEventListener('click', async function () {
+    hide(el.errorBox); hide(el.okBox);
+    await Session.signIn();
+    sessionRender();
+    if (Session.signedIn()) { await pollClaims(); }
     render();
   });
 
   if (SIM) {
     el.simBanner.hidden = false;
-    el.simOtherId.textContent = SIM_OTHER_ID;
     el.simResetNote.textContent = SIM_RESET_NOTE;
+    // The note about emptying a board belongs to simulation and is shown there only.
+    el.advWipeNote.hidden = false;
   }
+
+  // Both read from the constants at the top, so the address of the server and
+  // the address of Torn's key page are each written once in this file.
+  el.createKey.href = TORN_CUSTOM_KEY_URL;
+  el.aboutServer.textContent = CLAIM_SERVER.replace(/^https:\/\//, '');
 
   var storedKey = read(KEY_STORE);
   if (storedKey) el.apiKey.value = storedKey;
@@ -2070,8 +4153,29 @@
 
   setInterval(tick, CLAIM_POLL_MS);
   if (!document.hidden) ffStart();
-  // Only redraws the estimate beside a claim the server has already confirmed.
-  setInterval(function () { if (Claims.board()) renderTargets(); }, 1000);
+  // The second hand. It updates the countdown text, redraws a row whose rule
+  // answer has just changed, and asks the life queue whether a reading is due.
+  // The existing polls still own everything else.
+  var targetClock = null;
+  function secondHand() {
+    updateTargetTimes();
+    lifeQueueKick();
+    // Which clock is being counted on can change between two full redraws -
+    // a measure thrown away, a new one taken - and the line says so at once.
+    el.advClock.textContent = tornClockLabel();
+  }
+  function startTargetClock() {
+    if (targetClock === null) targetClock = setInterval(secondHand, 1000);
+  }
+  window.addEventListener('pagehide', function () {
+    clearInterval(targetClock);
+    targetClock = null;
+    clearTimeout(gateTimer);
+    gateTimer = null;
+    finishTargetPress(false);
+  });
+  window.addEventListener('pageshow', startTargetClock);
+  startTargetClock();
 })();
 </script>
 </body>
