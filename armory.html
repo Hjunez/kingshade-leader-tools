@@ -14,6 +14,9 @@
     --good: #1c7355; --good-soft: #dfeee8;
     --warn: #8c6210; --warn-soft: #f6ecd6;
     --bad: #a12f2a; --bad-soft: #f6dedc;
+    --rar-yellow: #6b5300; --rar-yellow-bg: #f6e7a8;
+    --rar-orange: #8a3f00; --rar-orange-bg: #f8d3b0;
+    --rar-red: #8f1d17; --rar-red-bg: #f3c4c1;
     --shadow: 0 1px 2px rgba(20,32,43,.06), 0 8px 24px rgba(20,32,43,.06);
     --display: 'Saira Condensed','Arial Narrow',Helvetica,sans-serif;
     --body: 'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
@@ -28,6 +31,9 @@
       --good: #46a583; --good-soft: #172a24;
       --warn: #cc9f3f; --warn-soft: #2a2417;
       --bad: #dd6a61; --bad-soft: #2c1b1a;
+      --rar-yellow: #e8cf62; --rar-yellow-bg: #3a3210;
+      --rar-orange: #f0a05a; --rar-orange-bg: #40260f;
+      --rar-red: #f08a82; --rar-red-bg: #451c1a;
       --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
     }
   }
@@ -39,6 +45,9 @@
     --good: #46a583; --good-soft: #172a24;
     --warn: #cc9f3f; --warn-soft: #2a2417;
     --bad: #dd6a61; --bad-soft: #2c1b1a;
+    --rar-yellow: #e8cf62; --rar-yellow-bg: #3a3210;
+    --rar-orange: #f0a05a; --rar-orange-bg: #40260f;
+    --rar-red: #f08a82; --rar-red-bg: #451c1a;
     --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
   }
 
@@ -116,7 +125,7 @@
   .grow { flex: 1 1 200px; min-width: 0; }
 
   .msg { font-size: 14px; border-radius: 3px; padding: 11px 13px; margin: 0; }
-  .msg.err { background: var(--bad-soft); color: var(--bad); user-select: all; font-family: var(--mono); font-size: 13px; }
+  .msg.err { background: var(--bad-soft); color: var(--bad); user-select: all; font-family: var(--mono); font-size: 13px; white-space: pre-line; }
   .msg.ok { background: var(--good-soft); color: var(--good); }
   .msg[hidden] { display: none; }
 
@@ -160,6 +169,25 @@
   td { padding: 9px 14px; border-bottom: 1px solid var(--line); }
   td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
   td .cat { font-family: var(--mono); font-size: 11px; text-transform: uppercase; color: var(--faint); }
+
+  .rar {
+    display: inline-block; font-family: var(--mono); font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .04em; line-height: 1.4;
+    border-radius: 2px; padding: 0 6px; margin-left: 8px; vertical-align: 1px;
+  }
+  .rar-yellow { color: var(--rar-yellow); background: var(--rar-yellow-bg); }
+  .rar-orange { color: var(--rar-orange); background: var(--rar-orange-bg); }
+  .rar-red { color: var(--rar-red); background: var(--rar-red-bg); }
+  td .rar:first-child { margin-left: 0; }
+
+  th .sortbtn {
+    font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit;
+    background: none; border: 0; padding: 0; cursor: pointer; text-align: left;
+  }
+  th .sortbtn:hover { color: var(--accent); }
+  th[aria-sort="ascending"] .sortbtn::after { content: " \25B2"; font-size: 10px; }
+  th[aria-sort="descending"] .sortbtn::after { content: " \25BC"; font-size: 10px; }
+  td.items span.item { white-space: nowrap; }
 
   .logline { padding: 9px 18px; border-bottom: 1px solid var(--line); font-size: 14px; display: flex; gap: 12px; }
   .logline:last-child { border-bottom: 0; }
@@ -216,6 +244,11 @@
           <button type="button" class="btn quiet" id="forgetKey">Forget key</button>
         </div>
       </div>
+      <div>
+        <label class="lbl" for="itemKey">Item details key (optional)</label>
+        <input type="password" id="itemKey" autocomplete="off" spellcheck="false"
+               placeholder="Only needed if your key cannot read rarity">
+      </div>
       <p class="msg err" id="errorBox" role="alert" hidden></p>
       <p class="msg ok" id="okBox" role="status" hidden></p>
     </div>
@@ -234,6 +267,9 @@
             see and a list of what you are not.</dd>
           <dt>What it reads</dt>
           <dd>The armory contents in all nine categories, plus the recent armory action log.</dd>
+          <dt>Item details</dt>
+          <dd>Rarity and weapon class come from torn → itemdetails (Public level). If your main key
+            cannot read it, paste a Public key in Item details key. It is used for nothing else.</dd>
           <dt>Storage</dt>
           <dd>Your key stays in this browser. No server, no account.</dd>
           <dt>Writes</dt>
@@ -245,9 +281,53 @@
 
   <section class="figures" id="figures" hidden aria-label="Summary">
     <div class="figure alert"><span class="k">Out on loan</span><span class="v" id="figLoaned">0</span><span class="sub">items held by members</span></div>
+    <div class="figure alert"><span class="k">RW on loan</span><span class="v" id="figRw">0</span><span class="sub" id="figRwSub">yellow, orange or red</span></div>
     <div class="figure"><span class="k">Holders</span><span class="v" id="figHolders">0</span><span class="sub">members with faction property</span></div>
     <div class="figure"><span class="k">In the armory</span><span class="v" id="figStock">0</span><span class="sub">items available</span></div>
     <div class="figure"><span class="k">Distinct items</span><span class="v" id="figKinds">0</span><span class="sub">across all categories</span></div>
+  </section>
+
+  <section class="panel" id="rwPanel">
+    <div class="panel-head">
+      <h2>RW weapons &amp; gear on loan</h2>
+      <p class="hint" id="rwHint">Not run yet</p>
+    </div>
+    <div class="table-scroll" id="rwWrap" hidden>
+      <table>
+        <thead>
+          <tr>
+            <th data-sort="member"><button type="button" class="sortbtn" data-sort="member">Member</button></th>
+            <th data-sort="item"><button type="button" class="sortbtn" data-sort="item">Item</button></th>
+            <th data-sort="rarity"><button type="button" class="sortbtn" data-sort="rarity">Rarity</button></th>
+            <th data-sort="class"><button type="button" class="sortbtn" data-sort="class">Class</button></th>
+            <th>Category</th>
+          </tr>
+        </thead>
+        <tbody id="rwBody"></tbody>
+      </table>
+    </div>
+    <p class="empty" id="rwEmpty">Paste a key and press Run audit.</p>
+  </section>
+
+  <section class="panel" id="classPanel">
+    <div class="panel-head">
+      <h2>Same weapon class, more than one</h2>
+      <p class="hint" id="classHint">Not run yet</p>
+    </div>
+    <div class="table-scroll" id="classWrap" hidden>
+      <table>
+        <thead>
+          <tr>
+            <th>Member</th>
+            <th>Class</th>
+            <th class="right">Count</th>
+            <th>Items</th>
+          </tr>
+        </thead>
+        <tbody id="classBody"></tbody>
+      </table>
+    </div>
+    <p class="empty" id="classEmpty">Paste a key and press Run audit.</p>
   </section>
 
   <section class="panel">
@@ -268,7 +348,7 @@
   <section class="panel">
     <div class="panel-head">
       <h2>Still in the armory</h2>
-      <p class="hint">What is available to loan out.</p>
+      <p class="hint">Every item the faction owns: how many are in the armory and how many are out on loan.</p>
     </div>
     <div class="table-scroll">
       <table>
@@ -309,6 +389,7 @@
     'use strict';
 
     var KEY_STORE = 'ks-leader-board-key';
+    var ITEM_KEY_STORE = 'ks-leader-board-itemkey';
     var CATEGORIES = ['weapons', 'armor', 'temporary', 'medical', 'consumables',
                       'drugs', 'boosters', 'utilities', 'loot'];
 
@@ -316,13 +397,25 @@
     var PAGE_SIZE = 100;
     var MAX_PAGES_PER_CATEGORY = 10;
 
+    // torn → itemdetails accepts at most 25 uids per call. Only weapons and armor have a rarity.
+    var DETAILS_BLOCK = 25;
+    var DETAILS_CATEGORIES = ['weapons', 'armor'];
+    // Rarities that count as RW, in the order the RW panel lists them.
+    var RW_RARITIES = ['red', 'orange', 'yellow'];
+
     var el = {};
-    ['apiKey','toggleKey','runBtn','forgetKey','errorBox','okBox','figures','figLoaned',
-     'figHolders','figStock','figKinds','loans','loansEmpty','loanHint','loanActions','copyLoans',
-     'copyToast','stockBody','stockEmpty','log','logEmpty']
+    ['apiKey','itemKey','toggleKey','runBtn','forgetKey','errorBox','okBox','figures','figLoaned',
+     'figRw','figRwSub','figHolders','figStock','figKinds','loans','loansEmpty','loanHint',
+     'loanActions','copyLoans','copyToast','rwHint','rwWrap','rwBody','rwEmpty','classHint',
+     'classWrap','classBody','classEmpty','stockBody','stockEmpty','log','logEmpty']
       .forEach(function (id) { el[id] = document.getElementById(id); });
 
     var loans = [];
+    // Why rarity could not be read (null when it could), and which categories were denied.
+    var detailsReason = null;
+    var deniedCategories = [];
+    var rwSort = { key: 'rarity', dir: 1 };
+    var hasRun = false;
 
     function show(box, message) { box.textContent = message; box.hidden = false; }
     function hide(box) { box.textContent = ''; box.hidden = true; }
@@ -330,6 +423,11 @@
     function readKey() { try { return localStorage.getItem(KEY_STORE) || ''; } catch (e) { return ''; } }
     function storeKey(v) {
       try { if (v) localStorage.setItem(KEY_STORE, v); else localStorage.removeItem(KEY_STORE); }
+      catch (e) { /* storage blocked */ }
+    }
+    function readItemKey() { try { return localStorage.getItem(ITEM_KEY_STORE) || ''; } catch (e) { return ''; } }
+    function storeItemKey(v) {
+      try { if (v) localStorage.setItem(ITEM_KEY_STORE, v); else localStorage.removeItem(ITEM_KEY_STORE); }
       catch (e) { /* storage blocked */ }
     }
 
@@ -377,32 +475,246 @@
       }
     }
 
-    async function tornGet(path) {
-      var key = el.apiKey.value.trim();
+    // The key goes in the Authorization header only, never in the URL. `shownPath` is what an error
+    // prints; it differs from `path` when the path carries a long uid list.
+    async function tornRequest(path, key, shownPath) {
       var joiner = path.indexOf('?') === -1 ? '?' : '&';
       var response;
       try {
         response = await fetch('https://api.torn.com/v2' + path + joiner + 'comment=KSArmoryAudit',
           { headers: { Authorization: 'ApiKey ' + key } });
       } catch (networkFailure) {
-        throw new Error('Could not reach Torn.  [GET /v2' + path + ' — network or CORS failure]');
+        throw new Error('Could not reach Torn.  [GET /v2' + shownPath + ' — network or CORS failure]');
       }
       var payload;
       try {
         payload = await response.json();
       } catch (parseFailure) {
-        throw TornCallError(path, response.status, null, 'response was not JSON');
+        throw TornCallError(shownPath, response.status, null, 'response was not JSON');
       }
       if (payload && payload.error) {
-        if ([2, 10, 13, 18].indexOf(payload.error.code) !== -1) { storeKey(''); el.apiKey.value = ''; }
-        throw TornCallError(path, response.status, payload.error.code, payload.error.error);
+        var failure = TornCallError(shownPath, response.status, payload.error.code, payload.error.error);
+        failure.fatalKey = [2, 10, 13, 18].indexOf(payload.error.code) !== -1;
+        throw failure;
       }
       return payload;
+    }
+
+    // Main key. A key Torn reports as dead is removed, not retried.
+    async function tornGet(path, shownPath) {
+      try {
+        return await tornRequest(path, el.apiKey.value.trim(), shownPath || path);
+      } catch (failure) {
+        if (failure && failure.fatalKey) { storeKey(''); el.apiKey.value = ''; }
+        throw failure;
+      }
+    }
+
+    // Item details key. Its own function so that it can never clear the main key.
+    async function itemGet(path, shownPath, key) {
+      try {
+        return await tornRequest(path, key, shownPath);
+      } catch (failure) {
+        if (failure && failure.fatalKey) { storeItemKey(''); el.itemKey.value = ''; }
+        throw failure;
+      }
     }
 
     function timeText(unix) {
       return new Date(unix * 1000).toLocaleString(undefined,
         { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+
+    function compare(a, b) { return a.localeCompare(b, 'en', { sensitivity: 'base' }); }
+
+    function isRw(row) { return row.checked === true && RW_RARITIES.indexOf(row.rarity) !== -1; }
+
+    function rarityBadge(rarity) {
+      var badge = document.createElement('span');
+      badge.className = 'rar rar-' + rarity;
+      badge.textContent = rarity;
+      return badge;
+    }
+
+    function classOf(row) {
+      if (row.type === 'Armor') return 'Armor';
+      if (row.category === 'weapons' && row.subType) return row.subType;
+      return '—';
+    }
+
+    function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+
+    // Rarity can only be trusted when itemdetails answered and the categories were readable.
+    // Anything else is UNKNOWN, never "not RW".
+    function rwUnknownReason() {
+      if (detailsReason) return detailsReason;
+      if (DETAILS_CATEGORIES.every(function (c) { return deniedCategories.indexOf(c) !== -1; })) {
+        return 'Weapons and armor could not be read from the armory.';
+      }
+      return null;
+    }
+    function classUnknownReason() {
+      if (detailsReason) return detailsReason;
+      if (deniedCategories.indexOf('weapons') !== -1) return 'Weapons could not be read from the armory.';
+      return null;
+    }
+
+    function setPanel(wrap, empty, hint, hintText, rowCount, message) {
+      hint.textContent = hintText;
+      wrap.hidden = rowCount === 0;
+      empty.hidden = rowCount > 0;
+      if (rowCount === 0) empty.textContent = message;
+    }
+
+    function rwRows() { return loans.filter(isRw); }
+
+    function sortedRwRows() {
+      var key = rwSort.key;
+      var value = function (r) {
+        if (key === 'member') return r.holder;
+        if (key === 'item') return r.item;
+        if (key === 'class') return classOf(r);
+        return String(RW_RARITIES.indexOf(r.rarity));
+      };
+      return rwRows().sort(function (a, b) {
+        var order;
+        if (key === 'rarity') {
+          order = RW_RARITIES.indexOf(a.rarity) - RW_RARITIES.indexOf(b.rarity);
+        } else {
+          order = compare(value(a), value(b));
+        }
+        if (order === 0) order = compare(a.holder, b.holder);
+        if (order === 0) order = compare(a.item, b.item);
+        return order * rwSort.dir;
+      });
+    }
+
+    function renderRw() {
+      el.rwBody.textContent = '';
+      var heads = document.querySelectorAll('#rwPanel th[data-sort]');
+      Array.prototype.forEach.call(heads, function (th) {
+        if (th.getAttribute('data-sort') === rwSort.key) {
+          th.setAttribute('aria-sort', rwSort.dir === 1 ? 'ascending' : 'descending');
+        } else {
+          th.removeAttribute('aria-sort');
+        }
+      });
+      if (!hasRun) return;
+
+      var unknown = rwUnknownReason();
+      if (unknown) {
+        setPanel(el.rwWrap, el.rwEmpty, el.rwHint, 'Rarity UNKNOWN', 0, 'Rarity UNKNOWN — ' + unknown);
+        return;
+      }
+
+      var rows = sortedRwRows();
+      var members = new Set(rows.map(function (r) { return r.holder; }));
+      var hint = plural(rows.length, 'RW item', 'RW items') + ' with ' + plural(members.size, 'member', 'members');
+      var unchecked = loans.filter(function (r) {
+        return DETAILS_CATEGORIES.indexOf(r.category) !== -1 && !r.checked;
+      }).length;
+      if (unchecked > 0) hint += '. ' + plural(unchecked, 'item', 'items') + ' could not be checked and ' +
+        (unchecked === 1 ? 'is' : 'are') + ' not counted';
+      var missing = DETAILS_CATEGORIES.filter(function (c) { return deniedCategories.indexOf(c) !== -1; });
+      if (missing.length > 0) hint += '. ' + missing.join(', ') + ' could not be read';
+
+      setPanel(el.rwWrap, el.rwEmpty, el.rwHint, hint, rows.length, 'No RW weapons or gear out on loan.');
+      rows.forEach(function (row) {
+        var tr = document.createElement('tr');
+        var cells = [row.holder, row.item, null, classOf(row), null];
+        cells.forEach(function (text, index) {
+          var td = document.createElement('td');
+          if (index === 2) {
+            td.appendChild(rarityBadge(row.rarity));
+          } else if (index === 4) {
+            var span = document.createElement('span');
+            span.className = 'cat';
+            span.textContent = row.category;
+            td.appendChild(span);
+          } else {
+            td.textContent = text;
+          }
+          tr.appendChild(td);
+        });
+        el.rwBody.appendChild(tr);
+      });
+    }
+
+    function renderClasses() {
+      el.classBody.textContent = '';
+      if (!hasRun) return;
+
+      var unknown = classUnknownReason();
+      if (unknown) {
+        setPanel(el.classWrap, el.classEmpty, el.classHint, 'Rarity UNKNOWN', 0, 'Rarity UNKNOWN — ' + unknown);
+        return;
+      }
+
+      var groups = new Map();
+      var withoutClass = 0;
+      loans.forEach(function (row) {
+        if (row.category !== 'weapons') return;
+        if (!row.checked || !row.subType) { withoutClass += 1; return; }
+        var id = row.holder + '\u0000' + row.subType;
+        var group = groups.get(id) || { holder: row.holder, cls: row.subType, rows: [] };
+        group.rows.push(row);
+        groups.set(id, group);
+      });
+      var rows = [...groups.values()].filter(function (g) { return g.rows.length >= 2; })
+        .sort(function (a, b) {
+          if (b.rows.length !== a.rows.length) return b.rows.length - a.rows.length;
+          return compare(a.holder, b.holder) || compare(a.cls, b.cls);
+        });
+
+      var members = new Set(rows.map(function (g) { return g.holder; }));
+      var hint = members.size + (members.size === 1 ? ' member holds' : ' members hold') +
+        ' two or more weapons of one class';
+      if (withoutClass > 0) {
+        hint += '. ' + plural(withoutClass, 'weapon', 'weapons') + ' without a known class ' +
+          (withoutClass === 1 ? 'is' : 'are') + ' left out.';
+      }
+      setPanel(el.classWrap, el.classEmpty, el.classHint, hint, rows.length,
+        'Nobody holds two weapons of the same class.');
+
+      rows.forEach(function (group) {
+        var tr = document.createElement('tr');
+        [group.holder, group.cls, String(group.rows.length)].forEach(function (text, index) {
+          var td = document.createElement('td');
+          if (index === 2) td.className = 'num';
+          td.textContent = text;
+          tr.appendChild(td);
+        });
+        var items = document.createElement('td');
+        items.className = 'items';
+        group.rows.forEach(function (row, index) {
+          if (index > 0) items.appendChild(document.createTextNode(', '));
+          var item = document.createElement('span');
+          item.className = 'item';
+          item.appendChild(document.createTextNode(row.item));
+          if (isRw(row)) item.appendChild(rarityBadge(row.rarity));
+          items.appendChild(item);
+        });
+        tr.appendChild(items);
+        el.classBody.appendChild(tr);
+      });
+    }
+
+    function renderRwFigure() {
+      var unknown = hasRun ? rwUnknownReason() : null;
+      if (unknown) {
+        el.figRw.textContent = 'UNKNOWN';
+        el.figRwSub.textContent = 'rarity could not be read';
+        return;
+      }
+      var counts = { yellow: 0, orange: 0, red: 0 };
+      rwRows().forEach(function (r) { counts[r.rarity] += 1; });
+      el.figRw.textContent = String(counts.yellow + counts.orange + counts.red);
+      var sub = counts.yellow + ' yellow · ' + counts.orange + ' orange · ' + counts.red + ' red';
+      var unchecked = loans.filter(function (r) {
+        return DETAILS_CATEGORIES.indexOf(r.category) !== -1 && !r.checked;
+      }).length;
+      if (unchecked > 0) sub += ' · ' + unchecked + ' unchecked';
+      el.figRwSub.textContent = sub;
     }
 
     function renderLoans() {
@@ -436,6 +748,7 @@
         entry[1].forEach(function (row) {
           var li = document.createElement('li');
           li.textContent = row.item;
+          if (isRw(row)) li.appendChild(rarityBadge(row.rarity));
           var cat = document.createElement('span');
           cat.className = 'cat';
           cat.textContent = row.category;
@@ -508,6 +821,124 @@
       el.logEmpty.hidden = news.length > 0;
     }
 
+    // Entries of an itemdetails answer. Torn returns a list; an older shape is a single object or
+    // an object keyed by uid (until 2027-01-01), so all three are accepted.
+    function detailEntries(payload) {
+      var d = payload && payload.itemdetails;
+      if (Array.isArray(d)) return d;
+      if (d && typeof d === 'object') {
+        if (d.uid !== undefined) return [d];
+        return Object.keys(d).map(function (k) {
+          var v = d[k];
+          return v && typeof v === 'object' && v.uid === undefined ? Object.assign({ uid: k }, v) : v;
+        });
+      }
+      return [];
+    }
+
+    // Turns an itemdetails failure into the reason shown in the panels and the line shown in the
+    // error box. Rarity stays UNKNOWN; nothing is guessed.
+    function describeDetailsFailure(error, usedItemKey, hadItemKey) {
+      var code = error && error.tornCode;
+      var reason;
+      var extra = '';
+      if (code === 16 && usedItemKey) {
+        reason = 'Neither your key nor the Item details key can read item details.';
+        extra = ' The last attempt used the Item details key.';
+      } else if (code === 16 && !hadItemKey) {
+        reason = 'Your key cannot read item details and no Item details key is set.';
+        extra = ' Paste a Public key in Item details key to read rarity and weapon class.';
+      } else if (typeof code === 'number') {
+        reason = usedItemKey ? 'The Item details key failed. ' + describeError(code) : describeError(code);
+        if (usedItemKey) extra = ' The last attempt used the Item details key.';
+        if (usedItemKey && error.fatalKey) extra += ' The Item details key was removed from this browser.';
+      } else {
+        reason = error && error.detail ? 'Torn’s answer could not be read.' : 'Torn could not be reached.';
+      }
+      return { reason: reason, notice: 'Rarity UNKNOWN: ' + (error.detail || error.message) + extra };
+    }
+
+    // Reads rarity, weapon class and type for the given loan rows. Returns null on success, or
+    // { reason, notice } when it had to stop. Rows Torn did not answer for stay unchecked.
+    async function readItemDetails(rows) {
+      var byUid = new Map();
+      rows.forEach(function (row) {
+        var id = String(row.uid);
+        var list = byUid.get(id) || [];
+        list.push(row);
+        byUid.set(id, list);
+      });
+      var uids = [...byUid.keys()];
+      var mainKey = el.apiKey.value.trim();
+      var itemKey = el.itemKey.value.trim();
+      if (itemKey === mainKey) itemKey = '';
+      var useItemKey = false;
+
+      for (var start = 0; start < uids.length; start += DETAILS_BLOCK) {
+        var block = uids.slice(start, start + DETAILS_BLOCK);
+        var path = '/torn/' + block.join(',') + '/itemdetails';
+        var shown = '/torn/{' + block.length + ' uids}/itemdetails';
+        var attempt = function () {
+          return useItemKey ? itemGet(path, shown, itemKey) : tornGet(path, shown);
+        };
+        var payload;
+        try {
+          payload = await attempt();
+        } catch (first) {
+          if (!useItemKey && itemKey && first.tornCode === 16) {
+            useItemKey = true;
+            try {
+              payload = await attempt();
+            } catch (second) {
+              return describeDetailsFailure(second, true, true);
+            }
+          } else {
+            return describeDetailsFailure(first, useItemKey, !!itemKey);
+          }
+        }
+        detailEntries(payload).forEach(function (entry) {
+          if (!entry || typeof entry !== 'object') return;
+          var matches = byUid.get(String(entry.uid));
+          if (!matches) return;
+          matches.forEach(function (row) {
+            row.checked = true;
+            row.rarity = typeof entry.rarity === 'string' ? entry.rarity.toLowerCase() : null;
+            row.subType = typeof entry.sub_type === 'string' && entry.sub_type ? entry.sub_type : null;
+            row.type = typeof entry.type === 'string' ? entry.type : null;
+          });
+        });
+      }
+      return null;
+    }
+
+    // One sentence per Torn error code, built from the code Torn actually returned.
+    function deniedText(denied) {
+      var seven = denied.filter(function (d) { return d.code === 7; }).map(function (d) { return d.category; });
+      var sixteen = denied.filter(function (d) { return d.code === 16; }).map(function (d) { return d.category; });
+      var parts = [];
+      if (seven.length > 0) {
+        parts.push('Your faction position is not allowed to see ' + seven.join(', ') + ' (error 7). ' +
+          'The Leader grants this on your faction position in Torn — no key setting can replace it.');
+      }
+      if (sixteen.length > 0) {
+        parts.push('This key cannot read ' + sixteen.join(', ') + ' (error 16 — the key\'s access level ' +
+          'or selections are too low). A Public key does not work here; use your normal Leader Tools key.');
+      }
+      var text = parts.join(' ');
+      if (denied.length < CATEGORIES.length) text += ' Everything else below is complete.';
+      return text;
+    }
+
+    function newsDeniedText(code) {
+      if (code === 7) {
+        return 'The armory activity log needs Faction API Access on your faction position (error 7). ' +
+          'That is a separate permission from armory access, so it can be missing while the item ' +
+          'lists above read fine.';
+      }
+      return 'This key cannot read the armory activity log (error 16 — the key has no faction → news ' +
+        'selection). The item lists above do not depend on it.';
+    }
+
     async function runAudit() {
       hide(el.errorBox);
       hide(el.okBox);
@@ -528,6 +959,7 @@
         loans = [];
         var stock = new Map();
         var inventoryError = null;
+        var categoriesRead = 0;
 
         // Armory permission is granted per item category on the faction position, so one category
         // being denied says nothing about the rest. Ask for each one and keep what comes back.
@@ -549,11 +981,12 @@
           } catch (categoryFailure) {
             var code = categoryFailure && categoryFailure.tornCode;
             if (code === 7 || code === 16) {
-              denied.push(category);
+              denied.push({ category: category, code: code });
               continue;
             }
             throw categoryFailure;
           }
+          categoriesRead += 1;
           items.forEach(function (item) {
             var name = typeof item.name === 'string' ? item.name : 'Item ' + item.id;
             var amount = typeof item.amount === 'number' ? item.amount : 1;
@@ -563,8 +996,14 @@
             var row = stock.get(key) || { name: name, category: category, available: 0, loaned: 0 };
             if (holder) {
               row.loaned += amount;
+              // One uid per unit lets each loaned item be looked up. If the list does not line up
+              // with the amount, the units stay without a uid and their rarity is UNKNOWN.
+              var uids = Array.isArray(item.uids) ? item.uids : [];
+              var perUid = amount > 0 && uids.length === amount;
               for (var n = 0; n < amount; n += 1) {
-                loans.push({ holder: holder, item: name, category: category });
+                var uid = perUid && uids[n] !== null && uids[n] !== undefined ? uids[n] : null;
+                loans.push({ holder: holder, item: name, category: category, uid: uid,
+                  checked: false, rarity: null, subType: null, type: null });
               }
             } else {
               row.available += amount;
@@ -573,14 +1012,21 @@
           });
         }
 
-        if (denied.length === CATEGORIES.length) {
-          inventoryError = 'Torn refused every armory category with error 7, which means this ' +
-            'account does not have armory permission on its faction position. The Leader grants ' +
-            'that in Torn under faction positions — no API key can substitute for it.';
-        } else if (denied.length > 0) {
-          inventoryError = 'No permission for: ' + denied.join(', ') +
-            '. Everything else below is complete. The Leader can enable those categories on your ' +
-            'faction position in Torn.';
+        deniedCategories = denied.map(function (d) { return d.category; });
+        if (denied.length > 0) inventoryError = deniedText(denied);
+
+        // Rarity and weapon class come from itemdetails, which only exists for weapons and armor.
+        detailsReason = null;
+        var detailsNotice = null;
+        var wanted = loans.filter(function (l) {
+          return DETAILS_CATEGORIES.indexOf(l.category) !== -1 && l.uid !== null;
+        });
+        if (wanted.length > 0) {
+          var outcome = await readItemDetails(wanted);
+          if (outcome) {
+            detailsReason = outcome.reason;
+            detailsNotice = outcome.notice;
+          }
         }
 
         // The activity log needs Faction API Access on the position, which is a different
@@ -595,14 +1041,15 @@
         } catch (newsFailure) {
           var newsCode = newsFailure && newsFailure.tornCode;
           if (newsCode === 7 || newsCode === 16) {
-            newsError = 'The armory activity log needs Faction API Access on your faction ' +
-              'position. That is a separate permission from armory access, so it can be missing ' +
-              'while the item lists above read fine.';
+            newsError = newsDeniedText(newsCode);
           } else {
             throw newsFailure;
           }
         }
 
+        hasRun = true;
+        renderRw();
+        renderClasses();
         renderLoans();
         renderStock(stock);
         renderLog(news);
@@ -611,11 +1058,17 @@
         var available = [...stock.values()].reduce(function (sum, r) { return sum + r.available; }, 0);
         el.figures.hidden = loans.length === 0 && stock.size === 0;
         el.figLoaned.textContent = String(loans.length);
+        renderRwFigure();
         el.figHolders.textContent = String(holders.size);
         el.figStock.textContent = available.toLocaleString('en-US');
         el.figKinds.textContent = String(stock.size);
 
-        storeKey(el.apiKey.value.trim());
+        // A key is only remembered once it has read something. If every category was refused,
+        // whatever is already saved stays untouched.
+        if (categoriesRead > 0) {
+          storeKey(el.apiKey.value.trim());
+          storeItemKey(el.itemKey.value.trim());
+        }
 
         var notices = [];
         if (inventoryError !== null) {
@@ -625,8 +1078,14 @@
           }
           notices.push(inventoryError);
         }
+        if (detailsNotice !== null) {
+          notices.push(detailsNotice);
+        }
         if (newsError !== null) {
           notices.push(newsError);
+        }
+        if (categoriesRead === 0) {
+          notices.push('The key was not saved.');
         }
         if (notices.length > 0) {
           show(el.errorBox, notices.join('\n\n'));
@@ -652,7 +1111,22 @@
 
     el.forgetKey.addEventListener('click', function () {
       storeKey(''); el.apiKey.value = '';
-      hide(el.errorBox); show(el.okBox, 'Key removed from this browser.');
+      storeItemKey(''); el.itemKey.value = '';
+      hide(el.errorBox); show(el.okBox, 'Keys removed from this browser.');
+    });
+
+    // Sorting is view-only and is not saved. The same header again reverses the order.
+    document.querySelector('#rwPanel thead').addEventListener('click', function (event) {
+      var button = event.target.closest ? event.target.closest('button[data-sort]') : null;
+      if (!button) return;
+      var key = button.getAttribute('data-sort');
+      if (rwSort.key === key) {
+        rwSort.dir = -rwSort.dir;
+      } else {
+        rwSort.key = key;
+        rwSort.dir = 1;
+      }
+      renderRw();
     });
 
     el.runBtn.addEventListener('click', function () { void runAudit(); });
@@ -661,7 +1135,7 @@
       var byHolder = new Map();
       loans.forEach(function (row) {
         var list = byHolder.get(row.holder) || [];
-        list.push(row.item);
+        list.push(isRw(row) ? row.item + ' [' + row.rarity + ']' : row.item);
         byHolder.set(row.holder, list);
       });
       var lines = ['FACTION ARMORY — OUT ON LOAN', ''];
@@ -688,6 +1162,8 @@
     });
 
     el.apiKey.value = readKey();
+    el.itemKey.value = readItemKey();
+    renderRw();
   })();
 </script>
 </body>
