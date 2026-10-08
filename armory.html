@@ -189,6 +189,20 @@
   th[aria-sort="descending"] .sortbtn::after { content: " \25BC"; font-size: 10px; }
   td.items span.item { white-space: nowrap; }
 
+  .loanstatus {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+    padding: 10px 18px; border-bottom: 1px solid var(--line);
+    background: var(--surface-2); color: var(--muted); font-size: 13px;
+  }
+  .loanstatus[hidden] { display: none; }
+  .loanstatus .text { flex: 1 1 240px; min-width: 0; overflow-wrap: anywhere; }
+  .loanstatus[data-state="error"] { background: var(--bad-soft); color: var(--bad); }
+  .loanstatus .btn { padding: 5px 11px; font-size: 12px; }
+  .loanstatus .btn[hidden] { display: none; }
+  td.held { white-space: nowrap; }
+  td.held .sub { display: block; font-size: 11px; color: var(--faint); }
+  td.held .state { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
   .logline { padding: 9px 18px; border-bottom: 1px solid var(--line); font-size: 14px; display: flex; gap: 12px; }
   .logline:last-child { border-bottom: 0; }
   .logline time { font-family: var(--mono); font-size: 12px; color: var(--faint); white-space: nowrap; flex: none; }
@@ -270,6 +284,10 @@
           <dt>Item details</dt>
           <dd>Rarity and weapon class come from torn → itemdetails (Public level). If your main key
             cannot read it, paste a Public key in Item details key. It is used for nothing else.</dd>
+          <dt>Loan times</dt>
+          <dd>Read from Torn's armory log with your main key (faction → news). The first run can take a
+            few minutes; later runs read only new lines. What was read is kept in this browser and
+            cleared by Forget key.</dd>
           <dt>Storage</dt>
           <dd>Your key stays in this browser. No server, no account.</dd>
           <dt>Writes</dt>
@@ -292,6 +310,11 @@
       <h2>RW weapons &amp; gear on loan</h2>
       <p class="hint" id="rwHint">Not run yet</p>
     </div>
+    <div class="loanstatus" id="loanTimeStatus" data-state="idle" hidden>
+      <span class="text" id="loanTimeText"></span>
+      <button type="button" class="btn" id="loanTimeStop" hidden>Stop</button>
+      <button type="button" class="btn" id="loanTimeFurther" hidden>Search further back</button>
+    </div>
     <div class="table-scroll" id="rwWrap" hidden>
       <table>
         <thead>
@@ -301,6 +324,7 @@
             <th data-sort="rarity"><button type="button" class="sortbtn" data-sort="rarity">Rarity</button></th>
             <th data-sort="class"><button type="button" class="sortbtn" data-sort="class">Class</button></th>
             <th>Category</th>
+            <th data-sort="held"><button type="button" class="sortbtn" data-sort="held">Held for</button></th>
           </tr>
         </thead>
         <tbody id="rwBody"></tbody>
@@ -379,6 +403,11 @@
     <p><strong>What "on loan" means here.</strong> Torn's own armory data marks an item with the
       member currently holding it. This page reports exactly that, so a name on the list is Torn's
       record, not a guess from reading the log.</p>
+    <p><strong>How long.</strong> Loan times come from Torn's armory log, matched by member and item
+      name, because the log never names the exact item. If a member holds more than one of the same
+      item, the newest loans of that name are used, and returns are not taken into account. A loan
+      that is not in the part of the log that was read is shown as longer than the time the log
+      covers — never as a guess.</p>
     <p><strong>Manual refresh only.</strong> One press, one read. The page never polls in the
       background and never acts inside Torn.</p>
   </footer>
@@ -407,8 +436,23 @@
     ['apiKey','itemKey','toggleKey','runBtn','forgetKey','errorBox','okBox','figures','figLoaned',
      'figRw','figRwSub','figHolders','figStock','figKinds','loans','loansEmpty','loanHint',
      'loanActions','copyLoans','copyToast','rwHint','rwWrap','rwBody','rwEmpty','classHint',
-     'classWrap','classBody','classEmpty','stockBody','stockEmpty','log','logEmpty']
+     'classWrap','classBody','classEmpty','stockBody','stockEmpty','log','logEmpty',
+     'loanTimeStatus','loanTimeText','loanTimeStop','loanTimeFurther']
       .forEach(function (id) { el[id] = document.getElementById(id); });
+
+    // Loan times. Torn's armory log is read page by page after the audit has been drawn, and only the
+    // loan lines are kept. Every wait goes through window.setTimeout.
+    var LOG_STORE = 'ks-armory-loanlog-v1';
+    var LOG_FACTION_ID = 48039;
+    var LOG_PAGE_LIMIT = 100;
+    var LOG_MAX_PAGES = 250;
+    var LOG_PACE_MS = 750;
+    var RATE_LIMIT_WAIT_S = 60;
+    var NO_PROGRESS_PAGES = 3;
+    var MIN_CACHED_LOANS = 10;
+    var NOT_FOUND_PREFIX = '> ';
+    var LOG_PATH = '/faction/news?cat=armoryAction&limit=' + LOG_PAGE_LIMIT + '&sort=DESC&striptags=true';
+    var LOAN_LINE = /^(\S+) loaned (\d+)x (.+) to (\S+) from the faction armory/;
 
     var loans = [];
     // Why rarity could not be read (null when it could), and which categories were denied.
@@ -416,6 +460,11 @@
     var deniedCategories = [];
     var rwSort = { key: 'rarity', dir: 1 };
     var hasRun = false;
+    // Loan-time reading: the run number, the read in progress, the pending wait, the cache of this page.
+    var runNo = 0;
+    var activeRead = null;
+    var sleeper = null;
+    var lastCache = null;
 
     function show(box, message) { box.textContent = message; box.hidden = false; }
     function hide(box) { box.textContent = ''; box.hidden = true; }
@@ -568,6 +617,54 @@
 
     function rwRows() { return loans.filter(isRw); }
 
+    // What a RW row knows about how long it has been held: { kind: 'found', ts } | { kind: 'bound',
+    // since } | { kind: 'none' } | { kind: 'checking' } | { kind: 'unknown' }. No value is UNKNOWN.
+    function heldKind(row) { return row.held ? row.held.kind : 'unknown'; }
+    function heldPinned(row) {
+      var kind = heldKind(row);
+      return kind === 'checking' || kind === 'unknown' ? 1 : 0;
+    }
+    function heldSince(row) { return heldKind(row) === 'found' ? row.held.ts : -1; }
+
+    function dateText(ts) {
+      return new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+
+    function heldCell(td, held) {
+      var kind = held ? held.kind : 'unknown';
+      var now = Math.floor(Date.now() / 1000);
+      var main;
+      var sub = null;
+      if (kind === 'found') {
+        var age = Math.max(0, now - held.ts);
+        main = age >= 86400 ? plural(Math.floor(age / 86400), 'day', 'days') : Math.floor(age / 3600) + ' h';
+        sub = 'since ' + dateText(held.ts);
+      } else if (kind === 'bound') {
+        var days = Math.floor(Math.max(0, now - held.since) / 86400);
+        main = NOT_FOUND_PREFIX + plural(days, 'day', 'days');
+        sub = 'not in log since ' + dateText(held.since);
+      } else if (kind === 'none') {
+        main = 'Not in log';
+      } else {
+        main = kind === 'checking' ? 'CHECKING' : 'UNKNOWN';
+        td.className = 'held';
+        var state = document.createElement('span');
+        state.className = 'state';
+        state.textContent = main;
+        td.appendChild(state);
+        return;
+      }
+      td.className = 'held';
+      td.appendChild(document.createTextNode(main));
+      if (sub !== null) {
+        td.appendChild(document.createTextNode(' '));
+        var small = document.createElement('span');
+        small.className = 'sub';
+        small.textContent = sub;
+        td.appendChild(small);
+      }
+    }
+
     function sortedRwRows() {
       var key = rwSort.key;
       var value = function (r) {
@@ -580,6 +677,12 @@
         var order;
         if (key === 'rarity') {
           order = RW_RARITIES.indexOf(a.rarity) - RW_RARITIES.indexOf(b.rarity);
+        } else if (key === 'held') {
+          // CHECKING and UNKNOWN stay last in both directions. Longest held comes first: loans that
+          // were not found (older than the log read) before found loans, oldest loan first.
+          var pinned = heldPinned(a) - heldPinned(b);
+          if (pinned !== 0) return pinned;
+          order = heldSince(a) - heldSince(b);
         } else {
           order = compare(value(a), value(b));
         }
@@ -621,11 +724,13 @@
       setPanel(el.rwWrap, el.rwEmpty, el.rwHint, hint, rows.length, 'No RW weapons or gear out on loan.');
       rows.forEach(function (row) {
         var tr = document.createElement('tr');
-        var cells = [row.holder, row.item, null, classOf(row), null];
+        var cells = [row.holder, row.item, null, classOf(row), null, null];
         cells.forEach(function (text, index) {
           var td = document.createElement('td');
           if (index === 2) {
             td.appendChild(rarityBadge(row.rarity));
+          } else if (index === 5) {
+            heldCell(td, row.held);
           } else if (index === 4) {
             var span = document.createElement('span');
             span.className = 'cat';
@@ -646,7 +751,8 @@
 
       var unknown = classUnknownReason();
       if (unknown) {
-        setPanel(el.classWrap, el.classEmpty, el.classHint, 'Rarity UNKNOWN', 0, 'Rarity UNKNOWN — ' + unknown);
+        setPanel(el.classWrap, el.classEmpty, el.classHint, 'Weapon class UNKNOWN', 0,
+          'Weapon class UNKNOWN — ' + unknown);
         return;
       }
 
@@ -939,7 +1045,401 @@
         'selection). The item lists above do not depend on it.';
     }
 
+    // ---- Loan times: reading Torn's armory log -------------------------------------------------
+
+    function isCurrent(no) { return no === runNo; }
+    function isDuplicate(seen, id) { return seen.has(id); }
+    function overlapTo(ts) { return ts + 1; }
+    function loanHolder(by, to) { return to === 'themselves' ? by : to; }
+    function newestFirst(a, b) { return b[0] - a[0]; }
+    function cacheMatchesFaction(cache) { return cache.factionId === LOG_FACTION_ID; }
+    function pairKey(holder, item) { return (holder + '|' + item).toLowerCase(); }
+    function isTs(value) { return typeof value === 'number' && isFinite(value); }
+
+    // Only loan lines matter. The log names the item, never the uid, so a loan is keyed by who holds
+    // it and what it is called.
+    function parseLoan(text) {
+      var m = typeof text === 'string' ? LOAN_LINE.exec(text) : null;
+      if (!m) return null;
+      var count = parseInt(m[2], 10);
+      if (!(count >= 1)) return null;
+      return { key: pairKey(loanHolder(m[1], m[4]), m[3]), count: count };
+    }
+
+    // store: key → [[timestamp, id, count], …], newest first, one entry per log line, at most `cap`.
+    function addLoan(store, key, entry, cap) {
+      var list = store[key] || (store[key] = []);
+      var id = String(entry[1]);
+      if (list.some(function (e) { return String(e[1]) === id; })) return;
+      list.push(entry);
+      list.sort(newestFirst);
+      if (list.length > cap) list.length = cap;
+    }
+
+    // The timestamps of the newest `need` loaned units, one per unit (a "loaned 2x" line is two units).
+    function unitTimes(entries, need) {
+      var times = [];
+      (entries || []).forEach(function (e) {
+        for (var n = 0; n < e[2] && times.length < need; n += 1) times.push(e[0]);
+      });
+      return times;
+    }
+
+    function holdCounts() {
+      var counts = Object.create(null);
+      loans.forEach(function (r) {
+        var key = pairKey(r.holder, r.item);
+        counts[key] = (counts[key] || 0) + 1;
+      });
+      return counts;
+    }
+    function rwNeeds() {
+      var need = Object.create(null);
+      rwRows().forEach(function (r) {
+        var key = pairKey(r.holder, r.item);
+        need[key] = (need[key] || 0) + 1;
+      });
+      return need;
+    }
+    function capOf(active, key) { return Math.max(MIN_CACHED_LOANS, active.holds[key] || 0); }
+
+    function allCovered(active) {
+      return Object.keys(active.need).every(function (key) {
+        return unitTimes(active.store[key], active.need[key]).length >= active.need[key];
+      });
+    }
+
+    function setHeld(rows, kind) { rows.forEach(function (r) { r.held = { kind: kind }; }); }
+
+    // Gives every RW row its time. `bound` says what an unfound unit means: not in the part of the log
+    // that was read ({ oldestTs, complete: false }) or not in the log at all ({ complete: true }).
+    // With bound = null (an unfinished update) a pair counts only when all its units were found;
+    // every other pair is UNKNOWN. Returns how many units were not found.
+    function applyHeld(rows, byKey, bound) {
+      var groups = new Map();
+      rows.forEach(function (r) {
+        var key = pairKey(r.holder, r.item);
+        var list = groups.get(key) || [];
+        list.push(r);
+        groups.set(key, list);
+      });
+      var unfound = 0;
+      groups.forEach(function (list, key) {
+        var times = unitTimes(byKey[key], list.length);
+        if (bound === null && times.length < list.length) { setHeld(list, 'unknown'); return; }
+        list.forEach(function (r, index) {
+          if (index < times.length) {
+            r.held = { kind: 'found', ts: times[index] };
+          } else {
+            unfound += 1;
+            r.held = bound.complete ? { kind: 'none' } : { kind: 'bound', since: bound.oldestTs };
+          }
+        });
+      });
+      return unfound;
+    }
+
+    function setLoanStatus(state, text, further) {
+      el.loanTimeStatus.setAttribute('data-state', state);
+      el.loanTimeStatus.hidden = state === 'idle';
+      el.loanTimeText.textContent = state === 'idle' ? '' : text;
+      el.loanTimeStop.hidden = state !== 'checking';
+      el.loanTimeFurther.hidden = !(state === 'done' && further === true);
+    }
+
+    function showChecking(active) {
+      setLoanStatus('checking', 'Reading Torn\'s armory log: page ' + (active.pages + 1) + ' of max ' +
+        LOG_MAX_PAGES + (active.lowest === null ? '' : ' · back to ' + dateText(active.lowest)));
+    }
+
+    // The cache lives in this browser only and holds loan lines, never the whole log. Anything that
+    // does not look exactly right is thrown away and the log is read from the start.
+    function validLogCache(c) {
+      if (!c || typeof c !== 'object' || Array.isArray(c)) return false;
+      if (c.schema !== 1 || !cacheMatchesFaction(c)) return false;
+      if (!isTs(c.newestTs) || !isTs(c.oldestTs) || typeof c.complete !== 'boolean') return false;
+      if (!c.loans || typeof c.loans !== 'object' || Array.isArray(c.loans)) return false;
+      return Object.keys(c.loans).every(function (key) {
+        var list = c.loans[key];
+        return Array.isArray(list) && list.every(function (e) {
+          return Array.isArray(e) && e.length >= 3 && isTs(e[0]) &&
+            (typeof e[1] === 'string' || typeof e[1] === 'number') && isTs(e[2]) && e[2] >= 1;
+        });
+      });
+    }
+    function readLogCache() {
+      var cache;
+      try { cache = JSON.parse(localStorage.getItem(LOG_STORE) || 'null'); } catch (e) { return null; }
+      if (!validLogCache(cache)) return null;
+      Object.keys(cache.loans).forEach(function (key) { cache.loans[key].sort(newestFirst); });
+      return cache;
+    }
+    function saveLogCache(cache) {
+      try { localStorage.setItem(LOG_STORE, JSON.stringify(cache)); return true; } catch (e) { return false; }
+    }
+    function clearLogCache() {
+      try { localStorage.removeItem(LOG_STORE); } catch (e) { /* storage blocked */ }
+    }
+    function makeCache(newestTs, oldestTs, complete, store) {
+      var kept = {};
+      Object.keys(store).forEach(function (key) { if (store[key].length > 0) kept[key] = store[key]; });
+      return { schema: 1, factionId: LOG_FACTION_ID, newestTs: newestTs, oldestTs: oldestTs,
+        complete: complete, loans: kept, savedAt: Date.now() };
+    }
+
+    // A wait that can be cancelled. The pending promise is resolved at once; the reader then finds out
+    // from the run number that it is no longer current.
+    function sleep(ms) {
+      return new Promise(function (resolve) {
+        sleeper = { resolve: resolve, timer: window.setTimeout(function () { sleeper = null; resolve(); }, ms) };
+      });
+    }
+    function cancelSleep() {
+      if (!sleeper) return;
+      window.clearTimeout(sleeper.timer);
+      var resolve = sleeper.resolve;
+      sleeper = null;
+      resolve();
+    }
+
+    async function rateLimitWait(active) {
+      for (var left = RATE_LIMIT_WAIT_S; left > 0; left -= 1) {
+        setLoanStatus('checking', 'Torn rate limit — waiting ' + left + ' s');
+        await sleep(1000);
+        if (!isCurrent(active.no)) return;
+      }
+    }
+
+    // One page of the log. Error 5 waits a minute and asks for the same page once more.
+    async function fetchLogPage(active, to) {
+      var path = LOG_PATH + (to === null ? '' : '&to=' + to);
+      for (var attempt = 0; ; attempt += 1) {
+        try {
+          return await tornRequest(path, active.key, path);
+        } catch (failure) {
+          if (!isCurrent(active.no)) return null;
+          if (failure && failure.tornCode === 5 && attempt === 0) {
+            await rateLimitWait(active);
+            if (!isCurrent(active.no)) return null;
+            continue;
+          }
+          throw failure;
+        }
+      }
+    }
+
+    function takePage(active, news) {
+      var fresh = 0;
+      var low = null;
+      var high = null;
+      news.forEach(function (row) {
+        if (!row || typeof row !== 'object' || !isTs(row.timestamp)) return;
+        if (low === null || row.timestamp < low) low = row.timestamp;
+        if (high === null || row.timestamp > high) high = row.timestamp;
+        var id = String(row.id);
+        if (isDuplicate(active.seen, id)) return;
+        active.seen.add(id);
+        fresh += 1;
+        var loan = parseLoan(row.text);
+        if (loan) addLoan(active.store, loan.key, [row.timestamp, id, loan.count], capOf(active, loan.key));
+      });
+      return { fresh: fresh, low: low, high: high };
+    }
+
+    // Ends a read, whichever way it ended, and shows the result. kind: end (start of the log), covered
+    // (every RW unit has a loan), reached (new lines meet the saved log), cap (page limit), stopped,
+    // error, denied (the log cannot be trusted at all).
+    function finishRead(active, kind, detail) {
+      if (activeRead === active) activeRead = null;
+      var rows = rwRows();
+      var fail = function (text) { setLoanStatus('error', text); renderRw(); };
+
+      if (kind === 'denied') { setHeld(rows, 'unknown'); fail(detail); return; }
+      if (active.mode === 'new' && (kind === 'stopped' || kind === 'error')) {
+        // Nothing is saved: the saved log stays as it was and only fully found pairs are shown.
+        applyHeld(rows, active.store, null);
+        fail(kind === 'stopped' ? 'Stopped before the log was up to date — some loan times are UNKNOWN.' : detail);
+        return;
+      }
+      if (active.mode === 'first' && active.highest === null && kind !== 'end') {
+        setHeld(rows, 'unknown');
+        fail(kind === 'stopped' ? 'Stopped before any log line was read — loan times are UNKNOWN.' : detail);
+        return;
+      }
+
+      var base = active.base;
+      var end = kind === 'end';
+      var replaced = false;
+      var cache;
+      if (active.mode === 'first') {
+        cache = active.highest === null ? null : makeCache(active.highest, active.lowest, end, active.store);
+      } else if (active.mode === 'further') {
+        cache = makeCache(base.newestTs, Math.min(base.oldestTs, active.lowest), base.complete || end, active.store);
+      } else if (kind === 'cap') {
+        // Too many new lines to meet the saved log: what was just read replaces it.
+        cache = makeCache(active.highest, active.lowest, false, active.store);
+        replaced = true;
+      } else {
+        var merged = Object.create(null);
+        [base.loans, active.store].forEach(function (source) {
+          Object.keys(source).forEach(function (key) {
+            source[key].forEach(function (entry) { addLoan(merged, key, entry, capOf(active, key)); });
+          });
+        });
+        cache = makeCache(
+          active.highest === null ? base.newestTs : Math.max(base.newestTs, active.highest),
+          end && active.lowest !== null ? Math.min(base.oldestTs, active.lowest) : base.oldestTs,
+          base.complete || end, merged);
+      }
+
+      var saved = cache === null ? true : saveLogCache(cache);
+      lastCache = cache;
+      var view = cache || { loans: {}, oldestTs: 0, complete: true };
+      var unfound = applyHeld(rows, view.loans, { oldestTs: view.oldestTs, complete: view.complete });
+      var coverage = view.complete ? 'read to the start of the log' : 'read back to ' + dateText(view.oldestTs);
+      if (kind === 'error') {
+        setLoanStatus('error', detail + ' Loan times shown come from the log ' + coverage + '.' +
+          (saved ? '' : ' Not saved in this browser.'));
+      } else {
+        setLoanStatus('done', 'Loan times from Torn\'s armory log, ' + coverage + '.' +
+          (replaced ? ' Saved log was too old and was replaced.' : '') +
+          (saved ? '' : ' Not saved in this browser.'), unfound > 0 && !view.complete);
+      }
+      renderRw();
+    }
+
+    // Reads the log newest to oldest, one page at a time. Every await is followed by a check of the
+    // run number, so a read that was stopped or replaced never writes anything.
+    async function readLog(active) {
+      var no = active.no;
+      var to = active.startTo;
+      var idle = 0;
+      while (active.pages < LOG_MAX_PAGES) {
+        showChecking(active);
+        await sleep(LOG_PACE_MS);
+        if (!isCurrent(no)) return;
+        var payload;
+        try {
+          payload = await fetchLogPage(active, to);
+        } catch (failure) {
+          if (isCurrent(no)) endOnFailure(active, failure);
+          return;
+        }
+        if (!isCurrent(no)) return;
+        var news = payload && Array.isArray(payload.news) ? payload.news : [];
+        active.pages += 1;
+        var page = takePage(active, news);
+        if (page.low !== null && (active.lowest === null || page.low < active.lowest)) active.lowest = page.low;
+        if (page.high !== null && (active.highest === null || page.high > active.highest)) active.highest = page.high;
+
+        if (news.length === 0 || (news.length < LOG_PAGE_LIMIT && page.fresh === 0)) {
+          finishRead(active, 'end');
+          return;
+        }
+        idle = page.fresh === 0 ? idle + 1 : 0;
+        if (page.low === null || idle >= NO_PROGRESS_PAGES) {
+          finishRead(active, 'error', 'Torn\'s log paging did not move forward.');
+          return;
+        }
+        if (active.mode === 'new' ? page.low <= active.base.newestTs : allCovered(active)) {
+          finishRead(active, active.mode === 'new' ? 'reached' : 'covered');
+          return;
+        }
+        if (active.pages >= LOG_MAX_PAGES) {
+          finishRead(active, 'cap');
+          return;
+        }
+        // One second of overlap, so lines in the same second are never lost whether Torn treats
+        // "to" as inclusive or exclusive. A full page without a new line steps back from there.
+        to = idle === 0 ? overlapTo(page.low) : (idle === 1 ? page.low : page.low - 1);
+      }
+    }
+
+    // A request failed. 7 and 16 mean the log cannot be read with this key; a key Torn reports as dead
+    // is removed; anything else is an error that stops the read.
+    function endOnFailure(active, failure) {
+      var code = failure && failure.tornCode;
+      if (failure && failure.fatalKey) { storeKey(''); el.apiKey.value = ''; }
+      if (code === 7 || code === 16) {
+        finishRead(active, 'denied', newsDeniedText(code));
+      } else if (failure && failure.fatalKey) {
+        finishRead(active, 'denied', failure.message);
+      } else {
+        finishRead(active, 'error', failure instanceof Error ? failure.message : String(failure));
+      }
+    }
+
+    function beginRead(mode, base, key) {
+      var active = { no: runNo, mode: mode, base: base, key: key, store: Object.create(null),
+        seen: new Set(), holds: holdCounts(), need: rwNeeds(), pages: 0, lowest: null, highest: null,
+        startTo: null };
+      if (mode === 'further') {
+        Object.keys(base.loans).forEach(function (k) {
+          base.loans[k].forEach(function (entry) { addLoan(active.store, k, entry.slice(), capOf(active, k)); });
+        });
+        active.lowest = base.oldestTs;
+        active.startTo = overlapTo(base.oldestTs);
+      }
+      activeRead = active;
+      void readLog(active);
+    }
+
+    // Called at the end of an audit that read rarity and found RW loans. The key is read once here and
+    // used for every page of the log.
+    function startLoanRead() {
+      var key = el.apiKey.value.trim();
+      if (!key) {
+        setHeld(rwRows(), 'unknown');
+        setLoanStatus('error', 'Loan times need a key, and none is set.');
+        renderRw();
+        return;
+      }
+      var base = readLogCache();
+      beginRead(base ? 'new' : 'first', base, key);
+    }
+
+    function searchFurther() {
+      if (activeRead || !lastCache) return;
+      var key = el.apiKey.value.trim();
+      if (!key) { setLoanStatus('error', 'Paste your Custom API Key first.'); return; }
+      rwRows().forEach(function (r) {
+        if (heldKind(r) === 'bound' || heldKind(r) === 'none') r.held = { kind: 'checking' };
+      });
+      setLoanStatus('checking', 'Reading Torn\'s armory log: page 1 of max ' + LOG_MAX_PAGES);
+      renderRw();
+      beginRead('further', lastCache, key);
+    }
+
+    // Stop, Run audit and Forget key all end a read in this order: the run number goes up (so the
+    // answer to a request in flight is dropped), the wait is cancelled, what was read is kept as the
+    // rules say, and the result is shown.
+    function stopLoanRead() {
+      runNo += 1;
+      cancelSleep();
+      var was = activeRead;
+      activeRead = null;
+      if (was) finishRead(was, 'stopped');
+    }
+
+    // Decides what the "Held for" column and the status line say when the audit has been read.
+    // Returns true when the log should be read.
+    function planLoanTimes(newsError) {
+      lastCache = null;
+      var rows = rwUnknownReason() ? [] : rwRows();
+      if (rows.length === 0) { setLoanStatus('idle', ''); return false; }
+      if (newsError !== null) {
+        setHeld(rows, 'unknown');
+        setLoanStatus('error', newsError);
+        return false;
+      }
+      setHeld(rows, 'checking');
+      setLoanStatus('checking', 'Reading Torn\'s armory log: page 1 of max ' + LOG_MAX_PAGES);
+      return true;
+    }
+
     async function runAudit() {
+      stopLoanRead();
+      setLoanStatus('idle', '');
       hide(el.errorBox);
       hide(el.okBox);
       if (!el.apiKey.value.trim()) { show(el.errorBox, 'Paste your Custom API Key first.'); return; }
@@ -1048,11 +1548,14 @@
         }
 
         hasRun = true;
+        var readLoanLog = planLoanTimes(newsError);
         renderRw();
         renderClasses();
         renderLoans();
         renderStock(stock);
         renderLog(news);
+        // The log is read after the audit is drawn, and the column already says CHECKING.
+        if (readLoanLog) startLoanRead();
 
         var holders = new Set(loans.map(function (l) { return l.holder; }));
         var available = [...stock.values()].reduce(function (sum, r) { return sum + r.available; }, 0);
@@ -1110,10 +1613,16 @@
     });
 
     el.forgetKey.addEventListener('click', function () {
+      stopLoanRead();
       storeKey(''); el.apiKey.value = '';
       storeItemKey(''); el.itemKey.value = '';
-      hide(el.errorBox); show(el.okBox, 'Keys removed from this browser.');
+      clearLogCache(); lastCache = null;
+      el.loanTimeFurther.hidden = true;
+      hide(el.errorBox); show(el.okBox, 'Keys and saved log removed from this browser.');
     });
+
+    el.loanTimeStop.addEventListener('click', function () { stopLoanRead(); });
+    el.loanTimeFurther.addEventListener('click', function () { searchFurther(); });
 
     // Sorting is view-only and is not saved. The same header again reverses the order.
     document.querySelector('#rwPanel thead').addEventListener('click', function (event) {
