@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PC
 // @namespace    kingshade.torn
-// @version      1.1.10
+// @version      1.1.11
 // @downloadURL  https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @description  PC TEST: DIBS as a native roster column beside Torn's Attack cell; FF and Est from FFScouter's get-stats API. War Stuff Enhanced is detected and shown read-only; it never blocks.
@@ -17,6 +17,54 @@
 // ==/UserScript==
 
 /*
+ * KS Torn War Dibs PC v1.1.11 -- CANDIDATE (hotfix during the war)
+ *
+ * ONE MAIN CHANGE: War Dibs keeps inside Torn's and FFScouter's request
+ * limits. Name, namespace, update address and every storage name are those of
+ * 1.1.10.
+ *
+ * FIXED
+ *   - Every time the window lost focus (Discord, another tab, an attack
+ *     window) the FF values were thrown away, and when focus came back the
+ *     script read FFScouter again at once, past the 60 s rule. Repeated window
+ *     switches ran into "Too many requests" and the FF values vanished (rows
+ *     UNKNOWN).
+ * CHANGED
+ *   - Losing focus keeps the FF values and the time of the last read. Each
+ *     value still expires on its own after 6 min (fairFightMaxAgeMs). A key
+ *     change and "Forget FF key" still clear everything. Getting focus back
+ *     reads FF only when the last read is 60 s old or missing, and never
+ *     during a backoff (no longer forced).
+ *   - Torn cap: at most 50 War Dibs Torn calls per rolling 60 s (was 100, the
+ *     player's whole quota) and at most 20 life reads a minute (was 30). A
+ *     life read from the queue starts only while fewer than 35 Torn calls were
+ *     made in the last 60 s; the rest is kept for status polls, identity,
+ *     member names and the life read made by a DIBS click.
+ *   - Torn error code 5 ("Too many requests") in any War Dibs answer: no Torn
+ *     call at all for 60 s, the life queue stands still, and the Torn line
+ *     reads "Torn: paused N s -- Torn says too many requests (all your tools
+ *     together)". Everything else stays fail-closed (DIBS shows WAIT, nothing
+ *     is claimed on old data). It resumes by itself after 60 s.
+ *   - FFScouter backoff: an answer that says "too many" (HTTP 429, code 20 or
+ *     21, torn_code 5, or the words "Too many requests", also with HTTP 200 or
+ *     502) holds every FFScouter call, Sync included, for the longer of 60 s
+ *     and retry_after_seconds, at most 15 min. The FF line reads
+ *     "FF: paused . Too many requests"; its title keeps the full text.
+ *   - Own use in plain words (titles only): the Torn line's title reads
+ *     "War Dibs Torn calls last 60 s: N of 50" (+ " . paused until HH:MM:SS"),
+ *     the FF line's title ends with " . War Dibs FFScouter calls last 60 s: N".
+ * KNOWN ISSUES
+ *   - A "too many" answer that arrives after the window has lost focus is
+ *     discarded (as before), so it sets no FFScouter backoff.
+ *   - The Torn calls at focus return (own wars, opponent members) are kept;
+ *     the cap is what limits them. With very fast window switching the status
+ *     data can therefore be stale for a while and DIBS shows WAIT.
+ *   - How much of the player's Torn quota other tools use is not measured.
+ * VERIFICATION
+ *   - Synthetic only: the whole script in Chromium against stand-in backends.
+ *     Not run against the real Torn or FFScouter. See RAPPORT_PC_1.1.11.txt.
+ *
+ * ---------------------------------------------------------------------------
  * KS Torn War Dibs PC v1.1.10 -- CANDIDATE
  *
  * ONE MAIN CHANGE: the DIBS transport. The claim board, claim, release and
@@ -438,8 +486,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs PC",
-    version: "1.1.10",
-    instanceKey: "__ksTornWarDibsPcV1110",
+    version: "1.1.11",
+    instanceKey: "__ksTornWarDibsPcV1111",
     rowHostPrefix: "ks-twd-wse-row-v010-",
     rosterStyleId: "ks-twd-wse-roster-style-v010",
     panelId: "ks-twd-wse-panel",
@@ -471,11 +519,18 @@
     lowHpMaxFairFight: 4.5,
     lifeMaxAgeMs: 15000,
     lifeReadMinIntervalMs: 10000,
-    lifeReadsPerMinuteMax: 30,
-    tornCallsPerMinuteMax: 100,
+    lifeReadsPerMinuteMax: 20,
+    tornCallsPerMinuteMax: 50,
+    // A life read from the queue may only start while fewer Torn calls than
+    // this were made in the last 60 s; the rest of tornCallsPerMinuteMax is
+    // kept for status polls, identity, member names and DIBS-click reads.
+    lifeQueueTornCallsMax: 35,
+    // Torn error code 5 ("Too many requests"): no Torn call at all for this long.
+    tornRateLimitPauseMs: 60000,
     fairFightRefreshMs: 60000,
     fairFightMaxAgeMs: 360000,
     fairFightErrorBackoffMs: 60000,
+    fairFightRetryAfterMaxMs: 900000,
     fairFightTransportRecoveryMs: 1800,
     fairFightInitialRequestTimeoutMs: 6000,
     fairFightInitialTransportRetryAttempts: 1,
@@ -668,6 +723,8 @@
   let fairFightBackoffUntil = 0;
   let fairFightEverSucceeded = false;
   let fairFightRetryTimer = null;
+  // Times of every FFScouter request this script sent (the last 60 s are counted, for the panel title only).
+  let fairFightRequestTimes = [];
   let fairFightStatus = { state: "idle", message: "FF: waiting…" };
   let tornStatusSyncing = false;
   let tornStatusRequestSerial = 0;
@@ -718,6 +775,8 @@
   const lifeReadAttempts = new Map();
   let lifeReadTimes = [];
   let tornRequestTimes = [];
+  // Set when Torn answers error code 5; no Torn call is made before this moment.
+  let tornRateLimitedUntil = 0;
   let lifeReadPending = null;
   let lifeReadController = null;
   let lifeClaimWaitCancel = null;
@@ -1912,6 +1971,7 @@
     let result = null;
     for (let attempt = 0; attempt <= maxAttempts; attempt += 1) {
       if (!isCurrent()) return result;
+      fairFightRequestTimes.push(nowMs());
       result = await gmXhr({ method: "GET", url: url.toString(), headers: { Accept: "application/json" }, timeout: requestTimeout });
       if (!isCurrent()) return result;
       if (result.ok || result.status !== 0 || attempt >= maxAttempts) break;
@@ -1950,7 +2010,14 @@
     if (!reserveTornRequest()) return { ok: false, status: 0, body: { error: { error: "Local Torn request budget exhausted" } } };
     const result = await gmXhr({ method: "GET", url: url.toString(), headers, signal });
     recordTornClockFromHeaders(result);
-    return { ...result, body: parseJsonSafe(result.responseText) };
+    const body = parseJsonSafe(result.responseText);
+    // 1.1.11: Torn's code 5 means all of the player's tools together went over
+    // 100 calls a minute. Stop calling for tornRateLimitPauseMs.
+    if (Number(body?.error?.code) === 5) {
+      tornRateLimitedUntil = nowMs() + CONFIG.tornRateLimitPauseMs;
+      updatePanel();
+    }
+    return { ...result, body };
   }
 
   function isPlainRecord(value) {
@@ -2221,10 +2288,32 @@
 
   function reserveTornRequest() {
     const now = nowMs();
+    if (now < tornRateLimitedUntil) return false;
     tornRequestTimes = tornRequestTimes.filter(at => now - at < 60000);
     if (tornRequestTimes.length >= CONFIG.tornCallsPerMinuteMax) return false;
     tornRequestTimes.push(now);
     return true;
+  }
+
+  // War Dibs' own Torn calls in the last 60 s (what the cap counts).
+  function tornCallsLastMinute() {
+    const now = nowMs();
+    return tornRequestTimes.filter(at => now - at < 60000).length;
+  }
+
+  function fairFightCallsLastMinute() {
+    const now = nowMs();
+    return fairFightRequestTimes.filter(at => now - at < 60000).length;
+  }
+
+  function tornPausedNow() {
+    return nowMs() < tornRateLimitedUntil;
+  }
+
+  // Torn's own clock (TCT) at the end of a pause, HH:MM:SS.
+  function tornPauseEndLabel() {
+    const tornMs = getTornNowMs() + (tornRateLimitedUntil - nowMs());
+    return new Date(tornMs).toISOString().slice(11, 19);
   }
 
   function lifeRuntimeReady() {
@@ -2270,6 +2359,9 @@
     const id = String(targetId);
     const key = syncLifeCredential();
     if (!key || lifeProfileMissing || lifeKeyFailureCode !== null || nowMs() < lifeRetryAfter || !validTargetId(id) || !lifeRuntimeReady() || !isCurrent() || lifeReadPending) return null;
+    if (tornPausedNow()) return null;
+    // 1.1.11: a queue read waits while 35 or more Torn calls were made in the last 60 s.
+    if (!forClaim && tornCallsLastMinute() >= CONFIG.lifeQueueTornCallsMax) return null;
     if (sharedWriteBusy && !forClaim) return null;
     if (lifeHospitalSecondsForTarget(id) === null) return null;
     const startedAt = nowMs();
@@ -2344,7 +2436,7 @@
 
   async function runLifeReadQueue() {
     syncLifeCredential();
-    if (lifeQueueRunning || lifeProfileMissing || lifeKeyFailureCode !== null || nowMs() < lifeRetryAfter || !lifeRuntimeReady() || sharedWriteBusy) return false;
+    if (lifeQueueRunning || lifeProfileMissing || lifeKeyFailureCode !== null || nowMs() < lifeRetryAfter || !lifeRuntimeReady() || sharedWriteBusy || tornPausedNow()) return false;
     const contextSerial = lifeContextSerial;
     lifeQueueRunning = true;
     try {
@@ -2353,7 +2445,7 @@
         .filter(target => target.seconds !== null)
         .sort((a, b) => a.seconds - b.seconds || Number(a.id) - Number(b.id));
       for (const target of targets) {
-        if (contextSerial !== lifeContextSerial || !lifeRuntimeReady() || sharedWriteBusy || lifeProfileMissing || lifeKeyFailureCode !== null || nowMs() < lifeRetryAfter) break;
+        if (contextSerial !== lifeContextSerial || !lifeRuntimeReady() || sharedWriteBusy || lifeProfileMissing || lifeKeyFailureCode !== null || nowMs() < lifeRetryAfter || tornPausedNow() || tornCallsLastMinute() >= CONFIG.lifeQueueTornCallsMax) break;
         await readTargetLife(target.id);
       }
       return true;
@@ -2821,14 +2913,33 @@
     );
     fairFightSyncing = true;
     setFairFightStatus("syncing", "FF: syncing…");
+    let pausedDetail = "";
     try {
       const initial = !fairFightEverSucceeded;
       const result = await fairFightStatsRequest(targetIds, { initial, isCurrent: isCurrentRequest, apiKey: requestKey });
       if (!isCurrentRequest() || !result) return false;
-      if (!result.ok) {
-        if (result.status === 429) fairFightBackoffUntil = nowMs() + CONFIG.fairFightErrorBackoffMs;
+      // 1.1.11: "too many" is read from the answer itself, also when it comes
+      // with HTTP 200 or 502: HTTP 429, FFScouter's code 20/21, Torn's code 5
+      // (torn_code) or the words "Too many requests".
+      const answer = result?.body;
+      const answerText = normalizeText(
+        typeof answer?.error === "string" ? answer.error : (answer?.error?.error ?? answer?.error?.message ?? answer?.message)
+      );
+      const rateLimited = result.status === 429 || [20, 21].includes(Number(answer?.code)) ||
+        Number(answer?.torn_code) === 5 || /too many requests/i.test(answerText);
+      if (!result.ok || rateLimited) {
+        if (rateLimited) {
+          // The longer of the fixed backoff and retry_after_seconds (top level
+          // of the answer), at most fairFightRetryAfterMaxMs. Holds for Sync too.
+          const retryAfterSeconds = Number(answer?.retry_after_seconds);
+          const retryAfterMs = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+            ? Math.min(retryAfterSeconds * 1000, CONFIG.fairFightRetryAfterMaxMs)
+            : 0;
+          fairFightBackoffUntil = nowMs() + Math.max(CONFIG.fairFightErrorBackoffMs, retryAfterMs);
+          pausedDetail = answerText || `HTTP ${result.status}`;
+        }
         if (result.status === 0) scheduleFairFightRecoveryRetry();
-        throw new Error(normalizeText(result?.body?.error) || `HTTP ${result.status}`);
+        throw new Error(answerText || `HTTP ${result.status}`);
       }
       const fetchedStats = normalizeFairFightStats(result.body, targetIds);
       fairFightStats = missingOnly
@@ -2847,7 +2958,8 @@
         // Keep the values we have; each one expires on its own after
         // fairFightMaxAgeMs. Retry on the next timer tick.
         if (!missingOnly) fairFightLastFetchAt = 0;
-        setFairFightStatus("offline", `FF: offline · ${normalizeText(error?.message) || "request failed"}`);
+        if (pausedDetail) setFairFightStatus("offline", "FF: paused · Too many requests", `FF: paused · ${pausedDetail}`);
+        else setFairFightStatus("offline", `FF: offline · ${normalizeText(error?.message) || "request failed"}`);
         scanWarRows();
       }
       return false;
@@ -2856,8 +2968,8 @@
     }
   }
 
-  function setFairFightStatus(state, message) {
-    fairFightStatus = { state: String(state || "unknown"), message: normalizeText(message) || "FF: unknown" };
+  function setFairFightStatus(state, message, title = "") {
+    fairFightStatus = { state: String(state || "unknown"), message: normalizeText(message) || "FF: unknown", title: normalizeText(title) };
     updatePanel();
   }
 
@@ -5756,7 +5868,7 @@
     if ($("ff-item")) $("ff-item").dataset.state = fairFightStatus.state;
     if ($("ff-status")) {
       if ($("ff-status").textContent !== fairFightStatus.message) $("ff-status").textContent = fairFightStatus.message;
-      setTitleIfChanged($("ff-status"), fairFightStatus.message);
+      setTitleIfChanged($("ff-status"), `${fairFightStatus.title || fairFightStatus.message} · War Dibs FFScouter calls last 60 s: ${fairFightCallsLastMinute()}`);
     }
     if ($("life-status")) {
       const lifeText = lifeStatusMessage();
@@ -5770,7 +5882,14 @@
       if ($("wse-status").textContent !== wseText) $("wse-status").textContent = wseText;
       setTitleIfChanged($("wse-status"), "War Stuff Enhanced is read-only for this script: nothing it renders is written to, hidden or moved.");
     }
-    if ($("torn-status")) { $("torn-status").textContent = tornStatusState.message; setTitleIfChanged($("torn-status"), tornStatusState.message); }
+    if ($("torn-status")) {
+      // 1.1.11: while Torn says "too many requests" the line says so and counts down.
+      const tornLine = tornPausedNow()
+        ? `Torn: paused ${Math.ceil((tornRateLimitedUntil - nowMs()) / 1000)} s — Torn says too many requests (all your tools together)`
+        : tornStatusState.message;
+      if ($("torn-status").textContent !== tornLine) $("torn-status").textContent = tornLine;
+      setTitleIfChanged($("torn-status"), `War Dibs Torn calls last 60 s: ${tornCallsLastMinute()} of ${CONFIG.tornCallsPerMinuteMax}${tornPausedNow() ? ` · paused until ${tornPauseEndLabel()}` : ""}`);
+    }
     const ffExternalLock = ffCredentialExternalLockActive();
     const ffChangeBusy = ffCredentialChangeBusy();
     if ($("key")) {
@@ -6427,8 +6546,9 @@
     ksBoardVerifiedAt = 0;
     fairFightRequestSerial += 1;
     fairFightSyncing = false;
-    fairFightStats = new Map();
-    fairFightLastFetchAt = 0;
+    // 1.1.11: the FF values and the time of the last read are kept. Each value
+    // still expires on its own after fairFightMaxAgeMs (scoutStatsForTarget),
+    // and a key change or "Forget FF key" still clears them.
     ownWarsState = emptyOwnWarsState();
     opponentMembersState = { factionId: "", members: new Map(), fetchedAt: 0 };
     currentWarSurface = null;
@@ -6457,7 +6577,9 @@
     startRuntimeTimers();
 
     if (apiKeyStorageReady) {
-      if (sharedApiKey) void fetchFairFightStats({ force: true });
+      // 1.1.11: not forced. Reads only when the last read is 60 s old or
+      // missing, and never during a backoff.
+      if (sharedApiKey) void fetchFairFightStats();
       if (effectiveTornApiKey()) {
         void fetchSharedClaims();
         void fetchTornStatuses({ force: true });
