@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PDA
 // @namespace    kingshade.torn
-// @version      1.5.186
+// @version      1.5.187
 // @description  Roster-local PDA presentation with v1.5.145 authority and shared-claim safety.
 // @author       Kingshade
 // @match        https://www.torn.com/factions.php*
@@ -15,6 +15,64 @@
 // ==/UserScript==
 
 /*
+ * 1.5.187 (2026-10-11): War Dibs keeps inside Torn's and FFScouter's request
+ * limits. Same fix as PC 1.1.11. ONE MAIN CHANGE. Name, namespace, update
+ * address and every storage name are those of 1.5.186.
+ * FIXED
+ *   - Every time the app or tab lost focus or visibility (another app, a chat,
+ *     an attack page) the FF values were thrown away (suspendRuntime), and
+ *     when focus came back the script read FFScouter again at once, past the
+ *     60 s rule (resumeRuntime forced it). Repeated switches ran into "Too many
+ *     requests" and the FF values vanished (rows UNKNOWN).
+ * CHANGED
+ *   - Losing focus or visibility keeps the FF values and the time of the last
+ *     read. Each value still expires on its own after 6 min
+ *     (fairFightMaxAgeMs). A key change and "Forget FF key" still clear
+ *     everything. Getting focus back reads FF only when the last read is 60 s
+ *     old or missing, and never during a backoff (no longer forced).
+ *   - Torn cap: at most 50 War Dibs Torn calls per rolling 60 s (was 100, the
+ *     player's whole quota) and at most 20 life reads a minute (was 30). A
+ *     life read from the queue starts only while fewer than 35 Torn calls were
+ *     made in the last 60 s; the rest is kept for status polls, clock sync,
+ *     identity, member names and the life read made by a DIBS tap.
+ *   - Torn error code 5 ("Too many requests") in any War Dibs answer: no Torn
+ *     call at all for 60 s, the life queue stands still, and the Torn line
+ *     (Settings) reads "Torn: paused N s — Torn says too many requests (all
+ *     your tools together)", counting down. Everything else stays fail-closed
+ *     (DIBS shows WAIT, nothing is claimed on old data). It resumes by itself
+ *     after 60 s.
+ *   - FFScouter backoff: an answer that says "too many" (HTTP 429, code 20 or
+ *     21, torn_code 5, or the words "Too many requests", also with HTTP 200 or
+ *     502) holds every FFScouter call, Sync included, for the longer of 60 s
+ *     and retry_after_seconds, at most 15 min. The FF values already held are
+ *     used until they expire (6 min).
+ * KNOWN ISSUES
+ *   - A "too many" answer that arrives after the app has lost focus is
+ *     discarded (as before), so it sets no FFScouter backoff.
+ *   - A FFScouter read still in flight when the app loses focus is discarded
+ *     (as before) and does not count as a successful read. When the last
+ *     good read is over 60 s old, the next return reads again; switching
+ *     faster than FFScouter answers can therefore still cost one read per
+ *     return until one answer gets through (measured against the stand-ins,
+ *     answer time 0.8 s: 11 away-and-back switches of 0.8 s each = 11 reads).
+ *     Switching slower than the answer time costs nothing.
+ *   - The Torn calls at focus return (own wars, opponent members, clock sync
+ *     burst) are kept; the cap is what limits them. With very fast switching
+ *     the status data can therefore be stale for a while and DIBS shows WAIT.
+ *   - The "online" event still clears the FFScouter and Torn status backoffs
+ *     (onOnline, unchanged), so a network return during a "too many" pause
+ *     reads FFScouter once more.
+ *   - How much of the player's Torn quota other tools use is not measured.
+ *   - No new panel row and no new title text (owner decision 2026-10-11); the
+ *     only new visible text is the Torn pause line.
+ * VERIFICATION
+ *   - Synthetic only: the whole script in Chromium (touch emulation) against
+ *     stand-in Torn, FFScouter and KS servers. Never run in Torn PDA or
+ *     against the real Torn, FFScouter or KS server. See RAPPORT_PDA_1.5.187.txt.
+ * Everything else is unchanged from 1.5.186: the DIBS rules (FF 2.00-3.40,
+ * hospital 2:00 or less, low life 4.50), the clock, the server, the texts, the
+ * storage and the pink low-life cell.
+ *
  * 1.5.186 (2026-10-05): DIBS moves to the KS War Room server.
  * CHANGED
  *   - The claim board, claim and release go to the KS War Room server
@@ -255,8 +313,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs",
-    version: "1.5.186",
-    instanceKey: "__ksTornWarDibsPdaV15186Test",
+    version: "1.5.187",
+    instanceKey: "__ksTornWarDibsPdaV15187Test",
     layerId: "ks-twd-pda-layer",
     rowHostPrefix: "ks-twd-pda-row-",
     panelId: "ks-twd-pda-panel",
@@ -304,11 +362,18 @@
     lowHpMaxFairFight: 4.5,
     lifeMaxAgeMs: 15000,
     lifeReadMinIntervalMs: 10000,
-    lifeReadsPerMinuteMax: 30,
-    tornCallsPerMinuteMax: 100,
+    lifeReadsPerMinuteMax: 20,
+    tornCallsPerMinuteMax: 50,
+    // A life read from the queue may only start while fewer Torn calls than
+    // this were made in the last 60 s; the rest of tornCallsPerMinuteMax is
+    // kept for status polls, clock sync, identity, member names and DIBS-tap reads.
+    lifeQueueTornCallsMax: 35,
+    // Torn error code 5 ("Too many requests"): no Torn call at all for this long.
+    tornRateLimitPauseMs: 60000,
     fairFightRefreshMs: 60000,
     fairFightMaxAgeMs: 360000,
     fairFightErrorBackoffMs: 60000,
+    fairFightRetryAfterMaxMs: 900000,
     fairFightTransportRecoveryMs: 1800,
     fairFightInitialRequestTimeoutMs: 6000,
     fairFightInitialTransportRetryAttempts: 1,
@@ -524,6 +589,8 @@
   const lifeReadAttempts = new Map();
   let lifeReadTimes = [];
   let tornRequestTimes = [];
+  // Set when Torn answers error code 5; no Torn call is made before this moment.
+  let tornRateLimitedUntil = 0;
   let lifeReadPending = null;
   let lifeReadController = null;
   let lifeClaimWaitCancel = null;
@@ -2299,6 +2366,12 @@
     const result = await gmXhr({ method: "GET", url: url.toString(), headers, signal });
     recordTornClockFromHeaders(result);
     const body = parseJsonSafe(result.responseText);
+    // 1.5.187: Torn's code 5 means all of the player's tools together went over
+    // 100 calls a minute. Stop calling for tornRateLimitPauseMs.
+    if (Number(body?.error?.code) === 5) {
+      tornRateLimitedUntil = nowMs() + CONFIG.tornRateLimitPauseMs;
+      updatePanel();
+    }
     const rejected = isPdaTornKeyRejectedError(body);
     const capabilityRejected = !isUserProfile && isTornCapabilityRejectedError(body);
     const successfulObservation = result.ok && !body?.error;
@@ -3107,10 +3180,27 @@
       const initial = !fairFightEverSucceeded;
       const result = await fairFightStatsRequest(targetIds, { initial, isCurrent: isCurrentRequest, apiKey: requestKey });
       if (!isCurrentRequest() || !result) return false;
-      if (!result.ok) {
-        if (result.status === 429) fairFightBackoffUntil = nowMs() + CONFIG.fairFightErrorBackoffMs;
+      // 1.5.187: "too many" is read from the answer itself, also when it comes
+      // with HTTP 200 or 502: HTTP 429, FFScouter's code 20/21, Torn's code 5
+      // (torn_code) or the words "Too many requests".
+      const answer = result?.body;
+      const answerText = normalizeText(
+        typeof answer?.error === "string" ? answer.error : (answer?.error?.error ?? answer?.error?.message ?? answer?.message)
+      );
+      const rateLimited = result.status === 429 || [20, 21].includes(Number(answer?.code)) ||
+        Number(answer?.torn_code) === 5 || /too many requests/i.test(answerText);
+      if (!result.ok || rateLimited) {
+        if (rateLimited) {
+          // The longer of the fixed backoff and retry_after_seconds (top level
+          // of the answer), at most fairFightRetryAfterMaxMs. Holds for Sync too.
+          const retryAfterSeconds = Number(answer?.retry_after_seconds);
+          const retryAfterMs = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+            ? Math.min(retryAfterSeconds * 1000, CONFIG.fairFightRetryAfterMaxMs)
+            : 0;
+          fairFightBackoffUntil = nowMs() + Math.max(CONFIG.fairFightErrorBackoffMs, retryAfterMs);
+        }
         if (result.status === 0) scheduleFairFightRecoveryRetry();
-        throw new Error(normalizeText(result?.body?.error) || `HTTP ${result.status}`);
+        throw new Error(answerText || `HTTP ${result.status}`);
       }
       const fetchedStats = normalizeFairFightStats(result.body, targetIds);
       fairFightStats = missingOnly
@@ -3721,10 +3811,21 @@
 
   function reserveTornRequest() {
     const now = nowMs();
+    if (now < tornRateLimitedUntil) return false;
     tornRequestTimes = tornRequestTimes.filter(at => now - at < 60000);
     if (tornRequestTimes.length >= CONFIG.tornCallsPerMinuteMax) return false;
     tornRequestTimes.push(now);
     return true;
+  }
+
+  // War Dibs' own Torn calls in the last 60 s (what the cap counts).
+  function tornCallsLastMinute() {
+    const now = nowMs();
+    return tornRequestTimes.filter(at => now - at < 60000).length;
+  }
+
+  function tornPausedNow() {
+    return nowMs() < tornRateLimitedUntil;
   }
 
   function lifeRuntimeReady() {
@@ -3770,15 +3871,19 @@
     const id = String(targetId);
     const key = syncLifeCredential();
     if (!key || lifeProfileMissing || lifeKeyFailureCode !== null || nowMs() < lifeRetryAfter || !validTargetId(id) || !lifeRuntimeReady() || !isCurrent() || lifeReadPending) return null;
+    if (tornPausedNow()) return null;
+    // 1.5.187: a queue read waits while 35 or more Torn calls were made in the last 60 s.
+    if (!forClaim && tornCallsLastMinute() >= CONFIG.lifeQueueTornCallsMax) return null;
     if (sharedWriteBusy && !forClaim) return null;
     if (lifeHospitalSecondsForTarget(id) === null) return null;
     const startedAt = nowMs();
     for (const [previousId, attemptedAt] of lifeReadAttempts) {
       if (startedAt - attemptedAt >= 60000) lifeReadAttempts.delete(previousId);
     }
-    // A DIBS click is one deliberate read: it skips the 10 s spacing and the
-    // queue's 30/min cap (it is still counted), so the claim is never delayed.
-    // The 100/min Torn budget in tornApiRequest still applies.
+    // A DIBS click is one deliberate read: it skips the 10 s spacing, the
+    // queue's 20/min cap and the queue's 35-calls stop (it is still counted),
+    // so the claim is never delayed. The 50/min Torn budget in tornApiRequest
+    // and the pause after Torn's error code 5 still apply.
     const lastAttempt = lifeReadAttempts.get(id);
     if (!forClaim && Number.isFinite(lastAttempt) && startedAt - lastAttempt < CONFIG.lifeReadMinIntervalMs) return null;
     lifeReadTimes = lifeReadTimes.filter(at => startedAt - at < 60000);
@@ -3844,7 +3949,7 @@
 
   async function runLifeReadQueue() {
     syncLifeCredential();
-    if (lifeQueueRunning || lifeProfileMissing || lifeKeyFailureCode !== null || nowMs() < lifeRetryAfter || !lifeRuntimeReady() || sharedWriteBusy) return false;
+    if (lifeQueueRunning || lifeProfileMissing || lifeKeyFailureCode !== null || nowMs() < lifeRetryAfter || !lifeRuntimeReady() || sharedWriteBusy || tornPausedNow()) return false;
     const contextSerial = lifeContextSerial;
     lifeQueueRunning = true;
     try {
@@ -3853,7 +3958,7 @@
         .filter(target => target.seconds !== null)
         .sort((a, b) => a.seconds - b.seconds || Number(a.id) - Number(b.id));
       for (const target of targets) {
-        if (contextSerial !== lifeContextSerial || !lifeRuntimeReady() || sharedWriteBusy || lifeProfileMissing || lifeKeyFailureCode !== null || nowMs() < lifeRetryAfter) break;
+        if (contextSerial !== lifeContextSerial || !lifeRuntimeReady() || sharedWriteBusy || lifeProfileMissing || lifeKeyFailureCode !== null || nowMs() < lifeRetryAfter || tornPausedNow() || tornCallsLastMinute() >= CONFIG.lifeQueueTornCallsMax) break;
         await readTargetLife(target.id);
       }
       return true;
@@ -6331,7 +6436,14 @@
         $("status").title = sharedStatus.message;
       }
     }
-    if ($("torn-status")) { $("torn-status").textContent = tornStatusState.message; $("torn-status").title = tornStatusState.message; }
+    if ($("torn-status")) {
+      // 1.5.187: while Torn says "too many requests" the line says so and counts down.
+      const tornLine = tornPausedNow()
+        ? `Torn: paused ${Math.ceil((tornRateLimitedUntil - nowMs()) / 1000)} s — Torn says too many requests (all your tools together)`
+        : tornStatusState.message;
+      $("torn-status").textContent = tornLine;
+      $("torn-status").title = tornLine;
+    }
     if ($("clock-status")) {
       // Freshen the tornClockSource side effect before reading the label, so
       // this row can never freeze on a stale value the way the old
@@ -7245,8 +7357,9 @@
     ambiguousOwnServerClaims = false;
     fairFightRequestSerial += 1;
     fairFightSyncing = false;
-    fairFightStats = new Map();
-    fairFightLastFetchAt = 0;
+    // 1.5.187: the FF values and the time of the last read are kept. Each value
+    // still expires on its own after fairFightMaxAgeMs (scoutStatsForTarget),
+    // and a key change or "Forget FF key" still clears them.
     invalidateTornCredentialRequests();
     ownWarsState = emptyOwnWarsState();
     opponentMembersState = { factionId: "", members: new Map(), fetchedAt: 0 };
@@ -7269,7 +7382,9 @@
 
     if (apiKeyStorageReady) {
       if (effectiveTornApiKey()) { void fetchSharedClaims(); void fetchTornStatuses({ force: true }); void runTornClockSyncBurst(); }
-      if (sharedApiKey) void fetchFairFightStats({ force: true });
+      // 1.5.187: not forced. Reads only when the last read is 60 s old or
+      // missing, and never during a backoff.
+      if (sharedApiKey) void fetchFairFightStats();
     }
   }
 
