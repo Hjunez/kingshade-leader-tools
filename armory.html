@@ -445,7 +445,7 @@
     var LOG_STORE = 'ks-armory-loanlog-v1';
     var LOG_FACTION_ID = 48039;
     var LOG_PAGE_LIMIT = 100;
-    var LOG_MAX_PAGES = 250;
+    var LOG_MAX_PAGES = 100;
     var LOG_PACE_MS = 750;
     var RATE_LIMIT_WAIT_S = 60;
     var NO_PROGRESS_PAGES = 3;
@@ -490,6 +490,7 @@
       if (code === 5) return 'Too many calls in the last minute. Wait a moment and run it again.';
       if (code === 9) return 'Torn’s API is temporarily unavailable. Try again shortly.';
       if (code === 17) return 'Torn is in a backend update. Try again in a minute.';
+      if (code === 14) return 'Torn\'s daily read limit is used up for this key\'s owner. Try again later.';
       return 'Torn returned error ' + code + '.';
     }
 
@@ -1036,6 +1037,11 @@
     }
 
     function newsDeniedText(code) {
+      if (code === 14) {
+        return 'Torn\'s daily read limit for log data is used up for this key\'s owner (error 14). The armory ' +
+          'lists above are complete. Loan times and recent activity come back when Torn lifts the limit — ' +
+          'Torn does not say when, so try again later.';
+      }
       if (code === 7) {
         return 'The armory activity log needs Faction API Access on your faction position (error 7). ' +
           'That is a separate permission from armory access, so it can be missing while the item ' +
@@ -1355,13 +1361,16 @@
       }
     }
 
-    // A request failed. 7 and 16 mean the log cannot be read with this key; a key Torn reports as dead
-    // is removed; anything else is an error that stops the read.
+    // A request failed. 7 and 16 mean the log cannot be read with this key; 14 means Torn's daily read
+    // limit is used up, so the read stops at once, keeps what it has and does not ask again (the key is
+    // fine); a key Torn reports as dead is removed; anything else is an error that stops the read.
     function endOnFailure(active, failure) {
       var code = failure && failure.tornCode;
       if (failure && failure.fatalKey) { storeKey(''); el.apiKey.value = ''; }
       if (code === 7 || code === 16) {
         finishRead(active, 'denied', newsDeniedText(code));
+      } else if (code === 14) {
+        finishRead(active, 'error', newsDeniedText(code));
       } else if (failure && failure.fatalKey) {
         finishRead(active, 'denied', failure.message);
       } else {
@@ -1540,7 +1549,7 @@
           news = Array.isArray(newsPayload.news) ? newsPayload.news : [];
         } catch (newsFailure) {
           var newsCode = newsFailure && newsFailure.tornCode;
-          if (newsCode === 7 || newsCode === 16) {
+          if (newsCode === 7 || newsCode === 16 || newsCode === 14) {
             newsError = newsDeniedText(newsCode);
           } else {
             throw newsFailure;
