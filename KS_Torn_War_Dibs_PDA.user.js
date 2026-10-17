@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PDA
 // @namespace    kingshade.torn
-// @version      1.5.187
+// @version      1.5.188
 // @description  Roster-local PDA presentation with v1.5.145 authority and shared-claim safety.
 // @author       Kingshade
 // @match        https://www.torn.com/factions.php*
@@ -15,6 +15,44 @@
 // ==/UserScript==
 
 /*
+ * 1.5.188 (2026-10-17): the life queue reads only the targets whose life can
+ * change the DIBS decision. Same fix as PC 1.1.12, except its title change:
+ * the PDA DIBS button has no title. ONE MAIN CHANGE. Name, namespace, update
+ * address and every storage name are those of 1.5.187.
+ * FIXED
+ *   - With many targets in the 2:00 hospital window the life queue read the
+ *     life of every one of them (sorted by least time left, at most 20 reads a
+ *     minute, the same target at most every 10 s) and did not get round to the
+ *     low-life candidate. With 20 other targets in the window the pink
+ *     low-life cell took 38-45 s to appear and was pink for only 26-28 % of
+ *     the window (measured in 1.5.187 against stand-in services).
+ * CHANGED
+ *   - The queue takes a target only if all of this holds: hospital 2:00 or
+ *     less and not Online (as before), Fair Fight known and above 3.40 up to
+ *     and including 4.50 (the only range where life changes the decision),
+ *     and no active claim on the board for it and not the own claim. The
+ *     order, the 20 reads a minute, the 10 s per target, the 35-call limit and
+ *     the pause after Torn error code 5 are unchanged. The read made by a
+ *     DIBS tap is unchanged.
+ * KNOWN ISSUES
+ *   - The life cache is still emptied at every app or tab switch
+ *     (suspendRuntime -> invalidateTornCredentialRequests -> resetLifeState),
+ *     so the pink cell is gone for a while after each return. To be fixed in a
+ *     later version.
+ *   - A candidate without a fresh life read still shows FFX.XX (locked) until
+ *     the read arrives, and a tap cannot start that read. To be fixed in a
+ *     later version.
+ *   - With very frequent app switches (every 3 s) the queue still gets no
+ *     room under the 35-call limit (1.5.187, finding F3). To be fixed in a
+ *     later version.
+ * VERIFICATION
+ *   - Synthetic only: the whole script in Chromium (touch emulation) against
+ *     stand-in Torn, FFScouter and KS servers. Never run in Torn PDA or
+ *     against the real Torn, FFScouter or KS server. See RAPPORT_PDA_1.5.188.txt.
+ * Everything else is unchanged from 1.5.187: the DIBS rules (FF 2.00-3.40,
+ * hospital 2:00 or less, low life 4.50), the limits, the clock, the server,
+ * the texts, the storage and the panel.
+ *
  * 1.5.187 (2026-10-11): War Dibs keeps inside Torn's and FFScouter's request
  * limits. Same fix as PC 1.1.11. ONE MAIN CHANGE. Name, namespace, update
  * address and every storage name are those of 1.5.186.
@@ -313,8 +351,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs",
-    version: "1.5.187",
-    instanceKey: "__ksTornWarDibsPdaV15187Test",
+    version: "1.5.188",
+    instanceKey: "__ksTornWarDibsPdaV15188Test",
     layerId: "ks-twd-pda-layer",
     rowHostPrefix: "ks-twd-pda-row-",
     panelId: "ks-twd-pda-panel",
@@ -3947,6 +3985,18 @@
     }
   }
 
+  // 1.5.188: the queue reads only a target whose life can change the decision:
+  // Fair Fight known and in (maxFairFight, lowHpMaxFairFight], and no claim on
+  // it (shared board or own). The hospital window test is left to the caller.
+  function lifeQueueCandidate(targetId) {
+    const ff = fairFightForTarget(targetId);
+    if (ff === null || !(ff > CONFIG.maxFairFight && ff <= CONFIG.lowHpMaxFairFight)) return false;
+    if (sharedClaimForTarget(targetId)) return false;
+    const own = currentOwnClaim();
+    if (own && String(own.targetId) === String(targetId)) return false;
+    return true;
+  }
+
   async function runLifeReadQueue() {
     syncLifeCredential();
     if (lifeQueueRunning || lifeProfileMissing || lifeKeyFailureCode !== null || nowMs() < lifeRetryAfter || !lifeRuntimeReady() || sharedWriteBusy || tornPausedNow()) return false;
@@ -3954,6 +4004,7 @@
     lifeQueueRunning = true;
     try {
       const targets = [...opponentMembersState.members.keys()]
+        .filter(id => lifeQueueCandidate(id))
         .map(id => ({ id, seconds: lifeHospitalSecondsForTarget(id) }))
         .filter(target => target.seconds !== null)
         .sort((a, b) => a.seconds - b.seconds || Number(a.id) - Number(b.id));
