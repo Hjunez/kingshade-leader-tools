@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PC
 // @namespace    kingshade.torn
-// @version      1.1.11
+// @version      1.1.12
 // @downloadURL  https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @description  PC TEST: DIBS as a native roster column beside Torn's Attack cell; FF and Est from FFScouter's get-stats API. War Stuff Enhanced is detected and shown read-only; it never blocks.
@@ -17,6 +17,41 @@
 // ==/UserScript==
 
 /*
+ * KS Torn War Dibs PC v1.1.12 -- CANDIDATE (hotfix during the war)
+ *
+ * ONE MAIN CHANGE: the life queue reads only the targets whose life can change
+ * the DIBS decision. Name, namespace, update address and every storage name
+ * are those of 1.1.11.
+ *
+ * FIXED
+ *   - With many targets in the 2:00 hospital window the life queue read the
+ *     life of every one of them (sorted by least time left, at most 20 reads a
+ *     minute, the same target at most every 10 s) and did not get round to the
+ *     low-life candidate. The pink low-life cell took 38-45 s to appear and
+ *     was pink for only 17-36 % of the window (measured in 1.1.11 against
+ *     stand-in backends).
+ * CHANGED
+ *   - The queue takes a target only if all of this holds: hospital 2:00 or
+ *     less and not Online (as before), Fair Fight known and above 3.40 up to
+ *     and including 4.50 (the only range where life changes the decision),
+ *     and no active claim on the board for it and not the own claim. The
+ *     order, the 20 reads a minute, the 10 s per target, the 35-call limit and
+ *     the pause after Torn error code 5 are unchanged. The read made by a
+ *     DIBS click is unchanged.
+ *   - The pink cell's title no longer counts "(read N s ago)", so the text
+ *     is no longer rewritten every second. Same numbers, same format.
+ * KNOWN ISSUES
+ *   - The life cache is still emptied at every window switch (suspendRuntime
+ *     -> resetLifeState), so the pink cell is gone for a while after each
+ *     return. To be fixed in a later version.
+ *   - A candidate without a fresh life read still shows FFX.XX (locked) until
+ *     the read arrives, and a click cannot start that read. To be fixed in a
+ *     later version.
+ * VERIFICATION
+ *   - Synthetic only: the whole script in Chromium against stand-in backends.
+ *     Not run against the real Torn or FFScouter. See RAPPORT_PC_1.1.12.txt.
+ *
+ * ---------------------------------------------------------------------------
  * KS Torn War Dibs PC v1.1.11 -- CANDIDATE (hotfix during the war)
  *
  * ONE MAIN CHANGE: War Dibs keeps inside Torn's and FFScouter's request
@@ -486,8 +521,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs PC",
-    version: "1.1.11",
-    instanceKey: "__ksTornWarDibsPcV1111",
+    version: "1.1.12",
+    instanceKey: "__ksTornWarDibsPcV1112",
     rowHostPrefix: "ks-twd-wse-row-v010-",
     rosterStyleId: "ks-twd-wse-roster-style-v010",
     panelId: "ks-twd-wse-panel",
@@ -2434,6 +2469,18 @@
     }
   }
 
+  // 1.1.12: the queue reads only a target whose life can change the decision:
+  // Fair Fight known and in (maxFairFight, lowHpMaxFairFight], and no claim on
+  // it (shared board or own). The hospital window test is left to the caller.
+  function lifeQueueCandidate(targetId) {
+    const ff = fairFightForTarget(targetId);
+    if (ff === null || !(ff > CONFIG.maxFairFight && ff <= CONFIG.lowHpMaxFairFight)) return false;
+    if (sharedClaimForTarget(targetId)) return false;
+    const own = currentOwnClaim();
+    if (own && String(own.targetId) === String(targetId)) return false;
+    return true;
+  }
+
   async function runLifeReadQueue() {
     syncLifeCredential();
     if (lifeQueueRunning || lifeProfileMissing || lifeKeyFailureCode !== null || nowMs() < lifeRetryAfter || !lifeRuntimeReady() || sharedWriteBusy || tornPausedNow()) return false;
@@ -2441,6 +2488,7 @@
     lifeQueueRunning = true;
     try {
       const targets = [...opponentMembersState.members.keys()]
+        .filter(id => lifeQueueCandidate(id))
         .map(id => ({ id, seconds: lifeHospitalSecondsForTarget(id) }))
         .filter(target => target.seconds !== null)
         .sort((a, b) => a.seconds - b.seconds || Number(a.id) - Number(b.id));
@@ -5389,7 +5437,7 @@
         const percentage = life ? Math.round(life.ratio * 100) : null;
         sub.textContent = percentage === null ? "HP ?" : `HP ${percentage}%`;
         button.dataset.ksTitle = life
-          ? `Low life ${percentage}% (read ${Math.max(0, Math.floor((nowMs() - life.fetchedAt) / 1000))} s ago) · Fair Fight ${Number(decision.fairFight).toFixed(2)} · allowed FF ${CONFIG.minFairFight.toFixed(2)}–${CONFIG.lowHpMaxFairFight.toFixed(2)} for low-life targets`
+          ? `Low life ${percentage}% · Fair Fight ${Number(decision.fairFight).toFixed(2)} · allowed FF ${CONFIG.minFairFight.toFixed(2)}–${CONFIG.lowHpMaxFairFight.toFixed(2)} for low-life targets`
           : "Low life reading unavailable";
         return;
       }
