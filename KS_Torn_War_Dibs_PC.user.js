@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PC
 // @namespace    kingshade.torn
-// @version      1.1.12
+// @version      1.1.13
 // @downloadURL  https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @description  PC TEST: DIBS as a native roster column beside Torn's Attack cell; FF and Est from FFScouter's get-stats API. War Stuff Enhanced is detected and shown read-only; it never blocks.
@@ -17,6 +17,39 @@
 // ==/UserScript==
 
 /*
+ * KS Torn War Dibs PC v1.1.13 -- CANDIDATE (hotfix during the war)
+ *
+ * ONE MAIN CHANGE: the life readings survive a window switch. Name, namespace,
+ * update address and every storage name are those of 1.1.12.
+ *
+ * FIXED
+ *   - Every time the window lost focus or the tab was switched, the life
+ *     readings behind the pink low-life cell were thrown away
+ *     (suspendRuntime -> resetLifeState), and the same target could not be read
+ *     again at once (10 s per target, 20 reads a minute, both kept over a
+ *     window switch on purpose). The pink cell was therefore gone for a while
+ *     after every return (measured in 1.1.12 against stand-in backends: pink
+ *     for 34 % of the time with a 1.5 s window switch every 3 s).
+ * CHANGED
+ *   - Losing focus keeps the readings that were already made. A reading still
+ *     counts for 15 s only (lifeMaxAgeMs, unchanged) and only for the war and
+ *     the opponent faction it was read for (each reading now carries both). A
+ *     read that is in flight when the window loses focus is cut off and not
+ *     stored, as before.
+ *   - A change of war or opponent faction drops the readings of the other war
+ *     or faction. A change of the Torn key, "Forget Torn key", the war surface
+ *     going away and the script being shut down still empty everything, as
+ *     before.
+ *   - No new request, no new limit: the number of life reads is unchanged.
+ * KNOWN ISSUES
+ *   - A candidate without a fresh life read still shows FFX.XX (locked) until
+ *     the read arrives, and a click cannot start that read. To be fixed in a
+ *     later version.
+ * VERIFICATION
+ *   - Synthetic only: the whole script in Chromium against stand-in backends.
+ *     Not run against the real Torn or FFScouter. See RAPPORT_PC_1.1.13.txt.
+ *
+ * ---------------------------------------------------------------------------
  * KS Torn War Dibs PC v1.1.12 -- CANDIDATE (hotfix during the war)
  *
  * ONE MAIN CHANGE: the life queue reads only the targets whose life can change
@@ -521,8 +554,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs PC",
-    version: "1.1.12",
-    instanceKey: "__ksTornWarDibsPcV1112",
+    version: "1.1.13",
+    instanceKey: "__ksTornWarDibsPcV1113",
     rowHostPrefix: "ks-twd-wse-row-v010-",
     rosterStyleId: "ks-twd-wse-roster-style-v010",
     panelId: "ks-twd-wse-panel",
@@ -2301,12 +2334,26 @@
   }
 
   // Rate timestamps survive suspend so blur/focus cannot bypass the limits.
-  // Life values and the active queue are invalidated at every context change.
-  function resetLifeState() {
+  // 1.1.13: cancelLifeReads() ends the active queue and any read in flight (a
+  // read that is cut off is not stored) but keeps what was already read.
+  // resetLifeState() also empties the cache; it is used where the key or the
+  // war surface itself goes away. pruneLifeCache() drops only the readings
+  // taken for another war or another opponent.
+  function cancelLifeReads() {
     lifeContextSerial += 1;
-    lifeCache.clear();
     lifeReadController?.abort();
     if (lifeClaimWaitCancel) lifeClaimWaitCancel();
+  }
+
+  function resetLifeState() {
+    cancelLifeReads();
+    lifeCache.clear();
+  }
+
+  function pruneLifeCache(warId, opponentId) {
+    for (const [targetId, entry] of [...lifeCache.entries()]) {
+      if (entry.warId !== warId || entry.opponentFactionId !== opponentId) lifeCache.delete(targetId);
+    }
   }
 
   function syncLifeCredential() {
@@ -2375,12 +2422,14 @@
     const maximum = profile.life?.maximum;
     if (!Number.isSafeInteger(current) || current < 0 || !Number.isSafeInteger(maximum) || maximum <= 0 || current > maximum) return null;
     if (!Number.isFinite(fetchedAt)) return null;
-    return { current, maximum, ratio: current / maximum, fetchedAt, source: "torn-profile", schemaVersion: 1 };
+    return { current, maximum, ratio: current / maximum, fetchedAt, source: "torn-profile", schemaVersion: 2 };
   }
 
+  // 1.1.13: a reading counts only for the war and the opponent it was read for.
   function freshLifeForTarget(targetId) {
     const entry = lifeCache.get(String(targetId));
-    if (!entry || entry.source !== "torn-profile" || entry.schemaVersion !== 1) return null;
+    if (!entry || entry.source !== "torn-profile" || entry.schemaVersion !== 2) return null;
+    if (!currentWarSurface || entry.warId !== currentWarSurface.warId || entry.opponentFactionId !== opponentFactionId) return null;
     const age = nowMs() - entry.fetchedAt;
     return Number.isFinite(age) && age >= 0 && age <= CONFIG.lifeMaxAgeMs ? entry : null;
   }
@@ -2452,7 +2501,7 @@
         // The start time is conservative: a delayed response cannot gain freshness.
         const entry = normalizeTargetLife(result.body, id, startedAt);
         if (!entry || (lifeCache.get(id)?.fetchedAt ?? -Infinity) > entry.fetchedAt) return null;
-        lifeCache.set(id, entry);
+        lifeCache.set(id, { ...entry, warId, opponentFactionId: opponentId });
         updatePanel();
         updateBoundControls();
         return freshLifeForTarget(id);
@@ -3766,7 +3815,8 @@
       opponentMembersState = { factionId: opponentFactionId, members: new Map(), fetchedAt: 0 };
     }
     if (changed) {
-      resetLifeState();
+      cancelLifeReads();
+      pruneLifeCache(selected.warId, selectedOpponentId);
       warSurfaceSerial += 1;
       invalidateOwnWarsState();
     }
@@ -6575,7 +6625,7 @@
     const hasValidatedIdentity = validTargetId(selfPlayerId) && validTargetId(selfFactionId) && keyScopeReady;
     runtimeActive = false;
     runtimeGeneration += 1;
-    resetLifeState();
+    cancelLifeReads();
     lastTrustedScrollIntentAt = Number.NEGATIVE_INFINITY;
     clearTimers();
     stopRouteObserver();
