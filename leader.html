@@ -567,6 +567,14 @@
         <span class="go">Open</span>
       </a>
 
+      <a class="card" href="halloween.html">
+        <span class="tag beta">Beta</span>
+        <span class="name">Halloween Competition</span>
+        <span class="what">Hits, mugs, hosps, retals, respect, activity and treats for every member across the
+          Halloween event. Picks the leaders in each category and copies the standings.</span>
+        <span class="go">Open</span>
+      </a>
+
       <a class="card" href="https://hjunez.github.io/kingshade-recruit-intelligence/">
         <span class="tag beta">Beta</span>
         <span class="name">Faction Recruit Intelligence</span>
@@ -626,7 +634,8 @@
     { id: 'rankedwars', path: '/faction/rankedwars?limit=1' },
     { id: 'crimes', path: '/faction/crimes?cat=recruiting&limit=1' },
     { id: 'news', path: '/faction/news?cat=armoryAction&limit=1' },
-    { id: 'inventory', path: '/faction/inventory?cat=weapons&limit=1' }
+    { id: 'inventory', path: '/faction/inventory?cat=weapons&limit=1' },
+    { id: 'attacks', path: '/faction/attacks?limit=1' }
   ];
 
   // Cards not listed here need nothing beyond the member list, or no API at all,
@@ -635,14 +644,16 @@
     { href: 'payout.html', needs: ['rankedwars'] },
     { href: 'history.html', needs: ['rankedwars'] },
     { href: 'oc.html', needs: ['crimes'] },
-    { href: 'armory.html', needs: ['news', 'inventory'] }
+    { href: 'armory.html', needs: ['news', 'inventory'] },
+    { href: 'halloween.html', needs: ['attacks'] }
   ];
 
   var PART_NAME = {
     rankedwars: 'The war history',
     crimes: 'The crime list',
     news: 'The take-and-return log',
-    inventory: 'The contents list'
+    inventory: 'The contents list',
+    attacks: 'The attack log'
   };
 
   var el = {};

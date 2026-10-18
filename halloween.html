@@ -1,0 +1,2182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Halloween Competition</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground: #eaedf1; --surface: #ffffff; --surface-2: #f4f6f9;
+    --ink: #14202b; --muted: #5c6d7e; --faint: #8b9aa8;
+    --line: #d3dae1; --line-strong: #b8c3cd;
+    --accent: #a3512a; --accent-ink: #ffffff; --accent-soft: #f2ded4;
+    --good: #1c7355; --good-soft: #dfeee8;
+    --warn: #8c6210; --warn-soft: #f6ecd6;
+    --bad: #a12f2a; --bad-soft: #f6dedc;
+    --shadow: 0 1px 2px rgba(20,32,43,.06), 0 8px 24px rgba(20,32,43,.06);
+    --display: 'Saira Condensed','Arial Narrow',Helvetica,sans-serif;
+    --body: 'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
+    --mono: 'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+      --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+      --line: #26313b; --line-strong: #35434f;
+      --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+      --good: #46a583; --good-soft: #172a24;
+      --warn: #cc9f3f; --warn-soft: #2a2417;
+      --bad: #dd6a61; --bad-soft: #2c1b1a;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+    --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+    --line: #26313b; --line-strong: #35434f;
+    --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+    --good: #46a583; --good-soft: #172a24;
+    --warn: #cc9f3f; --warn-soft: #2a2417;
+    --bad: #dd6a61; --bad-soft: #2c1b1a;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--body); font-size: 15px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1180px; margin: 0 auto; padding: 28px 20px 72px;
+    display: flex; flex-direction: column; gap: 22px;
+  }
+  .wrap > * { min-width: 0; }
+
+  .backbar a {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+    text-decoration: none; border: 1px solid var(--line-strong);
+    border-radius: 3px; padding: 7px 12px; display: inline-block;
+  }
+  .backbar a:hover { color: var(--accent); border-color: var(--accent); }
+  .backbar a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .masthead {
+    display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between;
+    gap: 12px 24px; padding-bottom: 18px; border-bottom: 2px solid var(--line-strong);
+  }
+
+  h1 {
+    font-family: var(--display); font-weight: 700;
+    font-size: clamp(30px, 5vw, 42px); line-height: 1.02; margin: 0; text-wrap: balance;
+  }
+
+  .masthead p { margin: 6px 0 0; color: var(--muted); max-width: 62ch; }
+
+  .stamp {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .13em; text-transform: uppercase; color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 2px; padding: 5px 10px; white-space: nowrap;
+  }
+
+  .panel {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 4px; box-shadow: var(--shadow);
+  }
+
+  .panel-head {
+    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+    gap: 8px 16px; padding: 14px 18px; border-bottom: 1px solid var(--line);
+  }
+
+  .panel-head h2 {
+    font-family: var(--display); font-weight: 600; font-size: 19px;
+    letter-spacing: .04em; text-transform: uppercase; margin: 0;
+  }
+
+  .panel-head .hint { color: var(--faint); font-size: 13px; margin: 0; }
+  .panel-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+
+  .field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; }
+  .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+
+  .field > label, .legend, label.lbl {
+    font-family: var(--display); font-weight: 600; font-size: 12px;
+    letter-spacing: .11em; text-transform: uppercase; color: var(--muted);
+  }
+  label.lbl { display: block; margin-bottom: 6px; }
+  .field .note { font-size: 12px; color: var(--faint); }
+
+  fieldset.field { border: 0; margin: 0; padding: 0; }
+  fieldset.field legend { padding: 0; margin-bottom: 6px; }
+
+  .radio {
+    display: flex; align-items: center; gap: 7px; font-size: 14px;
+    text-transform: none; letter-spacing: normal; color: var(--ink);
+    font-family: var(--body); font-weight: 400; padding: 2px 0;
+  }
+
+  input[type="text"], input[type="password"], input[type="datetime-local"], select {
+    font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 15px;
+    color: var(--ink); background: var(--surface-2);
+    border: 1px solid var(--line-strong); border-radius: 3px;
+    padding: 9px 11px; width: 100%; min-width: 0;
+  }
+  select { font-family: var(--body); font-size: 14px; }
+
+  input:focus-visible, button:focus-visible, select:focus-visible,
+  summary:focus-visible, th button:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+
+  .btn {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .08em; text-transform: uppercase;
+    background: var(--surface-2); color: var(--ink);
+    border: 1px solid var(--line-strong); border-radius: 3px;
+    padding: 9px 15px; cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn.primary:hover { color: var(--accent-ink); filter: brightness(1.06); }
+  .btn[disabled] { opacity: .55; cursor: default; filter: none; }
+  .btn.quiet { background: transparent; border-color: transparent; color: var(--faint); }
+  .btn.quiet:hover { color: var(--bad); border-color: var(--line); }
+
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .grow { flex: 1 1 200px; min-width: 0; }
+
+  .msg { font-size: 14px; border-radius: 3px; padding: 11px 13px; margin: 0; overflow-wrap: anywhere; }
+  .msg.err { background: var(--bad-soft); color: var(--bad); }
+  .msg.warn { background: var(--warn-soft); color: var(--warn); }
+  .msg.ok { background: var(--good-soft); color: var(--good); }
+  .msg.work { background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+  .msg[hidden] { display: none; }
+
+  .parts { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+  .part { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .part .part-name {
+    font-family: var(--display); font-weight: 600; font-size: 12px;
+    letter-spacing: .11em; text-transform: uppercase; color: var(--muted);
+  }
+
+  .asof { font-family: var(--mono); font-size: 13px; color: var(--muted); margin: 0; overflow-wrap: anywhere; }
+  .stale {
+    font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: .06em;
+    background: var(--warn-soft); color: var(--warn); border-radius: 2px;
+    padding: 2px 6px; margin-right: 6px;
+  }
+
+  .hint-line { font-size: 13px; color: var(--faint); margin: 0; overflow-wrap: anywhere; }
+
+  /* ---- leaders ---- */
+  .leaders { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 12px; padding: 18px; }
+  .lead {
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px;
+    padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0;
+  }
+  .lead h3 {
+    font-family: var(--display); font-weight: 600; font-size: 14px;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin: 0;
+  }
+  .lead ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+  .lead li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 6px; font-size: 14px; align-items: baseline; }
+  .lead li .place { font-family: var(--mono); color: var(--faint); }
+  .lead li .who { font-weight: 500; overflow-wrap: anywhere; }
+  .lead li .val { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
+  .lead .none { font-size: 13px; color: var(--faint); margin: 0; }
+
+  /* ---- table ---- */
+  .table-scroll { overflow-x: auto; max-width: 100%; }
+  table { border-collapse: collapse; width: 100%; min-width: 1500px; }
+  th {
+    font-family: var(--display); font-weight: 600; font-size: 12px;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+    text-align: left; background: var(--surface-2);
+    border-bottom: 1px solid var(--line-strong); padding: 0; white-space: nowrap;
+  }
+  th button {
+    font: inherit; color: inherit; background: none; border: 0;
+    padding: 11px 10px; width: 100%; text-align: right; cursor: pointer; white-space: nowrap;
+  }
+  th.name button { text-align: left; }
+  th button:hover { color: var(--accent); }
+  th[aria-sort="ascending"] button::after { content: ' \25B2'; font-size: 10px; }
+  th[aria-sort="descending"] button::after { content: ' \25BC'; font-size: 10px; }
+
+  td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: baseline; white-space: nowrap; }
+  td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+  td.num.none { color: var(--faint); }
+  td.name { font-weight: 500; position: sticky; left: 0; background: var(--surface); max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+  tr.gone td.name { color: var(--muted); }
+
+  .pill {
+    font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: .03em;
+    padding: 2px 6px; border-radius: 2px; white-space: nowrap; margin-left: 6px;
+    background: var(--surface-2); color: var(--muted); border: 1px solid var(--line);
+  }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+  .pill.bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+
+  .empty { padding: 30px 18px; text-align: center; color: var(--faint); margin: 0; }
+  .notes { padding: 14px 18px 18px; display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--line); }
+
+  details { border-top: 1px solid var(--line); }
+  summary {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+    padding: 13px 18px; cursor: pointer;
+  }
+  summary:hover { color: var(--accent); }
+  details dl { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; font-size: 14px; }
+  details dt { font-weight: 600; color: var(--muted); }
+  details dd { margin: 0; overflow-wrap: anywhere; }
+
+  footer { border-top: 1px solid var(--line); padding-top: 16px; color: var(--faint); font-size: 13px; }
+  footer p { margin: 0 0 6px; max-width: 74ch; }
+
+  .sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+  @media (max-width: 620px) {
+    .wrap { padding: 20px 14px 56px; }
+    details dl { grid-template-columns: minmax(0, 1fr); }
+    .panel-body { padding: 14px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav class="backbar"><a href="leader.html">&larr; Leader Tools</a></nav>
+
+  <header class="masthead">
+    <div>
+      <h1>Halloween Competition</h1>
+      <p>Hits, mugs, hosps, retals, respect, activity and treats for every member across the event,
+        so the Leader can hand out prizes with the numbers in front of them.</p>
+    </div>
+    <span class="stamp">PoIitically Incorrect &middot; 48039</span>
+  </header>
+
+  <section class="panel" id="keyPanel">
+    <div class="panel-head">
+      <h2>Your key</h2>
+      <p class="hint">Stays in this browser. Sent only to Torn.</p>
+    </div>
+    <div class="panel-body">
+      <div id="signedOut">
+        <label class="lbl" for="apiKey">Torn Custom API Key</label>
+        <div class="toolbar">
+          <input type="password" id="apiKey" class="grow" autocomplete="off" spellcheck="false"
+                 placeholder="Paste your key">
+          <button type="button" class="btn" id="toggleKey" aria-pressed="false">Show</button>
+          <button type="button" class="btn primary" id="signIn">Sign in</button>
+        </div>
+      </div>
+      <div class="toolbar" id="signedIn" hidden>
+        <p class="hint-line grow" id="signedInText">Signed in with the key saved in this browser.</p>
+        <button type="button" class="btn quiet" id="forgetKey">Forget key</button>
+      </div>
+      <p class="msg err" id="keyMsg" role="alert" hidden></p>
+    </div>
+
+    <details>
+      <summary>What this page does with your key</summary>
+      <div class="panel-body">
+        <dl>
+          <dt>Purpose</dt>
+          <dd>Reads the faction member list, the faction's outgoing attack log, five public personal
+            stats for each member and each member's Halloween treat count. It does this only when you
+            press Refresh or Take treat snapshot. Nothing runs in the background.</dd>
+          <dt>Access needed</dt>
+          <dd>A Custom Key with faction &rarr; <strong>members</strong> and <strong>attacks</strong>,
+            and user &rarr; <strong>personalstats</strong> and <strong>competition</strong>.
+            The attack log also needs <strong>Faction API Access</strong> on your faction position,
+            which the Leader sets in Torn and not on the key. A missing tick box gives error 16 and
+            the page says which call was refused.</dd>
+          <dt>Storage</dt>
+          <dd>The key lives in this browser's local storage under <code>ks-leader-board-key</code>,
+            shared with the other Leader Tools pages. The numbers this page reads (settings, attack
+            rows, activity values and treat snapshots) are kept under <code>ks-halloween-v1</code>.
+            There is no server and no account.</dd>
+          <dt>Retention</dt>
+          <dd>Until you press Forget key or clear this site's data in your browser. Forget key removes
+            only the key.</dd>
+          <dt>Sharing</dt>
+          <dd>Never. The key is sent only to api.torn.com, in a request header, never in a web address.
+            It is not written to the saved data, the exported file or the copied text.</dd>
+          <dt>Writes</dt>
+          <dd>None. This page only reads. It never attacks, sends, spends or changes anything.</dd>
+          <dt>Call pace</dt>
+          <dd>At most 50 calls a minute, one queue for everything, so it leaves room for other tools
+            on the same account. Every call is tagged <code>KSHalloween</code> in your own API log.</dd>
+        </dl>
+      </div>
+    </details>
+  </section>
+
+  <section class="panel" id="settingsPanel">
+    <div class="panel-head">
+      <h2>The competition</h2>
+      <p class="hint">Times are TCT (UTC), exactly as Torn shows them.</p>
+    </div>
+    <div class="panel-body">
+      <div class="field-grid">
+        <div class="field">
+          <label for="winFrom">From (TCT)</label>
+          <input type="datetime-local" id="winFrom" step="60">
+          <span class="note">Covers every personal start time, 10:00 to 16:00.</span>
+        </div>
+        <div class="field">
+          <label for="winTo">To (TCT)</label>
+          <input type="datetime-local" id="winTo" step="60">
+        </div>
+        <fieldset class="field" id="scopeField">
+          <legend class="legend">Scope</legend>
+          <label class="radio"><input type="radio" name="scope" value="all" checked> All attacks</label>
+          <label class="radio"><input type="radio" name="scope" value="rw"> Ranked war only</label>
+          <label class="radio"><input type="radio" name="scope" value="nonrw"> Outside ranked war</label>
+        </fieldset>
+        <div class="field">
+          <label for="minAvg">Min hits for avg respect</label>
+          <input type="text" id="minAvg" inputmode="numeric" autocomplete="off">
+          <span class="note">Fewer hits than this and a member is left out of Best avg respect.</span>
+        </div>
+      </div>
+
+      <p class="msg err" id="winMsg" role="alert" hidden></p>
+
+      <div class="toolbar">
+        <button type="button" class="btn primary" id="refreshBtn">Refresh</button>
+        <span class="asof" id="asOf" role="status"></span>
+      </div>
+
+      <p class="msg work" id="banner" role="status" hidden></p>
+      <p class="msg err" id="generalMsg" role="alert" hidden></p>
+
+      <div class="parts">
+        <div class="part"><span class="part-name">Attack log</span><p class="msg work" id="partAttacks" role="status">Not read yet.</p></div>
+        <div class="part"><span class="part-name">Activity</span><p class="msg work" id="partActivity" role="status">Not read yet.</p></div>
+        <div class="part"><span class="part-name">Treats</span><p class="msg work" id="partTreats" role="status">No snapshot yet.</p></div>
+      </div>
+      <p class="hint-line" id="storageNote" hidden></p>
+    </div>
+  </section>
+
+  <section class="panel" id="treatsPanel">
+    <div class="panel-head">
+      <h2>Treats</h2>
+      <p class="hint">Torn gives no history for treats, so the page keeps its own snapshots.</p>
+    </div>
+    <div class="panel-body">
+      <div class="toolbar">
+        <button type="button" class="btn primary" id="snapBtn">Take treat snapshot</button>
+        <span class="hint-line" id="snapCount"></span>
+      </div>
+      <div class="field-grid">
+        <div class="field">
+          <label for="snapStart">Start snapshot</label>
+          <select id="snapStart"></select>
+        </div>
+        <div class="field">
+          <label for="snapCmp">Compare with</label>
+          <select id="snapCmp"></select>
+        </div>
+      </div>
+      <p class="hint-line" id="snapInfo"></p>
+      <p class="msg warn" id="snapTrim" role="status" hidden></p>
+    </div>
+  </section>
+
+  <section class="panel" id="leadersPanel">
+    <div class="panel-head">
+      <h2>Leaders</h2>
+      <p class="hint">Top three in each category. Equal values share a place.</p>
+    </div>
+    <div class="leaders" id="leaders"></div>
+  </section>
+
+  <section class="panel" id="standingsPanel">
+    <div class="panel-head">
+      <h2>Standings</h2>
+      <p class="hint">Click a heading to sort.</p>
+    </div>
+    <div class="panel-body" style="padding-bottom:0">
+      <div class="toolbar">
+        <button type="button" class="btn primary" id="copyTextBtn">Copy standings</button>
+        <button type="button" class="btn primary" id="copyHtmlBtn">Copy for newsletter</button>
+        <button type="button" class="btn" id="exportBtn">Export JSON</button>
+        <button type="button" class="btn" id="importBtn">Import JSON</button>
+        <input type="file" id="importFile" accept="application/json,.json" class="sr" tabindex="-1" aria-label="Import JSON file">
+        <span class="msg ok" id="toast" role="status" hidden></span>
+      </div>
+      <p class="hint-line">Newsletter: in Torn's newsletter editor click <strong>Source code</strong>
+        (the { } button), paste, then click <strong>Source code</strong> again to see it before sending.</p>
+    </div>
+    <div class="table-scroll">
+      <table id="standings">
+        <thead><tr id="headRow"></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <p class="empty" id="tableEmpty">Sign in and press Refresh.</p>
+    <div class="notes" id="notes"></div>
+    <details>
+      <summary>How to read this table</summary>
+      <div class="panel-body">
+        <dl>
+          <dt>Hits</dt>
+          <dd>Leaves + Mugs + Hosps, the same rule as the War Payout Ledger.</dd>
+          <dt>Other wins</dt>
+          <dd>Arrested + Looted + Bounty + Special. Counted on their own, not in Hits.</dd>
+          <dt>Losses</dt>
+          <dd>Lost + Stalemate + Escape + Timeout + Interrupted + None.</dd>
+          <dt>Retals</dt>
+          <dd>Hits where Torn's retaliation modifier is above 1.</dd>
+          <dt>Bonus hits</dt>
+          <dd>Hits that landed on a chain bonus (10, 25, 50, 100 and so on) and whose respect equals
+            that bonus.</dd>
+          <dt>Avg respect</dt>
+          <dd>(Respect from Hits minus the respect from bonus hits) divided by (Hits minus Bonus hits).
+            Respect from assists and other wins is in Total respect but not in this average.
+            Bonus hits are left out because they lift an average by luck, not skill. They are shown
+            openly in their own column.</dd>
+          <dt>Energy</dt>
+          <dd>25 energy for every attack the member started, win or lose, assists included. It is an
+            estimate: Torn's wiki does not say whether energy is spent on every outcome.</dd>
+          <dt>Activity</dt>
+          <dd>The difference in Torn's personal stats between the start and the end of the window.
+            Torn returns these by day, so they cover whole days.</dd>
+          <dt>Treats</dt>
+          <dd>The difference between two snapshots. It is not known whether Torn's count drops when a
+            member spends treats, so a count that went down is marked <em>fell</em> and not hidden.</dd>
+        </dl>
+      </div>
+    </details>
+  </section>
+
+  <footer>
+    <p><strong>Manual only, by design.</strong> The page reads from Torn when you press a button and
+      never polls in the background. It never acts inside Torn.</p>
+    <p><strong>Read this as a scoreboard, not a verdict.</strong> Missing numbers are shown as a dash
+      with the reason, never as zero.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ================================================================
+     Constants
+     ================================================================ */
+
+  var FACTION_ID = 48039;
+  var KEY_STORE = 'ks-leader-board-key';
+  var NS = 'ks-halloween-v1';
+  var STORE = {
+    cache: NS + ':cache', settings: NS + ':settings', snaps: NS + ':snapshots',
+    stats: NS + ':stats', meta: NS + ':meta'
+  };
+  var COMMENT = 'KSHalloween';
+
+  // The one place the request budget lives. Torn allows 100 calls a minute over all keys;
+  // War Dibs runs on the same account during a war, so this page takes half.
+  var TORN_CALLS_PER_MINUTE = 50;
+  var MIN_GAP_MS = Math.ceil(60000 / TORN_CALLS_PER_MINUTE);
+  var RATE_LIMIT_WAIT_MS = 60000;
+  var RATE_LIMIT_RETRIES = 3;
+  var MAX_ATTACK_PAGES = 600;
+  var SNAPSHOT_LIMIT = 50;
+  var LIVE_STAT_TTL_MS = 10 * 60 * 1000;
+  var ENERGY_PER_ATTACK = 25;
+  var OVERLAP_SECONDS = 300;
+  var STREAK_STOP = 5;
+
+  var DEFAULT_FROM = '2026-10-25T10:00';
+  var DEFAULT_TO = '2026-11-01T16:00';
+
+  var RESULTS = ['None', 'Attacked', 'Mugged', 'Hospitalized', 'Arrested', 'Looted',
+    'Lost', 'Stalemate', 'Assist', 'Escape', 'Timeout', 'Special', 'Bounty', 'Interrupted'];
+  var BONUS_CHAINS = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000];
+  var STAT_NAMES = ['timeplayed', 'xantaken', 'refills', 'energydrinkused', 'candyused'];
+  var TERMINAL_CODES = { 2: 1, 10: 1, 13: 1, 18: 1 };
+  var SCOPES = { all: 'All attacks', rw: 'Ranked war only', nonrw: 'Outside ranked war' };
+
+  var PARTS = {
+    key: { label: 'The key check', where: 'key info' },
+    members: { label: 'The member list', where: 'faction → members' },
+    attacks: { label: 'The attack log', where: 'faction → attacks' },
+    activity: { label: 'The activity read', where: 'user → personalstats' },
+    treats: { label: 'The treat read', where: 'user → competition' }
+  };
+
+  /* ================================================================
+     Small helpers
+     ================================================================ */
+
+  function $(id) { return document.getElementById(id); }
+  function nowMs() { return Date.now(); }
+  function nowSec() { return Math.floor(Date.now() / 1000); }
+  function perfNow() { return performance.now(); }
+  function pad2(n) { return n < 10 ? '0' + n : String(n); }
+  function fmtInt(n) { return Math.round(n).toLocaleString('en-US'); }
+  function fmtDec(n, d) {
+    return n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+  }
+  function round2(n) { return Math.round(n * 100) / 100; }
+  function round1(n) { return Math.round(n * 10) / 10; }
+  function plural(n, one, many) { return n === 1 ? one : many; }
+  function isObj(v) { return v !== null && typeof v === 'object' && !Array.isArray(v); }
+
+  function tctMinutes(sec) {
+    var d = new Date(sec * 1000);
+    return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate()) +
+      ' ' + pad2(d.getUTCHours()) + ':' + pad2(d.getUTCMinutes());
+  }
+  function tctSeconds(sec) { return tctMinutes(sec) + ':' + pad2(new Date(sec * 1000).getUTCSeconds()); }
+
+  // The form value is "YYYY-MM-DDTHH:MM" and means TCT. It is joined into a UTC ISO string
+  // and never handed to new Date() raw, which would read it as local time.
+  function parseWindowValue(value) {
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return null;
+    var ms = Date.parse(value + ':00.000Z');
+    if (!isFinite(ms)) return null;
+    var sec = Math.floor(ms / 1000);
+    if (tctMinutes(sec).replace(' ', 'T') !== value) return null;
+    return sec;
+  }
+
+  function lsGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+  function lsSet(key, text) { try { localStorage.setItem(key, text); return true; } catch (e) { return false; } }
+  function lsDel(key) { try { localStorage.removeItem(key); } catch (e) { /* ignore */ } }
+
+  function readJson(key) {
+    var raw = lsGet(key);
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch (e) { return null; }
+  }
+
+  function abortError() {
+    var e = new Error('Aborted');
+    e.name = 'AbortError';
+    return e;
+  }
+  function isAbort(e) { return !!e && e.name === 'AbortError'; }
+
+  function TornError(code, text, part) {
+    this.name = 'TornError';
+    this.code = code;
+    this.text = text || '';
+    this.part = part;
+    this.message = 'Torn error ' + code;
+  }
+  TornError.prototype = Object.create(Error.prototype);
+
+  function AccessDenied() { this.name = 'AccessDenied'; this.message = 'Access denied'; }
+  AccessDenied.prototype = Object.create(Error.prototype);
+
+  /* ================================================================
+     State
+     ================================================================ */
+
+  var state = {
+    key: '',
+    verifiedKey: '',
+    settings: { from: DEFAULT_FROM, to: DEFAULT_TO, scope: 'all', minAvg: 10, snapStart: null, snapCmp: null },
+    cache: null,
+    cacheUnsaved: false,
+    meta: { asOf: null, asOfWindow: '', roster: [] },
+    roster: [],
+    rosterKnown: false,
+    snaps: [],
+    trimNote: '',
+    stats: { schema: 1, entries: {} },
+    activityErrors: {},
+    parts: {
+      attacks: { kind: 'work', text: 'Not read yet.' },
+      activity: { kind: 'work', text: 'Not read yet.' },
+      treats: { kind: 'work', text: 'No snapshot yet.' }
+    },
+    attacksFailed: false,
+    keyMsg: '',
+    generalMsg: '',
+    winMsg: '',
+    banner: '',
+    sortKey: 'hits',
+    sortDir: -1,
+    busy: false,
+    runSeq: 0,
+    ctrl: null,
+    gateTail: Promise.resolve(),
+    callTimes: [],
+    pausedUntil: 0,
+    bannerTimer: null
+  };
+
+  /* ================================================================
+     Persistence
+     ================================================================ */
+
+  function validRow(r) {
+    return Array.isArray(r) && r.length === 10 &&
+      Number.isSafeInteger(r[0]) && Number.isFinite(r[1]) && Number.isSafeInteger(r[2]) &&
+      typeof r[3] === 'string' && Number.isSafeInteger(r[4]) && r[4] >= 0 && r[4] < RESULTS.length &&
+      (r[5] === null || Number.isFinite(r[5])) && (r[6] === 0 || r[6] === 1) &&
+      (r[7] === 0 || r[7] === 1) && Number.isFinite(r[8]) && (r[9] === null || Number.isFinite(r[9]));
+  }
+
+  function loadCache() {
+    var c = readJson(STORE.cache);
+    if (!isObj(c) || c.schema !== 1 || c.factionId !== FACTION_ID || !Number.isFinite(c.from) ||
+        !Number.isFinite(c.to) || !Number.isFinite(c.fetchedTo) || !Array.isArray(c.rows)) return null;
+    for (var i = 0; i < c.rows.length; i += 1) if (!validRow(c.rows[i])) return null;
+    return c;
+  }
+
+  function persistCache() {
+    var ok = lsSet(STORE.cache, JSON.stringify(state.cache));
+    state.cacheUnsaved = !ok;
+  }
+
+  function cleanSettings(raw) {
+    var s = { from: DEFAULT_FROM, to: DEFAULT_TO, scope: 'all', minAvg: 10, snapStart: null, snapCmp: null };
+    if (!isObj(raw)) return s;
+    if (parseWindowValue(raw.from) !== null) s.from = raw.from;
+    if (parseWindowValue(raw.to) !== null) s.to = raw.to;
+    if (Object.prototype.hasOwnProperty.call(SCOPES, raw.scope)) s.scope = raw.scope;
+    if (Number.isSafeInteger(raw.minAvg) && raw.minAvg >= 0 && raw.minAvg <= 100000) s.minAvg = raw.minAvg;
+    if (Number.isSafeInteger(raw.snapStart) && raw.snapStart > 0) s.snapStart = raw.snapStart;
+    if (Number.isSafeInteger(raw.snapCmp) && raw.snapCmp > 0) s.snapCmp = raw.snapCmp;
+    return s;
+  }
+
+  function saveSettings() { lsSet(STORE.settings, JSON.stringify(state.settings)); }
+
+  function cleanSnapshot(raw) {
+    if (!isObj(raw) || !Number.isSafeInteger(raw.takenAt) || raw.takenAt <= 0 || raw.takenAt > 4102444800 ||
+        !isObj(raw.values)) return null;
+    var ids = Object.keys(raw.values);
+    if (ids.length > 2000) return null;
+    var values = {};
+    for (var i = 0; i < ids.length; i += 1) {
+      var id = ids[i];
+      var v = raw.values[id];
+      if (!/^[1-9]\d{0,9}$/.test(id) || !isObj(v)) return null;
+      var treats = v.treats === null ? null
+        : (Number.isSafeInteger(v.treats) && v.treats >= 0 ? v.treats : undefined);
+      var basket = v.basket === null || v.basket === undefined ? null
+        : (typeof v.basket === 'string' && v.basket.length <= 100 ? v.basket : undefined);
+      var note = v.note === null || v.note === undefined ? null
+        : (typeof v.note === 'string' && v.note.length <= 200 ? v.note : undefined);
+      if (treats === undefined || basket === undefined || note === undefined) return null;
+      values[id] = { treats: treats, basket: basket, note: note };
+    }
+    return { takenAt: raw.takenAt, values: values };
+  }
+
+  function loadSnapshots() {
+    var raw = readJson(STORE.snaps);
+    var out = [];
+    if (Array.isArray(raw)) {
+      raw.forEach(function (s) { var c = cleanSnapshot(s); if (c) out.push(c); });
+    }
+    out.sort(function (a, b) { return a.takenAt - b.takenAt; });
+    return out.slice(-SNAPSHOT_LIMIT);
+  }
+
+  function saveSnapshots() { lsSet(STORE.snaps, JSON.stringify(state.snaps)); }
+
+  function loadStats() {
+    var s = readJson(STORE.stats);
+    if (!isObj(s) || s.schema !== 1 || !isObj(s.entries)) return { schema: 1, entries: {} };
+    var clean = {};
+    Object.keys(s.entries).forEach(function (k) {
+      var e = s.entries[k];
+      if (!/^\d+:(\d+|live)$/.test(k) || !isObj(e) || !Number.isFinite(e.at) || !isObj(e.v)) return;
+      var v = {};
+      for (var i = 0; i < STAT_NAMES.length; i += 1) {
+        if (!Number.isFinite(e.v[STAT_NAMES[i]])) return;
+        v[STAT_NAMES[i]] = e.v[STAT_NAMES[i]];
+      }
+      clean[k] = { at: e.at, ts: Number.isFinite(e.ts) ? e.ts : 0, v: v };
+    });
+    return { schema: 1, entries: clean };
+  }
+
+  function saveStats() {
+    // Keep only what the current window can use, so the store cannot grow without bound.
+    var win = windowSeconds();
+    var keep = {};
+    Object.keys(state.stats.entries).forEach(function (k) {
+      var suffix = k.split(':')[1];
+      if (suffix === 'live' || (win.ok && (Number(suffix) === win.from || Number(suffix) === win.to))) {
+        keep[k] = state.stats.entries[k];
+      }
+    });
+    state.stats.entries = keep;
+    lsSet(STORE.stats, JSON.stringify(state.stats));
+  }
+
+  function loadMeta() {
+    var m = readJson(STORE.meta);
+    var out = { asOf: null, asOfWindow: '', roster: [] };
+    if (!isObj(m)) return out;
+    if (Number.isFinite(m.asOf)) out.asOf = m.asOf;
+    if (typeof m.asOfWindow === 'string') out.asOfWindow = m.asOfWindow;
+    if (Array.isArray(m.roster)) {
+      m.roster.forEach(function (r) {
+        if (Array.isArray(r) && Number.isSafeInteger(r[0]) && r[0] > 0 && typeof r[1] === 'string') {
+          out.roster.push({ id: r[0], name: r[1] });
+        }
+      });
+    }
+    return out;
+  }
+
+  function saveMeta() {
+    lsSet(STORE.meta, JSON.stringify({
+      asOf: state.meta.asOf, asOfWindow: state.meta.asOfWindow,
+      roster: state.roster.map(function (m) { return [m.id, m.name]; })
+    }));
+  }
+
+  /* ================================================================
+     The competition window
+     ================================================================ */
+
+  function windowSeconds() {
+    var from = parseWindowValue(state.settings.from);
+    var to = parseWindowValue(state.settings.to);
+    if (from === null || to === null) return { ok: false, reason: 'Both times are needed.' };
+    if (to < from) return { ok: false, reason: 'To cannot be before From.' };
+    return { ok: true, from: from, to: to };
+  }
+
+  function cacheMatches() {
+    var win = windowSeconds();
+    var c = state.cache;
+    return !!(win.ok && c && c.schema === 1 && c.factionId === FACTION_ID &&
+      c.from === win.from && c.to === win.to);
+  }
+
+  /* ================================================================
+     Torn: one queue, one pace
+     ================================================================ */
+
+  function sleep(ms, signal) {
+    return new Promise(function (resolve, reject) {
+      if (signal.aborted) { reject(abortError()); return; }
+      var timer = setTimeout(function () {
+        signal.removeEventListener('abort', onAbort);
+        resolve();
+      }, ms);
+      function onAbort() {
+        clearTimeout(timer);
+        reject(abortError());
+      }
+      signal.addEventListener('abort', onAbort, { once: true });
+    });
+  }
+
+  // Every Torn call from this page passes through here, in order. No two calls start less than
+  // MIN_GAP_MS apart, no more than TORN_CALLS_PER_MINUTE start within any minute, and a
+  // rate-limit pause holds the whole queue.
+  async function takeSlot(signal) {
+    for (;;) {
+      if (signal.aborted) throw abortError();
+      var t = perfNow();
+      while (state.callTimes.length && t - state.callTimes[0] >= 60000) state.callTimes.shift();
+      var wait = 0;
+      if (state.callTimes.length) {
+        wait = Math.max(wait, MIN_GAP_MS - (t - state.callTimes[state.callTimes.length - 1]));
+      }
+      if (state.callTimes.length >= TORN_CALLS_PER_MINUTE) {
+        wait = Math.max(wait, 60000 - (t - state.callTimes[0]));
+      }
+      if (state.pausedUntil > t) {
+        wait = Math.max(wait, state.pausedUntil - t);
+        if (!state.banner) setBanner('Torn asked for a pause. Waiting for it to end…');
+      }
+      if (wait <= 0) break;
+      await sleep(Math.ceil(wait), signal);
+    }
+    state.callTimes.push(perfNow());
+  }
+
+  function waitTurn(signal) {
+    var turn = state.gateTail.then(function () { return takeSlot(signal); });
+    state.gateTail = turn.catch(function () { /* the next caller still gets its turn */ });
+    return turn;
+  }
+
+  function describeError(code, part, text) {
+    var p = PARTS[part] || PARTS.members;
+    if (code === 2) return 'Torn rejected the key. Check it was copied whole. The key has been removed from this browser.';
+    if (code === 10) return 'The key owner is in federal jail, so the key cannot be used. The key has been removed from this browser.';
+    if (code === 13) return 'This key is disabled after seven days of account inactivity. The key has been removed from this browser.';
+    if (code === 18) return 'This key has been paused by its owner. The key has been removed from this browser.';
+    if (code === 5) return 'Torn says there were too many calls in the last minute.';
+    if (code === 9) return 'Torn’s API is temporarily unavailable. Try again shortly.';
+    if (code === 17) return 'Torn is in a backend update. Try again in a minute.';
+    if (code === 7 && part === 'attacks') {
+      return 'The attack log needs Faction API Access, which the Leader sets on your faction position ' +
+        'in Torn. It is not a key setting, so you cannot fix it yourself.';
+    }
+    if (code === 16) {
+      var sel = part === 'attacks' ? 'faction “attacks”'
+        : part === 'activity' ? 'user “personalstats”'
+        : part === 'treats' ? 'user “competition”'
+        : part === 'members' ? 'faction “members”' : '';
+      return 'Torn refused ' + p.label.charAt(0).toLowerCase() + p.label.slice(1) + ' (' + p.where +
+        ', error 16). ' + (sel ? 'Your Custom Key needs the ' + sel + ' selection ticked.'
+          : 'A selection is missing on your Custom Key.');
+    }
+    if (code === 0) return (text || 'Could not reach Torn.') + ' Check your connection.';
+    if (code === -2) return text || 'Torn answered, but not with what was expected.';
+    return 'Torn returned error ' + code + (text ? ': ' + text : '') + '.';
+  }
+
+  function describeThrown(e) {
+    if (e instanceof TornError) return describeError(e.code, e.part, e.text);
+    return 'Unexpected problem: ' + (e && e.message ? e.message : String(e));
+  }
+
+  function setBanner(text) {
+    state.banner = text || '';
+    var box = $('banner');
+    box.textContent = state.banner;
+    box.hidden = !state.banner;
+  }
+
+  async function tornGet(path, part, signal) {
+    var attempt = 0;
+    for (;;) {
+      await waitTurn(signal);
+      var payload;
+      try {
+        var response = await fetch('https://api.torn.com/v2' + path + (path.indexOf('?') === -1 ? '?' : '&') +
+          'comment=' + COMMENT, { headers: { Authorization: 'ApiKey ' + state.key }, signal: signal });
+        payload = await response.json();
+      } catch (err) {
+        if (signal.aborted || isAbort(err)) throw abortError();
+        throw new TornError(0, 'Torn did not answer properly.', part);
+      }
+      if (payload && payload.error) {
+        var code = typeof payload.error.code === 'number' ? payload.error.code : -1;
+        var text = typeof payload.error.error === 'string' ? payload.error.error : '';
+        if (code === 5 && attempt < RATE_LIMIT_RETRIES) {
+          attempt += 1;
+          state.pausedUntil = perfNow() + RATE_LIMIT_WAIT_MS;
+          setBanner('Torn asked for a pause. Waiting ' + Math.round(RATE_LIMIT_WAIT_MS / 1000) +
+            ' seconds before retry ' + attempt + ' of ' + RATE_LIMIT_RETRIES + '…');
+          continue;
+        }
+        throw new TornError(code, text, part);
+      }
+      setBanner('');
+      return payload;
+    }
+  }
+
+  async function ensureAccess(signal) {
+    if (state.verifiedKey && state.verifiedKey === state.key) return;
+    var payload = await tornGet('/key/info', 'key', signal);
+    var user = payload && payload.info && payload.info.user;
+    if (!user || user.faction_id !== FACTION_ID) throw new AccessDenied();
+    state.verifiedKey = state.key;
+  }
+
+  /* ================================================================
+     Operations: one at a time, cancellable, never overwrites a newer one
+     ================================================================ */
+
+  function startOp() {
+    if (state.busy) return null;
+    state.busy = true;
+    state.runSeq += 1;
+    state.ctrl = new AbortController();
+    return { seq: state.runSeq, signal: state.ctrl.signal };
+  }
+
+  function isCurrent(op) { return op.seq === state.runSeq && !op.signal.aborted; }
+
+  function endOp(op) {
+    if (op.seq === state.runSeq) {
+      state.busy = false;
+      state.ctrl = null;
+      setBanner('');
+    }
+  }
+
+  // A pause Torn asked for outlives the operation that met it: the next call still waits it out.
+  function cancelOp() {
+    if (state.ctrl) state.ctrl.abort();
+    state.ctrl = null;
+    state.busy = false;
+    state.runSeq += 1;
+    setBanner('');
+  }
+
+  function forgetKey() {
+    cancelOp();
+    lsDel(KEY_STORE);
+    state.key = '';
+    state.verifiedKey = '';
+  }
+
+  // Aborts end the operation quietly. A dead key or a key outside the faction signs the page out.
+  // Anything else was already reported by the part that met it.
+  function handleFatal(e) {
+    if (isAbort(e)) return;
+    if (e instanceof AccessDenied) {
+      forgetKey();
+      state.keyMsg = 'This key does not belong to a current member of faction 48039. Access denied.';
+      return;
+    }
+    if (e instanceof TornError && TERMINAL_CODES[e.code]) {
+      forgetKey();
+      state.keyMsg = describeError(e.code, e.part, e.text);
+      return;
+    }
+    state.generalMsg = describeThrown(e);
+  }
+
+  function rethrowIfFatal(e) {
+    if (isAbort(e) || e instanceof AccessDenied || (e instanceof TornError && TERMINAL_CODES[e.code])) throw e;
+  }
+
+  /* ================================================================
+     Reading the roster
+     ================================================================ */
+
+  async function loadRoster(op) {
+    var payload = await tornGet('/faction/members?striptags=true', 'members', op.signal);
+    var list = payload && payload.members;
+    if (!Array.isArray(list)) throw new TornError(-2, 'Torn answered, but not with a member list.', 'members');
+    var seen = {};
+    var roster = [];
+    list.forEach(function (m) {
+      if (!m || !Number.isSafeInteger(Number(m.id)) || Number(m.id) <= 0) return;
+      var id = Number(m.id);
+      if (seen[id]) return;
+      seen[id] = true;
+      roster.push({ id: id, name: typeof m.name === 'string' && m.name ? m.name : String(id) });
+    });
+    if (roster.length === 0) throw new TornError(-2, 'Torn answered with an empty member list.', 'members');
+    if (!isCurrent(op)) throw abortError();
+    state.roster = roster;
+    state.rosterKnown = true;
+    saveMeta();
+  }
+
+  /* ================================================================
+     Part 1: the attack log
+     ================================================================ */
+
+  function parseAttack(a, win) {
+    if (!isObj(a) || !Number.isSafeInteger(a.id) || a.id <= 0 || !Number.isFinite(a.ended)) return null;
+    var resultIndex = RESULTS.indexOf(a.result);
+    if (resultIndex === -1 || typeof a.is_ranked_war !== 'boolean') return null;
+    var att = a.attacker;
+    var attackerId = 0;
+    var attackerName = '';
+    var counted = false;
+    if (att === null) {
+      counted = true;
+    } else {
+      if (!isObj(att) || !Number.isSafeInteger(Number(att.id)) || Number(att.id) <= 0 ||
+          typeof att.name !== 'string') return null;
+      attackerId = Number(att.id);
+      attackerName = att.name;
+      counted = !!(isObj(att.faction) && Number(att.faction.id) === FACTION_ID);
+    }
+    var inWindow = a.ended >= win.from && a.ended <= win.to;
+    if (!counted || !inWindow) return { row: null };
+    var m = a.modifiers;
+    var modsOk = isObj(m) && Number.isFinite(m.retaliation) && Number.isFinite(m.chain);
+    var row = [
+      a.id, a.ended, attackerId, attackerName, resultIndex,
+      Number.isFinite(a.respect_gain) ? a.respect_gain : null,
+      modsOk && m.retaliation > 1 ? 1 : 0,
+      a.is_ranked_war ? 1 : 0,
+      Number.isFinite(a.chain) ? a.chain : 0,
+      modsOk ? m.chain : null
+    ];
+    return { row: row };
+  }
+
+  // Same shape as the War Payout Ledger: newest first, cursor on the ended time, de-duplicated
+  // on the attack id, pages of 100. One difference: a full page that sits entirely inside one
+  // second cannot be read past with from/to alone, so it stops with an error and counts nothing.
+  async function fetchAttackPages(lower, upper, op, win) {
+    var rows = new Map();
+    var seen = new Set();
+    var cursor = upper;
+    for (var page = 0; page < MAX_ATTACK_PAGES; page += 1) {
+      var payload = await tornGet('/faction/attacks?filters=outgoing&limit=100&sort=DESC&from=' + lower +
+        '&to=' + cursor, 'attacks', op.signal);
+      if (!isCurrent(op)) throw abortError();
+      var list = payload && payload.attacks;
+      if (!Array.isArray(list) || list.length > 100) {
+        throw new TornError(-2, 'Torn answered, but not with a valid attack log. Nothing was counted.', 'attacks');
+      }
+      var earliest = Infinity;
+      for (var i = 0; i < list.length; i += 1) {
+        var parsed = parseAttack(list[i], win);
+        if (!parsed) {
+          throw new TornError(-2, 'Torn answered, but not with a valid attack log. Nothing was counted.', 'attacks');
+        }
+        var id = list[i].id;
+        if (!seen.has(id)) seen.add(id);
+        if (parsed.row && !rows.has(id)) rows.set(id, parsed.row);
+        earliest = Math.min(earliest, list[i].ended);
+      }
+      put(op, 'attacks', 'work', 'Reading the attack log… ' + fmtInt(seen.size) + ' attacks so far');
+      if (list.length < 100) return { rows: rows, seen: seen.size };
+      if (earliest === cursor) {
+        throw new TornError(-2, 'Torn returned 100 attacks that all ended in the same second (' +
+          tctSeconds(cursor) + ' TCT), so the log cannot be read past that point. Nothing was counted.',
+          'attacks');
+      }
+      cursor = earliest;
+    }
+    throw new TornError(-2, 'The attack log for this window is too long to read (over ' +
+      fmtInt(MAX_ATTACK_PAGES * 100) + ' attacks). Nothing was counted.', 'attacks');
+  }
+
+  async function attacksPart(op, win) {
+    state.attacksFailed = false;
+    var now = nowSec();
+    if (now < win.from) {
+      put(op, 'attacks', 'ok', 'Starts when the competition starts (' + tctMinutes(win.from) + ' TCT). Nothing to read yet.');
+      return;
+    }
+    var cache = cacheMatches() ? state.cache : null;
+    var fetchTo = Math.min(win.to, now);
+    var lower = cache ? Math.max(win.from - 1, cache.fetchedTo - OVERLAP_SECONDS) : win.from - 1;
+    put(op, 'attacks', 'work', 'Reading the attack log… 0 attacks so far');
+    try {
+      var got = { rows: new Map(), seen: 0 };
+      if (fetchTo > lower) got = await fetchAttackPages(lower, fetchTo, op, win);
+      if (!isCurrent(op)) throw abortError();
+      var merged = new Map();
+      if (cache) {
+        cache.rows.forEach(function (r) {
+          if (r[1] >= win.from && r[1] <= win.to) merged.set(r[0], r);
+        });
+      }
+      var added = 0;
+      got.rows.forEach(function (row, id) {
+        if (!merged.has(id)) added += 1;
+        merged.set(id, row);
+      });
+      var all = Array.from(merged.values());
+      all.sort(function (a, b) { return b[1] - a[1] || b[0] - a[0]; });
+      state.cache = { schema: 1, factionId: FACTION_ID, from: win.from, to: win.to, fetchedTo: fetchTo, rows: all };
+      persistCache();
+      state.meta.asOf = nowSec();
+      state.meta.asOfWindow = win.from + ':' + win.to;
+      saveMeta();
+      put(op, 'attacks', 'ok', 'Read the attack log. ' + fmtInt(all.length) + ' ' +
+        plural(all.length, 'attack', 'attacks') + ' from our faction in the window' +
+        (cache ? ' (' + fmtInt(added) + ' new).' : '.'));
+    } catch (e) {
+      rethrowIfFatal(e);
+      if (isCurrent(op)) state.attacksFailed = true;
+      put(op, 'attacks', 'err', describeThrown(e));
+    }
+  }
+
+  /* ================================================================
+     Part 2: activity (personal stats)
+     ================================================================ */
+
+  function statKey(id, which, win) {
+    if (which === 'start') return id + ':' + win.from;
+    return win.to <= nowSec() ? id + ':' + win.to : id + ':live';
+  }
+
+  function entryFresh(entry, key) {
+    if (!entry) return false;
+    if (key.slice(-5) === ':live') return nowMs() - entry.at < LIVE_STAT_TTL_MS;
+    return true;
+  }
+
+  async function readStats(id, ts, op) {
+    var payload = await tornGet('/user/' + id + '/personalstats?stat=' + STAT_NAMES.join(',') +
+      '&timestamp=' + ts, 'activity', op.signal);
+    if (!isCurrent(op)) throw abortError();
+    var list = payload && payload.personalstats;
+    if (!Array.isArray(list)) {
+      throw new TornError(-2, 'Torn answered, but not with personal stats.', 'activity');
+    }
+    var v = {};
+    var missing = [];
+    STAT_NAMES.forEach(function (name) {
+      var hit = null;
+      for (var i = 0; i < list.length; i += 1) {
+        if (list[i] && list[i].name === name) { hit = list[i]; break; }
+      }
+      if (hit && Number.isFinite(hit.value)) v[name] = hit.value; else missing.push(name);
+    });
+    if (missing.length) {
+      throw new TornError(-2, 'Torn did not return ' + missing.join(', ') + '.', 'activity');
+    }
+    return v;
+  }
+
+  async function activityPart(op, win, rosterFresh) {
+    state.activityErrors = {};
+    var now = nowSec();
+    if (now < win.from) {
+      put(op, 'activity', 'ok', 'Starts when the competition starts (' + tctMinutes(win.from) + ' TCT).');
+      return;
+    }
+    if (!rosterFresh) {
+      put(op, 'activity', 'err', 'The member list could not be read, so activity was not read either.');
+      return;
+    }
+    var endTs = Math.min(win.to, now);
+    var members = state.roster.slice();
+    var done = 0;
+    var failed = 0;
+    var successes = 0;
+    var streak = 0;
+    var firstFailure = '';
+    var stopText = '';
+    try {
+      for (var i = 0; i < members.length; i += 1) {
+        var m = members[i];
+        put(op, 'activity', 'work', 'Reading activity… ' + done + ' of ' + members.length + ' members');
+        var startKey = statKey(m.id, 'start', win);
+        var endKey = statKey(m.id, 'end', win);
+        var needStart = !entryFresh(state.stats.entries[startKey], startKey);
+        var needEnd = !entryFresh(state.stats.entries[endKey], endKey);
+        var memberError = null;
+        try {
+          if (needStart) {
+            state.stats.entries[startKey] = { at: nowMs(), ts: win.from, v: await readStats(m.id, win.from, op) };
+          }
+          if (needEnd) {
+            state.stats.entries[endKey] = { at: nowMs(), ts: endTs, v: await readStats(m.id, endTs, op) };
+          }
+        } catch (e) {
+          rethrowIfFatal(e);
+          if (!(e instanceof TornError)) throw e;
+          if (e.code === 5) { stopText = describeError(5, 'activity') + ' It kept refusing after ' +
+            RATE_LIMIT_RETRIES + ' retries, so the rest was not read.'; break; }
+          memberError = e;
+        }
+        done += 1;
+        if (memberError) {
+          failed += 1;
+          var reason = describeError(memberError.code, 'activity', memberError.text);
+          if (isCurrent(op)) state.activityErrors[m.id] = reason;
+          if (!firstFailure) firstFailure = reason;
+          if (memberError.code === 16 || memberError.code === 0) streak += 1; else streak = 0;
+          if (successes === 0 && streak >= STREAK_STOP) { stopText = firstFailure; break; }
+        } else {
+          successes += 1;
+          streak = 0;
+        }
+      }
+    } finally {
+      saveStats();
+    }
+    if (stopText) {
+      put(op, 'activity', 'err', stopText);
+    } else if (failed > 0) {
+      put(op, 'activity', 'warn', 'Read activity for ' + (members.length - failed) + ' of ' + members.length +
+        ' members. ' + failed + ' could not be read: ' + firstFailure + (failed > 1 ? ' (and others; hover a dash in the table.)' : ''));
+    } else {
+      put(op, 'activity', 'ok', 'Read activity for ' + members.length + ' ' + plural(members.length, 'member', 'members') + '.');
+    }
+  }
+
+  /* ================================================================
+     Refresh
+     ================================================================ */
+
+  async function refresh() {
+    if (state.busy) return;
+    if (!state.key) return;
+    var win = windowSeconds();
+    if (!win.ok) { state.winMsg = win.reason; render(); return; }
+    var op = startOp();
+    if (!op) return;
+    state.winMsg = '';
+    state.generalMsg = '';
+    state.keyMsg = '';
+    setPart('attacks', 'work', 'Starting…');
+    setPart('activity', 'work', 'Waiting for the attack log…');
+    render();
+    try {
+      await ensureAccess(op.signal);
+      var rosterFresh = true;
+      try {
+        await loadRoster(op);
+      } catch (e) {
+        rethrowIfFatal(e);
+        if (!(e instanceof TornError)) throw e;
+        rosterFresh = false;
+        state.generalMsg = describeThrown(e);
+      }
+      await attacksPart(op, win);
+      await activityPart(op, win, rosterFresh);
+    } catch (e) {
+      handleFatal(e);
+      // A part that never got going says so instead of staying on its progress text.
+      if (!isAbort(e)) {
+        if (state.parts.attacks.kind === 'work') setPart('attacks', 'err', 'Not read. See the message above.');
+        if (state.parts.activity.kind === 'work') setPart('activity', 'err', 'Not read. See the message above.');
+      }
+    } finally {
+      endOp(op);
+      render();
+    }
+  }
+
+  /* ================================================================
+     Part 3: treat snapshots
+     ================================================================ */
+
+  async function takeSnapshot() {
+    if (state.busy || !state.key) return;
+    var op = startOp();
+    if (!op) return;
+    state.generalMsg = '';
+    state.keyMsg = '';
+    put(op, 'treats', 'work', 'Taking snapshot…');
+    render();
+    try {
+      await ensureAccess(op.signal);
+      await loadRoster(op);
+      var takenAt = nowSec();
+      var members = state.roster.slice();
+      var values = {};
+      var withData = 0;
+      var failed = 0;
+      var streak = 0;
+      var firstFailure = '';
+      var stopText = '';
+      for (var i = 0; i < members.length; i += 1) {
+        put(op, 'treats', 'work', 'Taking snapshot… ' + i + ' of ' + members.length);
+        var m = members[i];
+        try {
+          var payload = await tornGet('/user/' + m.id + '/competition', 'treats', op.signal);
+          if (!isCurrent(op)) throw abortError();
+          var c = payload && payload.competition;
+          if (isObj(c) && c.name === 'Halloween' && Number.isSafeInteger(c.treats_collected) && c.treats_collected >= 0) {
+            values[m.id] = {
+              treats: c.treats_collected,
+              basket: isObj(c.basket) && typeof c.basket.name === 'string' ? c.basket.name.slice(0, 100) : null,
+              note: null
+            };
+            withData += 1;
+          } else {
+            values[m.id] = { treats: null, basket: null, note: 'No Halloween data from Torn' };
+          }
+          streak = 0;
+        } catch (e) {
+          rethrowIfFatal(e);
+          if (!(e instanceof TornError)) throw e;
+          if (e.code === 5) {
+            stopText = describeError(5, 'treats') + ' It kept refusing after ' + RATE_LIMIT_RETRIES +
+              ' retries, so no snapshot was saved.';
+            break;
+          }
+          var reason = describeError(e.code, 'treats', e.text);
+          values[m.id] = { treats: null, basket: null, note: reason.slice(0, 200) };
+          failed += 1;
+          if (!firstFailure) firstFailure = reason;
+          if (e.code === 16 || e.code === 0) streak += 1; else streak = 0;
+          if (withData === 0 && streak >= STREAK_STOP) { stopText = firstFailure + ' No snapshot was saved.'; break; }
+        }
+      }
+      if (!isCurrent(op)) throw abortError();
+      if (stopText) {
+        put(op, 'treats', 'err', stopText);
+      } else if (failed === members.length) {
+        put(op, 'treats', 'err', firstFailure + ' No snapshot was saved.');
+      } else {
+        state.snaps.push({ takenAt: takenAt, values: values });
+        state.snaps.sort(function (a, b) { return a.takenAt - b.takenAt; });
+        state.trimNote = '';
+        while (state.snaps.length > SNAPSHOT_LIMIT) {
+          var gone = state.snaps.shift();
+          state.trimNote = 'The limit of ' + SNAPSHOT_LIMIT + ' snapshots was reached, so the oldest one (taken ' +
+            tctMinutes(gone.takenAt) + ' TCT) was removed.';
+        }
+        saveSnapshots();
+        put(op, 'treats', failed > 0 ? 'warn' : 'ok', 'Snapshot saved (' + tctMinutes(takenAt) + ' TCT): ' +
+          withData + ' of ' + members.length + ' members had Halloween data' +
+          (failed > 0 ? '; ' + failed + ' could not be read (' + firstFailure + ')' : '') + '.');
+      }
+    } catch (e) {
+      handleFatal(e);
+      if (!isAbort(e) && state.parts.treats.kind === 'work') setPart('treats', 'err', 'No snapshot was saved. See the message above.');
+    } finally {
+      endOp(op);
+      render();
+    }
+  }
+
+  /* ================================================================
+     The numbers
+     ================================================================ */
+
+  function newAcc(id, name) {
+    return {
+      id: id, name: name, nameAt: -1, attacks: 0, leaves: 0, mugs: 0, hosps: 0, other: 0, assists: 0,
+      losses: 0, retals: 0, bonus: 0, respect: 0, hitRespect: 0, bonusRespect: 0, partial: 0
+    };
+  }
+
+  function tallyRows(rows, scope) {
+    var accs = new Map();
+    var hidden = 0;
+    var partialAttacks = 0;
+    rows.forEach(function (r) {
+      if (scope === 'rw' && r[7] !== 1) return;
+      if (scope === 'nonrw' && r[7] !== 0) return;
+      if (r[2] === 0) { hidden += 1; return; }
+      var a = accs.get(r[2]);
+      if (!a) { a = newAcc(r[2], r[3]); accs.set(r[2], a); }
+      if (r[1] > a.nameAt) { a.nameAt = r[1]; a.name = r[3]; }
+      a.attacks += 1;
+      var result = RESULTS[r[4]];
+      var isHit = result === 'Attacked' || result === 'Mugged' || result === 'Hospitalized';
+      if (result === 'Attacked') a.leaves += 1;
+      else if (result === 'Mugged') a.mugs += 1;
+      else if (result === 'Hospitalized') a.hosps += 1;
+      else if (result === 'Arrested' || result === 'Looted' || result === 'Bounty' || result === 'Special') a.other += 1;
+      else if (result === 'Assist') a.assists += 1;
+      else a.losses += 1;
+      if (r[5] === null || r[9] === null) { a.partial += 1; partialAttacks += 1; }
+      if (r[5] !== null) a.respect += r[5];
+      if (isHit) {
+        if (r[5] !== null) a.hitRespect += r[5];
+        if (r[6] === 1) a.retals += 1;
+        if (BONUS_CHAINS.indexOf(r[8]) !== -1 && r[5] !== null && r[9] !== null && r[5] === r[9]) {
+          a.bonus += 1;
+          a.bonusRespect += r[5];
+        }
+      }
+    });
+    return { accs: accs, hidden: hidden, partialAttacks: partialAttacks };
+  }
+
+  function selectedSnapshots() {
+    var snaps = state.snaps;
+    if (snaps.length === 0) return { start: null, cmp: null };
+    function find(takenAt) {
+      for (var i = 0; i < snaps.length; i += 1) if (snaps[i].takenAt === takenAt) return snaps[i];
+      return null;
+    }
+    return {
+      start: find(state.settings.snapStart) || snaps[0],
+      cmp: find(state.settings.snapCmp) || snaps[snaps.length - 1]
+    };
+  }
+
+  function activityFor(id, win) {
+    if (!win.ok) return { vals: null, reason: 'Fix the times first.' };
+    if (nowSec() < win.from) return { vals: null, reason: 'Starts when the competition starts' };
+    if (state.activityErrors[id]) return { vals: null, reason: state.activityErrors[id] };
+    var s = state.stats.entries[statKey(id, 'start', win)];
+    var e = state.stats.entries[statKey(id, 'end', win)];
+    if (!s || !e) return { vals: null, reason: 'Not read yet' };
+    return {
+      vals: {
+        time: (e.v.timeplayed - s.v.timeplayed) / 3600,
+        xan: e.v.xantaken - s.v.xantaken,
+        refills: e.v.refills - s.v.refills,
+        cans: e.v.energydrinkused - s.v.energydrinkused,
+        candy: e.v.candyused - s.v.candyused
+      },
+      reason: ''
+    };
+  }
+
+  function computeView() {
+    var win = windowSeconds();
+    var hasAttacks = cacheMatches();
+    var tally = hasAttacks ? tallyRows(state.cache.rows, state.settings.scope)
+      : { accs: new Map(), hidden: 0, partialAttacks: 0 };
+    var sel = selectedSnapshots();
+    var rosterIds = {};
+    state.roster.forEach(function (m) { rosterIds[m.id] = true; });
+
+    function build(id, name, left) {
+      var a = tally.accs.get(id);
+      var r = { id: id, name: name, left: left, partial: 0 };
+      if (hasAttacks) {
+        var acc = a || newAcc(id, name);
+        var hits = acc.leaves + acc.mugs + acc.hosps;
+        var denominator = hits - acc.bonus;
+        r.leaves = acc.leaves; r.mugs = acc.mugs; r.hosps = acc.hosps; r.hits = hits;
+        r.other = acc.other; r.assists = acc.assists; r.losses = acc.losses;
+        r.retals = acc.retals; r.bonus = acc.bonus;
+        r.respect = round2(acc.respect);
+        // Only the respect from Hits counts here, so numerator and denominator cover the same attacks.
+        r.avg = denominator > 0 ? (acc.hitRespect - acc.bonusRespect) / denominator : null;
+        r.energy = ENERGY_PER_ATTACK * acc.attacks;
+        r.partial = acc.partial;
+      } else {
+        ['leaves', 'mugs', 'hosps', 'hits', 'other', 'assists', 'losses', 'retals', 'bonus', 'respect', 'avg', 'energy']
+          .forEach(function (k) { r[k] = null; });
+      }
+      var act = activityFor(id, win);
+      r.actReason = act.reason;
+      r.time = act.vals ? act.vals.time : null;
+      r.xan = act.vals ? act.vals.xan : null;
+      r.refills = act.vals ? act.vals.refills : null;
+      r.cans = act.vals ? act.vals.cans : null;
+      r.candy = act.vals ? act.vals.candy : null;
+      var s = sel.start ? sel.start.values[id] : null;
+      var c = sel.cmp ? sel.cmp.values[id] : null;
+      r.tStart = s && s.treats !== null ? s.treats : null;
+      r.tNow = c && c.treats !== null ? c.treats : null;
+      r.tGain = r.tStart !== null && r.tNow !== null ? r.tNow - r.tStart : null;
+      r.tBasket = c && c.basket ? c.basket : null;
+      return r;
+    }
+
+    var rows = [];
+    state.roster.forEach(function (m) { rows.push(build(m.id, m.name, false)); });
+    tally.accs.forEach(function (a, id) {
+      if (!rosterIds[id]) rows.push(build(id, a.name, state.rosterKnown));
+    });
+
+    var anyActivity = rows.some(function (r) { return r.time !== null; });
+    var cnt = function (snap) {
+      if (!snap) return null;
+      var ids = Object.keys(snap.values);
+      return { total: ids.length, withData: ids.filter(function (k) { return snap.values[k].treats !== null; }).length };
+    };
+    return {
+      win: win, hasAttacks: hasAttacks, rows: rows, hidden: tally.hidden, partialAttacks: tally.partialAttacks,
+      anyActivity: anyActivity, sel: sel, startCount: cnt(sel.start), cmpCount: cnt(sel.cmp),
+      leftCount: rows.filter(function (r) { return r.left; }).length
+    };
+  }
+
+  /* ================================================================
+     Leaders
+     ================================================================ */
+
+  var CATEGORIES = [
+    { id: 'hits', title: 'Most hits', need: 'attacks', val: function (r) { return r.hits; }, dec: 0, unit: ' hits' },
+    { id: 'retals', title: 'Most retals', need: 'attacks', val: function (r) { return r.retals; }, dec: 0, unit: ' retals' },
+    { id: 'respect', title: 'Most total respect', need: 'attacks', val: function (r) { return r.respect; }, dec: 2, unit: '' },
+    { id: 'avg', title: 'Best avg respect', need: 'attacks', val: function (r) { return r.avg; }, dec: 2, unit: '', min: true },
+    { id: 'tgain', title: 'Most treats gained', need: 'treats', val: function (r) { return r.tGain; }, dec: 0, unit: ' treats' },
+    { id: 'time', title: 'Most active time', need: 'activity', val: function (r) { return r.time; }, dec: 1, unit: ' h' },
+    { id: 'mugs', title: 'Most mugs', need: 'attacks', val: function (r) { return r.mugs; }, dec: 0, unit: ' mugs' },
+    { id: 'hosps', title: 'Most hosps', need: 'attacks', val: function (r) { return r.hosps; }, dec: 0, unit: ' hosps' },
+    { id: 'energy', title: 'Most energy on attacks (est.)', need: 'attacks', val: function (r) { return r.energy; }, dec: 0, unit: ' energy' }
+  ];
+
+  function roundTo(v, dec) { return dec === 2 ? round2(v) : dec === 1 ? round1(v) : Math.round(v); }
+  function fmtValue(v, dec) { return dec === 0 ? fmtInt(v) : fmtDec(v, dec); }
+
+  function nameCompare(a, b) { return a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }); }
+
+  function leadersFor(view, cat) {
+    var res = { cat: cat, ok: false, reason: '', list: [] };
+    if (cat.need === 'attacks' && !view.hasAttacks) {
+      res.reason = 'No attack data yet. Press Refresh.';
+      return res;
+    }
+    if (cat.need === 'activity' && !view.anyActivity) {
+      res.reason = nowSec() < (view.win.ok ? view.win.from : 0) ? 'Starts when the competition starts.'
+        : 'No activity data yet. Press Refresh.';
+      return res;
+    }
+    if (cat.need === 'treats' && !(view.sel.start && view.sel.cmp)) {
+      res.reason = 'No treat snapshot yet.';
+      return res;
+    }
+    var cand = view.rows.filter(function (r) {
+      var v = cat.val(r);
+      if (v === null || !(roundTo(v, cat.dec) > 0)) return false;
+      if (cat.min && r.hits < state.settings.minAvg) return false;
+      return true;
+    });
+    cand.sort(function (a, b) {
+      return roundTo(cat.val(b), cat.dec) - roundTo(cat.val(a), cat.dec) || nameCompare(a, b);
+    });
+    var place = 1;
+    var prev = null;
+    for (var i = 0; i < cand.length; i += 1) {
+      var v = roundTo(cat.val(cand[i]), cat.dec);
+      if (prev !== null && v !== prev) place = i + 1;
+      if (place > 3) break;
+      res.list.push({ place: place, row: cand[i], value: v });
+      prev = v;
+    }
+    res.ok = true;
+    if (res.list.length === 0) {
+      res.reason = cat.min ? 'Nobody has ' + state.settings.minAvg + ' hits yet.' : 'Nobody has any yet.';
+    }
+    return res;
+  }
+
+  /* ================================================================
+     Rendering
+     ================================================================ */
+
+  function setPart(name, kind, text) { state.parts[name] = { kind: kind, text: text }; }
+
+  // A stale operation never writes to the screen: a newer one owns it.
+  function put(op, name, kind, text) {
+    if (!isCurrent(op)) return;
+    setPart(name, kind, text);
+    renderParts();
+  }
+
+  function renderParts() {
+    var names = { attacks: 'partAttacks', activity: 'partActivity', treats: 'partTreats' };
+    Object.keys(names).forEach(function (k) {
+      var box = $(names[k]);
+      box.className = 'msg ' + (state.parts[k].kind === 'blocked' ? 'err' : state.parts[k].kind);
+      box.textContent = state.parts[k].text;
+    });
+  }
+
+  function showMsg(id, text) {
+    var box = $(id);
+    box.textContent = text || '';
+    box.hidden = !text;
+  }
+
+  function renderKeyPanel() {
+    var signedIn = !!state.key;
+    $('signedOut').hidden = signedIn;
+    $('signedIn').hidden = !signedIn;
+    $('signIn').disabled = state.busy;
+    showMsg('keyMsg', state.keyMsg);
+  }
+
+  function renderSettings(view) {
+    $('refreshBtn').disabled = state.busy || !state.key;
+    $('snapBtn').disabled = state.busy || !state.key;
+    $('importBtn').disabled = state.busy;
+    $('winFrom').value = state.settings.from;
+    $('winTo').value = state.settings.to;
+    $('minAvg').value = String(state.settings.minAvg);
+    Array.prototype.forEach.call(document.querySelectorAll('input[name="scope"]'), function (r) {
+      r.checked = r.value === state.settings.scope;
+    });
+    showMsg('winMsg', state.winMsg);
+    showMsg('generalMsg', state.generalMsg);
+
+    var asOf = $('asOf');
+    asOf.textContent = '';
+    var win = view.win;
+    if (!win.ok) {
+      asOf.textContent = '';
+    } else if (!view.hasAttacks) {
+      asOf.textContent = 'No attack data for this window yet. Press Refresh.';
+    } else {
+      var at = state.meta.asOfWindow === win.from + ':' + win.to ? state.meta.asOf : null;
+      if (state.attacksFailed) {
+        var stale = document.createElement('span');
+        stale.className = 'stale';
+        stale.textContent = 'STALE';
+        asOf.appendChild(stale);
+      }
+      asOf.appendChild(document.createTextNode(
+        (at !== null ? 'Data as of ' + tctSeconds(at) + ' TCT' : 'Data as of an earlier refresh') +
+        (state.attacksFailed ? '. The last refresh failed, so this is older data.' : '')));
+    }
+
+    renderParts();
+    var storageNote = $('storageNote');
+    storageNote.hidden = !state.cacheUnsaved;
+    storageNote.textContent = state.cacheUnsaved
+      ? 'Could not save to this browser; the data is kept until you close the page.' : '';
+  }
+
+  function snapLabel(s) {
+    var ids = Object.keys(s.values);
+    var withData = ids.filter(function (k) { return s.values[k].treats !== null; }).length;
+    return tctMinutes(s.takenAt) + ' TCT — ' + withData + ' of ' + ids.length + ' with Halloween data';
+  }
+
+  function fillSelect(select, chosen) {
+    select.textContent = '';
+    state.snaps.forEach(function (s) {
+      var option = document.createElement('option');
+      option.value = String(s.takenAt);
+      option.textContent = snapLabel(s);
+      select.appendChild(option);
+    });
+    select.disabled = state.snaps.length === 0;
+    if (chosen) select.value = String(chosen.takenAt);
+  }
+
+  function renderTreats(view) {
+    fillSelect($('snapStart'), view.sel.start);
+    fillSelect($('snapCmp'), view.sel.cmp);
+    $('snapCount').textContent = state.snaps.length === 0 ? 'No snapshots yet.'
+      : state.snaps.length + ' ' + plural(state.snaps.length, 'snapshot', 'snapshots') + ' saved (up to ' +
+        SNAPSHOT_LIMIT + ' are kept).';
+    var info = [];
+    if (view.sel.start) {
+      info.push('Start snapshot: ' + view.startCount.withData + ' of ' + view.startCount.total +
+        ' members had Halloween data.');
+    }
+    if (view.sel.cmp) {
+      info.push('Compare with: ' + view.cmpCount.withData + ' of ' + view.cmpCount.total +
+        ' members had Halloween data.');
+    }
+    if (view.sel.start && view.sel.cmp && view.sel.start.takenAt === view.sel.cmp.takenAt) {
+      info.push('Start and Compare with are the same snapshot, so nothing has been gained yet.');
+    }
+    $('snapInfo').textContent = info.join(' ');
+    showMsg('snapTrim', state.trimNote);
+  }
+
+  function renderLeaders(view) {
+    var host = $('leaders');
+    host.textContent = '';
+    CATEGORIES.forEach(function (cat) {
+      var res = leadersFor(view, cat);
+      var card = document.createElement('div');
+      card.className = 'lead';
+      card.setAttribute('data-cat', cat.id);
+      var h = document.createElement('h3');
+      h.textContent = cat.title;
+      card.appendChild(h);
+      if (res.list.length === 0) {
+        var none = document.createElement('p');
+        none.className = 'none';
+        none.textContent = res.reason;
+        card.appendChild(none);
+      } else {
+        var ol = document.createElement('ol');
+        res.list.forEach(function (item) {
+          var li = document.createElement('li');
+          var place = document.createElement('span');
+          place.className = 'place';
+          place.textContent = item.place + '.';
+          var who = document.createElement('span');
+          who.className = 'who';
+          who.textContent = item.row.name;
+          var val = document.createElement('span');
+          val.className = 'val';
+          val.textContent = fmtValue(item.value, cat.dec) + cat.unit;
+          li.appendChild(place); li.appendChild(who); li.appendChild(val);
+          ol.appendChild(li);
+        });
+        card.appendChild(ol);
+      }
+      host.appendChild(card);
+    });
+  }
+
+  var COLUMNS = [
+    { key: 'name', label: 'Member', text: true },
+    { key: 'hits', label: 'Hits', title: 'Leaves + Mugs + Hosps' },
+    { key: 'leaves', label: 'Leaves' },
+    { key: 'mugs', label: 'Mugs' },
+    { key: 'hosps', label: 'Hosps' },
+    { key: 'other', label: 'Other wins', title: 'Arrested + Looted + Bounty + Special. Not part of Hits.' },
+    { key: 'assists', label: 'Assists' },
+    { key: 'losses', label: 'Losses', title: 'Lost + Stalemate + Escape + Timeout + Interrupted + None' },
+    { key: 'retals', label: 'Retals', title: 'Hits where the retaliation modifier is above 1' },
+    { key: 'bonus', label: 'Bonus hits', title: 'Hits that landed on a chain bonus' },
+    { key: 'respect', label: 'Total respect', dec: 2 },
+    { key: 'avg', label: 'Avg respect', dec: 2, title: 'Without bonus hits' },
+    { key: 'energy', label: 'Energy on attacks (est.)', title: '25 energy per attack started. Revitalize refunds are not counted.' },
+    { key: 'time', label: 'Active time (h)', dec: 1, title: 'Torn returns these by day, so they cover whole days.' },
+    { key: 'xan', label: 'Xanax', title: 'Torn returns these by day, so they cover whole days.' },
+    { key: 'refills', label: 'Energy refills', title: 'Torn returns these by day, so they cover whole days.' },
+    { key: 'cans', label: 'Cans', title: 'Energy drinks used. Torn returns these by day, so they cover whole days.' },
+    { key: 'candy', label: 'Candy eaten', title: 'Torn returns these by day, so they cover whole days.' },
+    { key: 'tStart', label: 'Treats start' },
+    { key: 'tNow', label: 'Treats now' },
+    { key: 'tGain', label: 'Treats gained' }
+  ];
+
+  var ATTACK_KEYS = { hits: 1, leaves: 1, mugs: 1, hosps: 1, other: 1, assists: 1, losses: 1, retals: 1, bonus: 1, respect: 1, avg: 1, energy: 1 };
+  var ACTIVITY_KEYS = { time: 1, xan: 1, refills: 1, cans: 1, candy: 1 };
+
+  function sortRows(rows) {
+    var key = state.sortKey;
+    var dir = state.sortDir;
+    return rows.slice().sort(function (a, b) {
+      if (key === 'name') return nameCompare(a, b) * dir;
+      var av = a[key];
+      var bv = b[key];
+      if (av === null && bv === null) return nameCompare(a, b);
+      if (av === null) return 1;
+      if (bv === null) return -1;
+      if (av !== bv) return (av - bv) * dir;
+      return nameCompare(a, b);
+    });
+  }
+
+  function cellText(col, row, view) {
+    var v = row[col.key];
+    if (v === null || v === undefined) {
+      var why = '';
+      if (ATTACK_KEYS[col.key]) why = 'No attack data yet. Press Refresh.';
+      else if (ACTIVITY_KEYS[col.key]) why = row.actReason;
+      else if (col.key === 'tStart' || col.key === 'tNow' || col.key === 'tGain') {
+        why = view.sel.start && view.sel.cmp
+          ? 'This member has no Halloween data in the chosen snapshot.' : 'No treat snapshot yet.';
+      } else if (col.key === 'avg') {
+        why = row.hits !== null && row.hits - row.bonus <= 0 ? 'No hits besides bonus hits.' : '';
+      }
+      return { text: '—', title: why, none: true };
+    }
+    if (col.dec === 2) return { text: fmtDec(v, 2) };
+    if (col.dec === 1) return { text: fmtDec(v, 1) };
+    return { text: fmtInt(v) };
+  }
+
+  function renderTable(view) {
+    var head = $('headRow');
+    head.textContent = '';
+    COLUMNS.forEach(function (col) {
+      var th = document.createElement('th');
+      th.className = col.text ? 'name' : '';
+      th.setAttribute('data-col', col.key);
+      th.setAttribute('aria-sort', state.sortKey === col.key
+        ? (state.sortDir === 1 ? 'ascending' : 'descending') : 'none');
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = col.label;
+      if (col.title) b.title = col.title;
+      b.addEventListener('click', function () {
+        if (state.sortKey === col.key) state.sortDir = -state.sortDir;
+        else { state.sortKey = col.key; state.sortDir = col.text ? 1 : -1; }
+        renderTable(computeView());
+      });
+      th.appendChild(b);
+      head.appendChild(th);
+    });
+
+    var body = $('tbody');
+    body.textContent = '';
+    sortRows(view.rows).forEach(function (row) {
+      var tr = document.createElement('tr');
+      tr.setAttribute('data-id', String(row.id));
+      if (row.left) tr.className = 'gone';
+      COLUMNS.forEach(function (col) {
+        var td = document.createElement('td');
+        td.setAttribute('data-col', col.key);
+        if (col.text) {
+          td.className = 'name';
+          td.textContent = row.name;
+          td.title = row.name;
+          if (row.left) {
+            var left = document.createElement('span');
+            left.className = 'pill';
+            left.textContent = 'left';
+            left.title = 'No longer in the faction, but has attacks in the window.';
+            td.appendChild(left);
+          }
+          if (row.partial > 0) {
+            var partial = document.createElement('span');
+            partial.className = 'pill warn';
+            partial.textContent = 'partial';
+            partial.title = row.partial + ' ' + plural(row.partial, 'attack', 'attacks') +
+              ' lacked respect or modifier data, so respect, retals and bonus hits may be low.';
+            td.appendChild(partial);
+          }
+        } else {
+          var cell = cellText(col, row, view);
+          td.className = 'num' + (cell.none ? ' none' : '');
+          td.textContent = cell.text;
+          if (cell.title) td.title = cell.title;
+          if (col.key === 'tNow' && row.tBasket && !cell.none) td.title = row.tBasket;
+          if (col.key === 'tGain' && row.tGain !== null && row.tGain < 0) {
+            td.title = 'The count went down between snapshots — Torn may count spent treats';
+            var fell = document.createElement('span');
+            fell.className = 'pill bad';
+            fell.textContent = 'fell';
+            fell.title = td.title;
+            td.appendChild(fell);
+          }
+        }
+        tr.appendChild(td);
+      });
+      body.appendChild(tr);
+    });
+
+    var empty = $('tableEmpty');
+    empty.hidden = view.rows.length > 0;
+    if (view.rows.length === 0) {
+      empty.textContent = state.key ? 'Press Refresh to read the faction.' : 'Sign in and press Refresh.';
+    }
+
+    var notes = $('notes');
+    notes.textContent = '';
+    function note(text) {
+      var p = document.createElement('p');
+      p.className = 'hint-line';
+      p.textContent = text;
+      notes.appendChild(p);
+    }
+    note('25 energy per attack started. Revitalize refunds are not counted.');
+    note('Torn returns the activity columns by day, so they cover whole days.');
+    if (view.hidden > 0) {
+      note(fmtInt(view.hidden) + ' ' + plural(view.hidden, 'attack', 'attacks') +
+        ' had a hidden attacker and ' + plural(view.hidden, 'was', 'were') + ' not counted.');
+    }
+    if (view.partialAttacks > 0) {
+      note(fmtInt(view.partialAttacks) + ' ' + plural(view.partialAttacks, 'attack', 'attacks') +
+        ' lacked respect or modifier data. They are counted, but the members are marked partial and ' +
+        'their respect, retals and bonus hits may be low.');
+    }
+    if (view.leftCount > 0) {
+      note(view.leftCount + ' ' + plural(view.leftCount, 'member', 'members') +
+        ' left the faction but ' + plural(view.leftCount, 'has', 'have') + ' attacks in the window (marked left). ' +
+        'Their activity and treats are not read.');
+    }
+    if (view.rows.some(function (r) { return r.tGain !== null && r.tGain < 0; })) {
+      note('fell: the count went down between snapshots — Torn may count spent treats.');
+    }
+  }
+
+  function render() {
+    var view = computeView();
+    renderKeyPanel();
+    renderSettings(view);
+    renderTreats(view);
+    renderLeaders(view);
+    renderTable(view);
+  }
+
+  /* ================================================================
+     Copy, export, import
+     ================================================================ */
+
+  function escapeHtml(value) {
+    return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function standingsModel() {
+    var view = computeView();
+    var win = view.win;
+    var at = win.ok && state.meta.asOfWindow === win.from + ':' + win.to ? state.meta.asOf : null;
+    var model = {
+      windowText: win.ok ? tctMinutes(win.from) + ' – ' + tctMinutes(win.to) + ' TCT' : 'Window not set',
+      scopeText: SCOPES[state.settings.scope],
+      asOfText: view.hasAttacks && at !== null ? 'Data as of ' + tctSeconds(at) + ' TCT' : 'No attack data yet',
+      leaders: CATEGORIES.map(function (cat) {
+        var res = leadersFor(view, cat);
+        return {
+          title: cat.title, reason: res.reason,
+          list: res.list.map(function (item) {
+            return { place: item.place, name: item.row.name, value: fmtValue(item.value, cat.dec) + cat.unit };
+          })
+        };
+      }),
+      top: [],
+      notes: []
+    };
+    if (view.hasAttacks) {
+      model.top = view.rows.slice().sort(function (a, b) { return b.hits - a.hits || nameCompare(a, b); })
+        .slice(0, 10).map(function (r) {
+          return { name: r.name, hits: fmtInt(r.hits), retals: fmtInt(r.retals), respect: fmtDec(r.respect, 2) };
+        });
+    }
+    if (state.attacksFailed) {
+      model.notes.push('The last refresh failed, so these figures are older than the time above.');
+    }
+    if (view.hidden > 0) {
+      model.notes.push(fmtInt(view.hidden) + ' ' + plural(view.hidden, 'attack', 'attacks') + ' had a hidden attacker and ' +
+        plural(view.hidden, 'was', 'were') + ' not counted.');
+    }
+    if (view.partialAttacks > 0) {
+      model.notes.push(fmtInt(view.partialAttacks) + ' ' + plural(view.partialAttacks, 'attack', 'attacks') +
+        ' lacked respect or modifier data, so some figures may be low.');
+    }
+    return model;
+  }
+
+  function plainStandings() {
+    var m = standingsModel();
+    var lines = ['HALLOWEEN COMPETITION — PoIitically Incorrect', 'Window: ' + m.windowText,
+      'Scope: ' + m.scopeText, m.asOfText, '', 'LEADERS'];
+    m.leaders.forEach(function (c) {
+      lines.push(c.title);
+      if (c.list.length === 0) lines.push(c.reason);
+      c.list.forEach(function (i) { lines.push(i.place + '. ' + i.name + ' — ' + i.value); });
+      lines.push('');
+    });
+    lines.push('TOP 10 BY HITS');
+    if (m.top.length === 0) lines.push('No attack data yet.');
+    m.top.forEach(function (r, i) {
+      lines.push((i + 1) + '. ' + r.name + ' — ' + r.hits + ' hits — ' + r.retals + ' retals — ' + r.respect + ' respect');
+    });
+    if (m.notes.length) { lines.push(''); m.notes.forEach(function (n) { lines.push(n); }); }
+    return lines.join('\n');
+  }
+
+  function htmlStandings() {
+    var m = standingsModel();
+    var out = [];
+    var dash = ' &ndash; ';
+    function p(inner) { out.push('<p>' + inner + '</p>'); }
+    function gap() { out.push('<p>&nbsp;</p>'); }
+    function heading(text) { p('<span style="font-size: 16px;"><strong>' + text + '</strong></span>'); }
+    function b(text) { return '<strong>' + text + '</strong>'; }
+    p('<span style="font-size: 24px; text-decoration: underline;"><strong>HALLOWEEN COMPETITION</strong></span>');
+    p(b('PoIitically Incorrect') + dash + escapeHtml(m.windowText));
+    p('Scope: ' + escapeHtml(m.scopeText));
+    p(escapeHtml(m.asOfText));
+    gap();
+    heading('LEADERS');
+    m.leaders.forEach(function (c) {
+      p(b(escapeHtml(c.title)));
+      if (c.list.length === 0) p(escapeHtml(c.reason));
+      c.list.forEach(function (i) { p(i.place + '. ' + escapeHtml(i.name) + dash + b(escapeHtml(i.value))); });
+    });
+    gap();
+    heading('TOP 10 BY HITS');
+    if (m.top.length === 0) p('No attack data yet.');
+    m.top.forEach(function (r, i) {
+      p((i + 1) + '. ' + b(escapeHtml(r.name)) + dash + escapeHtml(r.hits) + ' hits' + dash +
+        escapeHtml(r.retals) + ' retals' + dash + escapeHtml(r.respect) + ' respect');
+    });
+    if (m.notes.length) { gap(); m.notes.forEach(function (n) { p(escapeHtml(n)); }); }
+    return out.join('\n');
+  }
+
+  var toastTimer = null;
+  function toast(text, bad) {
+    var box = $('toast');
+    box.className = 'msg ' + (bad ? 'err' : 'ok');
+    box.textContent = text;
+    box.hidden = false;
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { box.hidden = true; toastTimer = null; }, 6000);
+  }
+
+  function copyOut(build) {
+    var text = build();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { toast('Copied.'); },
+        function () { toast('Could not copy. Select the table and copy by hand.', true); });
+    } else {
+      toast('Clipboard unavailable in this browser.', true);
+    }
+  }
+
+  function exportJson() {
+    var payload = {
+      schema: 1, kind: 'ks-halloween-v1', exportedAt: nowSec(),
+      settings: {
+        from: state.settings.from, to: state.settings.to, scope: state.settings.scope,
+        minAvg: state.settings.minAvg, snapStart: state.settings.snapStart, snapCmp: state.settings.snapCmp
+      },
+      snapshots: state.snaps
+    };
+    var blob = new Blob([JSON.stringify(payload, null, 1)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'ks-halloween-' + tctMinutes(nowSec()).replace(/[: ]/g, '-') + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    toast('Exported settings and ' + state.snaps.length + ' ' + plural(state.snaps.length, 'snapshot', 'snapshots') + '.');
+  }
+
+  function importJson(text) {
+    var data;
+    try { data = JSON.parse(text); } catch (e) { toast('That file is not valid JSON. Nothing was imported.', true); return; }
+    if (!isObj(data) || data.schema !== 1 || data.kind !== 'ks-halloween-v1' || !isObj(data.settings) ||
+        !Array.isArray(data.snapshots)) {
+      toast('That file is not a Halloween export. Nothing was imported.', true);
+      return;
+    }
+    var s = data.settings;
+    if (parseWindowValue(s.from) === null || parseWindowValue(s.to) === null ||
+        parseWindowValue(s.to) < parseWindowValue(s.from) || !Object.prototype.hasOwnProperty.call(SCOPES, s.scope) ||
+        !Number.isSafeInteger(s.minAvg) || s.minAvg < 0 || s.minAvg > 100000) {
+      toast('The settings in that file are not valid. Nothing was imported.', true);
+      return;
+    }
+    if (data.snapshots.length > 200) { toast('That file has too many snapshots. Nothing was imported.', true); return; }
+    var incoming = [];
+    for (var i = 0; i < data.snapshots.length; i += 1) {
+      var clean = cleanSnapshot(data.snapshots[i]);
+      if (!clean) { toast('Snapshot ' + (i + 1) + ' in that file is not valid. Nothing was imported.', true); return; }
+      incoming.push(clean);
+    }
+    cancelOp();
+    state.settings = cleanSettings(s);
+    var byTime = new Map();
+    state.snaps.forEach(function (x) { byTime.set(x.takenAt, x); });
+    incoming.forEach(function (x) { byTime.set(x.takenAt, x); });
+    state.snaps = Array.from(byTime.values()).sort(function (a, b) { return a.takenAt - b.takenAt; });
+    state.trimNote = '';
+    while (state.snaps.length > SNAPSHOT_LIMIT) {
+      var gone = state.snaps.shift();
+      state.trimNote = 'The limit of ' + SNAPSHOT_LIMIT + ' snapshots was reached, so the oldest one (taken ' +
+        tctMinutes(gone.takenAt) + ' TCT) was removed.';
+    }
+    state.winMsg = '';
+    saveSettings();
+    saveSnapshots();
+    render();
+    toast('Imported settings and ' + incoming.length + ' ' + plural(incoming.length, 'snapshot', 'snapshots') + '.');
+  }
+
+  /* ================================================================
+     Wiring
+     ================================================================ */
+
+  function onWindowChange() {
+    state.settings.from = $('winFrom').value;
+    state.settings.to = $('winTo').value;
+    cancelOp();
+    var win = windowSeconds();
+    state.winMsg = win.ok ? '' : win.reason;
+    state.generalMsg = '';
+    state.attacksFailed = false;
+    state.activityErrors = {};
+    setPart('attacks', 'work', 'Not read yet.');
+    setPart('activity', 'work', 'Not read yet.');
+    saveSettings();
+    render();
+  }
+
+  $('winFrom').addEventListener('change', onWindowChange);
+  $('winTo').addEventListener('change', onWindowChange);
+
+  Array.prototype.forEach.call(document.querySelectorAll('input[name="scope"]'), function (radio) {
+    radio.addEventListener('change', function () {
+      if (!radio.checked) return;
+      state.settings.scope = radio.value;
+      saveSettings();
+      render();
+    });
+  });
+
+  $('minAvg').addEventListener('change', function () {
+    var n = Number($('minAvg').value.trim());
+    if (Number.isSafeInteger(n) && n >= 0 && n <= 100000) state.settings.minAvg = n;
+    saveSettings();
+    render();
+  });
+
+  $('snapStart').addEventListener('change', function () {
+    state.settings.snapStart = Number($('snapStart').value) || null;
+    saveSettings();
+    render();
+  });
+  $('snapCmp').addEventListener('change', function () {
+    state.settings.snapCmp = Number($('snapCmp').value) || null;
+    saveSettings();
+    render();
+  });
+
+  $('refreshBtn').addEventListener('click', function () { void refresh(); });
+  $('snapBtn').addEventListener('click', function () { void takeSnapshot(); });
+  $('copyTextBtn').addEventListener('click', function () { copyOut(plainStandings); });
+  $('copyHtmlBtn').addEventListener('click', function () { copyOut(htmlStandings); });
+  $('exportBtn').addEventListener('click', exportJson);
+  $('importBtn').addEventListener('click', function () { $('importFile').click(); });
+  $('importFile').addEventListener('change', function () {
+    var file = $('importFile').files && $('importFile').files[0];
+    $('importFile').value = '';
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { toast('That file is too large. Nothing was imported.', true); return; }
+    file.text().then(importJson, function () { toast('Could not read that file.', true); });
+  });
+
+  $('toggleKey').addEventListener('click', function () {
+    var input = $('apiKey');
+    var showing = input.type === 'text';
+    input.type = showing ? 'password' : 'text';
+    $('toggleKey').textContent = showing ? 'Show' : 'Hide';
+    $('toggleKey').setAttribute('aria-pressed', String(!showing));
+  });
+
+  async function signIn() {
+    var candidate = $('apiKey').value.trim();
+    if (!candidate) { state.keyMsg = 'Paste your key first.'; render(); return; }
+    if (state.busy) return;
+    $('apiKey').value = '';
+    state.key = candidate;
+    state.verifiedKey = '';
+    var op = startOp();
+    state.keyMsg = '';
+    state.generalMsg = '';
+    render();
+    try {
+      await ensureAccess(op.signal);
+      if (!isCurrent(op)) return;
+      lsSet(KEY_STORE, candidate);
+    } catch (e) {
+      if (isAbort(e)) return;
+      var wasDenied = e instanceof AccessDenied;
+      var terminal = e instanceof TornError && !!TERMINAL_CODES[e.code];
+      state.key = '';
+      state.verifiedKey = '';
+      lsDel(KEY_STORE);
+      state.keyMsg = wasDenied ? 'This key does not belong to a current member of faction 48039. Access denied.'
+        : describeThrown(e);
+      // A dropped connection or a busy Torn says nothing about the key, so it stays in the field.
+      if (!wasDenied && !terminal) $('apiKey').value = candidate;
+    } finally {
+      endOp(op);
+      render();
+    }
+  }
+
+  $('signIn').addEventListener('click', function () { void signIn(); });
+  $('apiKey').addEventListener('keydown', function (event) {
+    if (event.key === 'Enter') void signIn();
+  });
+  $('forgetKey').addEventListener('click', function () {
+    forgetKey();
+    state.keyMsg = '';
+    state.generalMsg = '';
+    render();
+    toast('Key removed from this browser.');
+  });
+
+  // Leaving the page ends everything: the queue is aborted and no timer is left running.
+  window.addEventListener('pagehide', function () {
+    if (state.ctrl) state.ctrl.abort();
+    if (toastTimer) clearTimeout(toastTimer);
+    state.pausedUntil = 0;
+  });
+
+  /* ================================================================
+     Start
+     ================================================================ */
+
+  state.settings = cleanSettings(readJson(STORE.settings));
+  state.cache = loadCache();
+  state.snaps = loadSnapshots();
+  state.stats = loadStats();
+  state.meta = loadMeta();
+  state.roster = state.meta.roster.slice();
+  state.rosterKnown = false;
+  state.key = lsGet(KEY_STORE) || '';
+  render();
+})();
+</script>
+</body>
+</html>
