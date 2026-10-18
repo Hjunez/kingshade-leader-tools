@@ -455,7 +455,8 @@
             estimate: Torn's wiki does not say whether energy is spent on every outcome.</dd>
           <dt>Activity</dt>
           <dd>The difference in Torn's personal stats between the start and the end of the window.
-            Torn returns these by day, so they cover whole days.</dd>
+            Torn returns these by day, so they cover whole days, and it adds each day a day or
+            more late. A stat Torn has never recorded for a member counts as 0.</dd>
           <dt>Treats</dt>
           <dd>The difference between two snapshots. It is not known whether Torn's count drops when a
             member spends treats, so a count that went down is marked <em>fell</em> and not hidden.</dd>
@@ -494,12 +495,17 @@
   var TORN_CALLS_PER_MINUTE = 50;
   var MIN_GAP_MS = Math.ceil(60000 / TORN_CALLS_PER_MINUTE);
   var RATE_LIMIT_WAIT_MS = 60000;
+  // The request leaves a few ms after its slot is taken, so the pace keeps a small margin on top.
+  var PACE_MARGIN_MS = 25;
   var RATE_LIMIT_RETRIES = 3;
   var MAX_ATTACK_PAGES = 600;
   var SNAPSHOT_LIMIT = 50;
   var LIVE_STAT_TTL_MS = 10 * 60 * 1000;
   var ENERGY_PER_ATTACK = 25;
   var OVERLAP_SECONDS = 300;
+  // Torn writes personal-stat history once a day and a day or more late (measured 2026-10-18: at 20:33
+  // TCT the newest value was from 00:00 the day before). A value is final only when read this long after its date.
+  var STAT_SETTLE_SECONDS = 3 * 86400;
   var STREAK_STOP = 5;
 
   var DEFAULT_FROM = '2026-10-25T10:00';
@@ -708,7 +714,7 @@
         if (!Number.isFinite(e.v[STAT_NAMES[i]])) return;
         v[STAT_NAMES[i]] = e.v[STAT_NAMES[i]];
       }
-      clean[k] = { at: e.at, ts: Number.isFinite(e.ts) ? e.ts : 0, v: v };
+      clean[k] = { at: e.at, ts: Number.isFinite(e.ts) ? e.ts : 0, upd: Number.isFinite(e.upd) ? e.upd : 0, v: v };
     });
     return { schema: 1, entries: clean };
   }
@@ -795,13 +801,13 @@
     for (;;) {
       if (signal.aborted) throw abortError();
       var t = perfNow();
-      while (state.callTimes.length && t - state.callTimes[0] >= 60000) state.callTimes.shift();
+      while (state.callTimes.length && t - state.callTimes[0] >= 60000 + PACE_MARGIN_MS) state.callTimes.shift();
       var wait = 0;
       if (state.callTimes.length) {
-        wait = Math.max(wait, MIN_GAP_MS - (t - state.callTimes[state.callTimes.length - 1]));
+        wait = Math.max(wait, MIN_GAP_MS + PACE_MARGIN_MS - (t - state.callTimes[state.callTimes.length - 1]));
       }
       if (state.callTimes.length >= TORN_CALLS_PER_MINUTE) {
-        wait = Math.max(wait, 60000 - (t - state.callTimes[0]));
+        wait = Math.max(wait, 60000 + PACE_MARGIN_MS - (t - state.callTimes[0]));
       }
       if (state.pausedUntil > t) {
         wait = Math.max(wait, state.pausedUntil - t);
@@ -1109,7 +1115,10 @@
   function entryFresh(entry, key) {
     if (!entry) return false;
     if (key.slice(-5) === ':live') return nowMs() - entry.at < LIVE_STAT_TTL_MS;
-    return true;
+    // Read long enough after its date: Torn will not change it any more.
+    if (entry.at >= (entry.ts + STAT_SETTLE_SECONDS) * 1000) return true;
+    // Read too early: Torn may still add that day, so it is only as fresh as a live value.
+    return nowMs() - entry.at < LIVE_STAT_TTL_MS;
   }
 
   async function readStats(id, ts, op) {
@@ -1121,18 +1130,24 @@
       throw new TornError(-2, 'Torn answered, but not with personal stats.', 'activity');
     }
     var v = {};
-    var missing = [];
+    var upd = 0;
+    var bad = [];
     STAT_NAMES.forEach(function (name) {
       var hit = null;
       for (var i = 0; i < list.length; i += 1) {
         if (list[i] && list[i].name === name) { hit = list[i]; break; }
       }
-      if (hit && Number.isFinite(hit.value)) v[name] = hit.value; else missing.push(name);
+      // The spec: a stat that did not exist at the timestamp is not returned at all. Measured
+      // 2026-10-18: members with 0 energy drinks get no energydrinkused back. Absent means 0.
+      if (!hit) { v[name] = 0; return; }
+      if (!Number.isFinite(hit.value)) { bad.push(name); return; }
+      v[name] = hit.value;
+      if (Number.isFinite(hit.timestamp) && hit.timestamp > upd) upd = hit.timestamp;
     });
-    if (missing.length) {
-      throw new TornError(-2, 'Torn did not return ' + missing.join(', ') + '.', 'activity');
+    if (bad.length) {
+      throw new TornError(-2, 'Torn returned ' + bad.join(', ') + ' without a number.', 'activity');
     }
-    return v;
+    return { v: v, upd: upd };
   }
 
   async function activityPart(op, win, rosterFresh) {
@@ -1165,10 +1180,12 @@
         var memberError = null;
         try {
           if (needStart) {
-            state.stats.entries[startKey] = { at: nowMs(), ts: win.from, v: await readStats(m.id, win.from, op) };
+            var gotStart = await readStats(m.id, win.from, op);
+            state.stats.entries[startKey] = { at: nowMs(), ts: win.from, upd: gotStart.upd, v: gotStart.v };
           }
           if (needEnd) {
-            state.stats.entries[endKey] = { at: nowMs(), ts: endTs, v: await readStats(m.id, endTs, op) };
+            var gotEnd = await readStats(m.id, endTs, op);
+            state.stats.entries[endKey] = { at: nowMs(), ts: endTs, upd: gotEnd.upd, v: gotEnd.v };
           }
         } catch (e) {
           rethrowIfFatal(e);
@@ -1193,13 +1210,21 @@
     } finally {
       saveStats();
     }
+    // The newest day Torn has written for any member, so a 0 is not mistaken for no activity.
+    var newest = 0;
+    members.forEach(function (mm) {
+      var e = state.stats.entries[statKey(mm.id, 'end', win)];
+      if (e && e.upd > newest) newest = e.upd;
+    });
+    var upTo = newest > 0 ? ' Torn\u2019s numbers run to ' + tctMinutes(newest).slice(0, 10) +
+      '; Torn adds each day a day or more late.' : '';
     if (stopText) {
       put(op, 'activity', 'err', stopText);
     } else if (failed > 0) {
       put(op, 'activity', 'warn', 'Read activity for ' + (members.length - failed) + ' of ' + members.length +
-        ' members. ' + failed + ' could not be read: ' + firstFailure + (failed > 1 ? ' (and others; hover a dash in the table.)' : ''));
+        ' members. ' + failed + ' could not be read: ' + firstFailure + (failed > 1 ? ' (and others; hover a dash in the table.)' : '') + upTo);
     } else {
-      put(op, 'activity', 'ok', 'Read activity for ' + members.length + ' ' + plural(members.length, 'member', 'members') + '.');
+      put(op, 'activity', 'ok', 'Read activity for ' + members.length + ' ' + plural(members.length, 'member', 'members') + '.' + upTo);
     }
   }
 
@@ -1832,7 +1857,7 @@
       notes.appendChild(p);
     }
     note('25 energy per attack started. Revitalize refunds are not counted.');
-    note('Torn returns the activity columns by day, so they cover whole days.');
+    note('Torn returns the activity columns by day, so they cover whole days, and it adds each day a day or more late.');
     if (view.hidden > 0) {
       note(fmtInt(view.hidden) + ' ' + plural(view.hidden, 'attack', 'attacks') +
         ' had a hidden attacker and ' + plural(view.hidden, 'was', 'were') + ' not counted.');
