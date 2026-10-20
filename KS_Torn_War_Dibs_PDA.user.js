@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PDA
 // @namespace    kingshade.torn
-// @version      1.5.188
+// @version      1.5.189
 // @description  Roster-local PDA presentation with v1.5.145 authority and shared-claim safety.
 // @author       Kingshade
 // @match        https://www.torn.com/factions.php*
@@ -15,6 +15,47 @@
 // ==/UserScript==
 
 /*
+ * 1.5.189 (2026-10-18): the life readings survive an app or tab switch. Same
+ * fix as PC 1.1.13. ONE MAIN CHANGE. Name, namespace, update address and every
+ * storage name are those of 1.5.188.
+ * FIXED
+ *   - Every time the app lost focus or the tab was switched, the life readings
+ *     behind the pink low-life cell were thrown away (suspendRuntime ->
+ *     invalidateTornCredentialRequests -> resetLifeState), and once more when
+ *     the identity was read again on return (refreshCurrentWarSurface). The
+ *     same target could not be read again at once (10 s per target, 20 reads a
+ *     minute, both kept over a switch on purpose), so the pink cell was gone for
+ *     a while after every return (measured in 1.5.188 against stand-in
+ *     services: pink for 3-93 % of the time with a 5 s switch every 10 s).
+ * CHANGED
+ *   - Losing focus or visibility keeps the readings that were already made. A
+ *     reading still counts for 15 s only (lifeMaxAgeMs, unchanged) and only for
+ *     the war and the opponent faction it was read for (each reading now
+ *     carries both). A read that is in flight when the app loses focus is cut
+ *     off and not stored, as before.
+ *   - A change of war or opponent faction drops the readings of the other war
+ *     or faction. A change of the Torn key, "Forget Torn key", Torn PDA's key
+ *     being refused, the war surface going away while the script is active and
+ *     the script being shut down still empty everything, as before.
+ *   - The identity is still read again on every return, as before. No new
+ *     request, no new limit: the number of life reads is unchanged.
+ * KNOWN ISSUES
+ *   - A candidate without a fresh life read still shows FFX.XX (locked) until
+ *     the read arrives, and a tap cannot start that read. To be fixed in a
+ *     later version.
+ *   - Every return to the app still reads the key's identity again (4 Torn
+ *     calls: key/info, faction/wars, opponent members, user basic). With very
+ *     frequent switches (every 3 s) that fills the Torn limit and the life
+ *     queue gets no room (1.5.187, finding F3): pink 13-27 % of the time in
+ *     that measurement. To be fixed in a later version.
+ * VERIFICATION
+ *   - Synthetic only: the whole script in Chromium (touch emulation) against
+ *     stand-in Torn, FFScouter and KS servers. Never run in Torn PDA or
+ *     against the real Torn, FFScouter or KS server. See RAPPORT_PDA_1.5.189.txt.
+ * Everything else is unchanged from 1.5.188: the DIBS rules (FF 2.00-3.40,
+ * hospital 2:00 or less, low life 4.50), the limits, the clock, the server,
+ * the texts, the storage and the panel.
+ *
  * 1.5.188 (2026-10-17): the life queue reads only the targets whose life can
  * change the DIBS decision. Same fix as PC 1.1.12, except its title change:
  * the PDA DIBS button has no title. ONE MAIN CHANGE. Name, namespace, update
@@ -351,8 +392,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs",
-    version: "1.5.188",
-    instanceKey: "__ksTornWarDibsPdaV15188Test",
+    version: "1.5.189",
+    instanceKey: "__ksTornWarDibsPdaV15189Test",
     layerId: "ks-twd-pda-layer",
     rowHostPrefix: "ks-twd-pda-row-",
     panelId: "ks-twd-pda-panel",
@@ -768,8 +809,8 @@
     sharedClaimsVerifiedAt = 0;
   }
 
-  function invalidateTornCredentialRequests() {
-    resetLifeState();
+  function invalidateTornCredentialRequests({ keepLife = false } = {}) {
+    if (keepLife) cancelLifeReads(); else resetLifeState();
     tornCredentialEpoch += 1;
     publicBasicRequestSerial += 1;
     selfIdentityRequestSerial += 1;
@@ -3525,7 +3566,8 @@
     opponentFactionId = selected.opponentFactionId;
     if (previousOpponent !== opponentFactionId) opponentMembersState = { factionId: opponentFactionId, members: new Map(), fetchedAt: 0 };
     if (identityChanged) {
-      resetLifeState();
+      cancelLifeReads();
+      pruneLifeCache(selected.warId, selected.opponentFactionId);
       warSurfaceSerial += 1;
       invalidateOwnWarsState();
       prewarObservation = null;
@@ -3827,12 +3869,26 @@
   }
 
   // Rate timestamps survive suspend so blur/focus cannot bypass the limits.
-  // Life values and the active queue are invalidated at every context change.
-  function resetLifeState() {
+  // 1.5.189: cancelLifeReads() ends the active queue and any read in flight (a
+  // read that is cut off is not stored) but keeps what was already read.
+  // resetLifeState() also empties the cache; it is used where the key or the
+  // war surface itself goes away. pruneLifeCache() drops only the readings
+  // taken for another war or another opponent.
+  function cancelLifeReads() {
     lifeContextSerial += 1;
-    lifeCache.clear();
     lifeReadController?.abort();
     if (lifeClaimWaitCancel) lifeClaimWaitCancel();
+  }
+
+  function resetLifeState() {
+    cancelLifeReads();
+    lifeCache.clear();
+  }
+
+  function pruneLifeCache(warId, opponentId) {
+    for (const [targetId, entry] of [...lifeCache.entries()]) {
+      if (entry.warId !== warId || entry.opponentFactionId !== opponentId) lifeCache.delete(targetId);
+    }
   }
 
   function syncLifeCredential() {
@@ -3890,12 +3946,14 @@
     const maximum = profile.life?.maximum;
     if (!Number.isSafeInteger(current) || current < 0 || !Number.isSafeInteger(maximum) || maximum <= 0 || current > maximum) return null;
     if (!Number.isFinite(fetchedAt)) return null;
-    return { current, maximum, ratio: current / maximum, fetchedAt, source: "torn-profile", schemaVersion: 1 };
+    return { current, maximum, ratio: current / maximum, fetchedAt, source: "torn-profile", schemaVersion: 2 };
   }
 
+  // 1.5.189: a reading counts only for the war and the opponent it was read for.
   function freshLifeForTarget(targetId) {
     const entry = lifeCache.get(String(targetId));
-    if (!entry || entry.source !== "torn-profile" || entry.schemaVersion !== 1) return null;
+    if (!entry || entry.source !== "torn-profile" || entry.schemaVersion !== 2) return null;
+    if (!currentWarSurface || entry.warId !== currentWarSurface.warId || entry.opponentFactionId !== opponentFactionId) return null;
     const age = nowMs() - entry.fetchedAt;
     return Number.isFinite(age) && age >= 0 && age <= CONFIG.lifeMaxAgeMs ? entry : null;
   }
@@ -3968,7 +4026,7 @@
         // The start time is conservative: a delayed response cannot gain freshness.
         const entry = normalizeTargetLife(result.body, id, startedAt);
         if (!entry || (lifeCache.get(id)?.fetchedAt ?? -Infinity) > entry.fetchedAt) return null;
-        lifeCache.set(id, entry);
+        lifeCache.set(id, { ...entry, warId, opponentFactionId: opponentId });
         updatePanel();
         scanWarRows();
         return freshLifeForTarget(id);
@@ -7411,7 +7469,7 @@
     // 1.5.187: the FF values and the time of the last read are kept. Each value
     // still expires on its own after fairFightMaxAgeMs (scoutStatsForTarget),
     // and a key change or "Forget FF key" still clears them.
-    invalidateTornCredentialRequests();
+    invalidateTornCredentialRequests({ keepLife: true });
     ownWarsState = emptyOwnWarsState();
     opponentMembersState = { factionId: "", members: new Map(), fetchedAt: 0 };
     currentWarSurface = null;
@@ -7456,6 +7514,7 @@
   function destroy() {
     if (destroyed) return;
     if (runtimeActive) suspendRuntime();
+    resetLifeState();
     destroyed = true;
     runtimeActive = false;
     runtimeGeneration += 1;
