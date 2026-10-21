@@ -458,7 +458,9 @@
             Torn returns these by day, so they cover whole days, and it adds each day a day or
             more late. A stat Torn has never recorded for a member counts as 0.</dd>
           <dt>Treats</dt>
-          <dd>The difference between two snapshots. It is not known whether Torn's count drops when a
+          <dd>The difference between two snapshots. A member with no Halloween data in the Start snapshot
+            (Torn shows the previous competition until a player's own event has begun) is counted from
+            their first snapshot with Halloween data. It is not known whether Torn's count drops when a
             member spends treats, so a count that went down is marked <em>fell</em> and not hidden.</dd>
         </dl>
       </div>
@@ -1468,13 +1470,29 @@
       r.refills = act.vals ? act.vals.refills : null;
       r.cans = act.vals ? act.vals.cans : null;
       r.candy = act.vals ? act.vals.candy : null;
-      var s = sel.start ? sel.start.values[id] : null;
       var c = sel.cmp ? sel.cmp.values[id] : null;
-      r.tStart = s && s.treats !== null ? s.treats : null;
+      var first = firstTreats(id, sel);
+      r.tStart = first ? first.treats : null;
+      r.tStartAt = first ? first.takenAt : null;
+      r.tStartLater = !!(first && sel.start && first.takenAt !== sel.start.takenAt);
       r.tNow = c && c.treats !== null ? c.treats : null;
       r.tGain = r.tStart !== null && r.tNow !== null ? r.tNow - r.tStart : null;
       r.tBasket = c && c.basket ? c.basket : null;
       return r;
+    }
+
+    // Measured 2026-10-20: before the event Torn still answers with the previous competition, and every
+    // player's Halloween starts at their own time (10:00-16:00 TCT). So a member's start is their first
+    // snapshot with Halloween data, from the chosen Start snapshot up to Compare with.
+    function firstTreats(id, sel) {
+      if (!sel.start || !sel.cmp) return null;
+      for (var i = 0; i < state.snaps.length; i += 1) {
+        var snap = state.snaps[i];
+        if (snap.takenAt < sel.start.takenAt || snap.takenAt > sel.cmp.takenAt) continue;
+        var v = snap.values[id];
+        if (v && v.treats !== null) return { treats: v.treats, takenAt: snap.takenAt };
+      }
+      return null;
     }
 
     var rows = [];
@@ -1492,7 +1510,8 @@
     return {
       win: win, hasAttacks: hasAttacks, rows: rows, hidden: tally.hidden, partialAttacks: tally.partialAttacks,
       anyActivity: anyActivity, sel: sel, startCount: cnt(sel.start), cmpCount: cnt(sel.cmp),
-      leftCount: rows.filter(function (r) { return r.left; }).length
+      leftCount: rows.filter(function (r) { return r.left; }).length,
+      laterStarts: rows.filter(function (r) { return r.tStartLater; }).length
     };
   }
 
@@ -1828,6 +1847,10 @@
           td.textContent = cell.text;
           if (cell.title) td.title = cell.title;
           if (col.key === 'tNow' && row.tBasket && !cell.none) td.title = row.tBasket;
+          if (col.key === 'tStart' && row.tStartLater && !cell.none) {
+            td.title = 'Counted from ' + tctMinutes(row.tStartAt) +
+              ' TCT, the first snapshot with Halloween data for this member.';
+          }
           if (col.key === 'tGain' && row.tGain !== null && row.tGain < 0) {
             td.title = 'The count went down between snapshots — Torn may count spent treats';
             var fell = document.createElement('span');
@@ -1871,6 +1894,10 @@
       note(view.leftCount + ' ' + plural(view.leftCount, 'member', 'members') +
         ' left the faction but ' + plural(view.leftCount, 'has', 'have') + ' attacks in the window (marked left). ' +
         'Their activity and treats are not read.');
+    }
+    if (view.laterStarts > 0) {
+      note(view.laterStarts + ' ' + plural(view.laterStarts, 'member is', 'members are') +
+        ' counted from a later snapshot, the first one with Halloween data for them. Hover Treats start to see when.');
     }
     if (view.rows.some(function (r) { return r.tGain !== null && r.tGain < 0; })) {
       note('fell: the count went down between snapshots — Torn may count spent treats.');
