@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PC
 // @namespace    kingshade.torn
-// @version      1.1.13
+// @version      1.1.14
 // @downloadURL  https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @description  PC TEST: DIBS as a native roster column beside Torn's Attack cell; FF and Est from FFScouter's get-stats API. War Stuff Enhanced is detected and shown read-only; it never blocks.
@@ -17,6 +17,53 @@
 // ==/UserScript==
 
 /*
+ * KS Torn War Dibs PC v1.1.14 -- CANDIDATE (hotfix during the war)
+ *
+ * ONE MAIN CHANGE: the panel says why it is read-only while you travel. Name,
+ * namespace, update address and every storage name are those of 1.1.13.
+ *
+ * ADDED
+ *   - While travelling, Torn sends you from your own faction's war address
+ *     (factions.php?step=your&type=1#/war/rank) to your own faction's profile
+ *     address (factions.php?step=profile&ID=<your faction>#/war/rank). That is
+ *     a VIEW address, so the panel only said "War Room: VIEW read-only". On a
+ *     profile war address the War Room line now reads:
+ *       "<Torn's status text> -- DIBS works when you are back in Torn"
+ *         your own faction's war and Torn says you are Traveling or Abroad
+ *         (the text is Torn's status.description, at most 60 characters; the
+ *         word Traveling or Abroad when it is empty),
+ *       "Your own war, read-only here -- open Faction -> War to use DIBS"
+ *         your own faction's war, any other or unknown status,
+ *       "War Room: VIEW read-only"
+ *         any other faction, or the key owner is not known (as before).
+ *   - To know whose faction that is, VIEW asks Torn once who the Torn key
+ *     belongs to (GET /v2/key/info), kept in page memory only, for the text
+ *     above and nothing else. It gives no permission to anything. The own
+ *     status is read from the members list VIEW already fetches.
+ * CHANGED
+ *   - VIEW may make one more request: /v2/key/info, only on a profile war
+ *     address, at most once per page load and key (a new try at the earliest
+ *     30 s after a failure). Everything else VIEW may fetch is as in 1.1.13:
+ *     the members list of the factions on the page and FFScouter's get-stats.
+ *     The request is allowed only for the single call fetchViewKeyOwner makes;
+ *     the identity checks that the own mode runs (and that are refused in VIEW,
+ *     as before) are not let through.
+ *   - The page is still VIEW: no claim, no release, no report, no request to
+ *     the KS War Room server, no /wars, no life reads, "TEST · VIEW" in the
+ *     panel. selfPlayerId, selfFactionId and keyScopeReady are never set by
+ *     VIEW. A change of the Torn key (Save, Forget) forgets the key owner.
+ * KNOWN ISSUES
+ *   - A candidate without a fresh life read still shows FFX.XX (locked) until
+ *     the read arrives, and a click cannot start that read. To be fixed in a
+ *     later version.
+ *   - The RW line still reads "RW: UNKNOWN" while you travel (VIEW does not
+ *     fetch /wars).
+ * VERIFICATION
+ *   - Synthetic only: the whole script in Chromium against stand-in backends.
+ *     Not run against the real Torn or FFScouter, and not run while travelling
+ *     in the real game. See RAPPORT_PC_1.1.14.txt.
+ *
+ * ---------------------------------------------------------------------------
  * KS Torn War Dibs PC v1.1.13 -- CANDIDATE (hotfix during the war)
  *
  * ONE MAIN CHANGE: the life readings survive a window switch. Name, namespace,
@@ -515,11 +562,13 @@
  * PDA still carries the + 1, so PDA and PC will differ by one second until the
  * same correction is made there.
  *
- * Everything else in VIEW mode stays refused at the transport: no FFScouter
- * traffic, no shared claim reads or writes, no own-wars call, no key/info, no
- * target basic check. The faction ID is pinned to the one in the URL, so VIEW
- * cannot be pointed at any other faction. The button stays locked; no CLAIM or
- * RELEASE is reachable.
+ * Everything else in VIEW mode stays refused at the transport: no shared claim
+ * reads or writes, no own-wars call, no target basic check. (Written for
+ * v1.0.x, which also refused FFScouter and key/info in VIEW. Since v0.1.0 VIEW
+ * also reads FFScouter's get-stats, and since v1.1.14 it reads /v2/key/info
+ * once on a profile war address, for the War Room line only.) The faction ID
+ * is pinned to the one in the URL, so VIEW cannot be pointed at any other
+ * faction. The button stays locked; no CLAIM or RELEASE is reachable.
  *
  * Live-war behaviour, shared DIBS authority and the claim engine are unchanged. Built from v1.0.13 RELEASE (169,007 bytes,
  * SHA-256 723A0582A7EAE95E830313DCF67F6C208719D6A6EC74EC504583639D0E74A313).
@@ -540,7 +589,8 @@
  *
  * VIEW mode: on any other faction's /war/rank route the column renders
  * read-only. While VIEW mode is active every network call is refused at the
- * transport and every shared write is refused at the control.
+ * transport, except the few listed at isViewModePermittedRequest, and every
+ * shared write is refused at the control.
  *
  * Shared DIBS authority, CLAIM/QUEUED/RELEASE semantics, credential guards and
  * the target decision engine are unchanged from v1.0.13.
@@ -554,8 +604,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs PC",
-    version: "1.1.13",
-    instanceKey: "__ksTornWarDibsPcV1113",
+    version: "1.1.14",
+    instanceKey: "__ksTornWarDibsPcV1114",
     rowHostPrefix: "ks-twd-wse-row-v010-",
     rosterStyleId: "ks-twd-wse-roster-style-v010",
     panelId: "ks-twd-wse-panel",
@@ -809,6 +859,16 @@
   let keyScopeReady = false;
   let apiKeyStorageReady = false;
   let tornTransportFailureStreak = 0;
+  // 1.1.14: whose Torn key this is, as VIEW learned it on a profile war address.
+  // Used for the War Room line and nothing else: it is NOT selfPlayerId /
+  // selfFactionId / keyScopeReady, gives no permission to anything and is never
+  // stored. Emptied together with the other Torn-key state (see
+  // invalidateTornCredentialRequests).
+  let viewKeyOwner = emptyViewKeyOwner();
+  // True only for the synchronous moment fetchViewKeyOwner hands its request to
+  // the transport (see isViewModePermittedRequest).
+  let viewKeyInfoGrant = false;
+  const VIEW_KEY_OWNER_RETRY_MS = 30000;
   let ownWarsState = {
     live: false,
     warId: "",
@@ -919,6 +979,10 @@
     ownWarsState = emptyOwnWarsState();
   }
 
+  function emptyViewKeyOwner() {
+    return { epoch: -1, key: "", playerId: "", factionId: "", failedAt: 0, inFlight: false };
+  }
+
   function invalidateSharedReads() {
     sharedAuthorityEpoch += 1;
     sharedRequestSerial += 1;
@@ -928,6 +992,7 @@
   function invalidateTornCredentialRequests() {
     tornCredentialEpoch += 1;
     resetLifeState();
+    viewKeyOwner = emptyViewKeyOwner();
     selfIdentityRequestSerial += 1;
     tornStatusRequestSerial += 1;
     selfIdentitySyncing = false;
@@ -1521,14 +1586,18 @@
 
   // VIEW mode allowlist. Fail closed: anything that is not exactly the members
   // endpoint for a faction rendered on the current page is refused. v0.1.0 adds
-  // exactly one more permitted request, FFScouter's get-stats: it only reads FF
-  // and battle-stat estimates and touches no claim. The KS War Room server
-  // stays refused.
+  // one more permitted request, FFScouter's get-stats: it only reads FF and
+  // battle-stat estimates and touches no claim. v1.1.14 adds one more, Torn's
+  // /v2/key/info: only on a profile war address (viewedFactionIdFromRoute() is
+  // not empty) and only for the call fetchViewKeyOwner makes (viewKeyInfoGrant),
+  // which asks whose key this is so the War Room line can say why VIEW is
+  // read-only. The KS War Room server stays refused.
   function isViewModePermittedRequest(rawUrl) {
     try {
       const url = new URL(String(rawUrl || ""));
       if (url.origin === SCRIPT.ffscouterOrigin && url.pathname === STATS_API.getStats) return true;
       if (url.origin !== SCRIPT.tornApiOrigin) return false;
+      if (url.pathname === SCRIPT.tornKeyInfoPath) return viewKeyInfoGrant && viewedFactionIdFromRoute() !== "";
       return viewPermittedFactionIds().some(id => url.pathname === `/v2/faction/${id}/members`);
     } catch {
       return false;
@@ -3496,6 +3565,74 @@
     } finally {
       viewMembersInFlight = false;
     }
+  }
+
+  // 1.1.14: whose Torn key this is, asked once on a profile war address so the
+  // War Room line can say why VIEW is read-only (see viewWarRoomLineText). Never
+  // sets selfPlayerId, selfFactionId or keyScopeReady, makes no other request
+  // (no capability check) and stores nothing. Not repeated for the same key
+  // and credential epoch; after a failure not before VIEW_KEY_OWNER_RETRY_MS.
+  async function fetchViewKeyOwner() {
+    if (!viewOnlyMode() || viewedFactionIdFromRoute() === "") return false;
+    const key = effectiveTornApiKey();
+    if (!key || !runtimeActive || !isRuntimeEligible()) return false;
+    const credentialEpoch = tornCredentialEpoch;
+    const owner = viewKeyOwner;
+    if (owner.inFlight) return false;
+    if (owner.playerId && owner.key === key && owner.epoch === credentialEpoch) return true;
+    if (owner.failedAt > 0 && nowMs() - owner.failedAt < VIEW_KEY_OWNER_RETRY_MS) return false;
+    const stillValid = () => (
+      owner === viewKeyOwner &&
+      key === effectiveTornApiKey() &&
+      credentialEpoch === tornCredentialEpoch &&
+      viewOnlyMode() &&
+      viewedFactionIdFromRoute() !== ""
+    );
+    owner.inFlight = true;
+    try {
+      // The transport checks viewKeyInfoGrant synchronously inside this call.
+      let request;
+      viewKeyInfoGrant = true;
+      try { request = tornApiRequest(SCRIPT.tornKeyInfoPath, key); } finally { viewKeyInfoGrant = false; }
+      const result = await request;
+      if (!stillValid()) return false;
+      const identity = result?.ok && !result.body?.error ? normalizeSelfIdentity(result.body) : null;
+      if (identity) {
+        Object.assign(owner, { epoch: credentialEpoch, key, playerId: identity.playerId, factionId: identity.factionId, failedAt: 0 });
+      } else {
+        Object.assign(owner, { playerId: "", factionId: "", failedAt: nowMs() });
+      }
+      return Boolean(identity);
+    } catch {
+      if (stillValid()) Object.assign(owner, { playerId: "", factionId: "", failedAt: nowMs() });
+      return false;
+    } finally {
+      owner.inFlight = false;
+      syncViewWarRoomLine();
+    }
+  }
+
+  // 1.1.14: the War Room line in VIEW. The first rule that holds wins:
+  //   your own faction's war, Torn says Traveling or Abroad -> Torn's status text
+  //   your own faction's war, any other or unknown status    -> open Faction -> War
+  //   anything else (other faction, key owner not known)     -> as before
+  function viewWarRoomLineText() {
+    const routeFactionId = viewedFactionIdFromRoute();
+    const owner = viewKeyOwner;
+    if (!routeFactionId || !owner.playerId || owner.factionId !== routeFactionId) return "War Room: VIEW read-only";
+    const status = viewMemberStatusForTarget(owner.playerId);
+    const state = normalizeText(status?.state).toLowerCase();
+    if (state === "traveling" || state === "abroad") {
+      const description = Array.from(normalizeText(status.description)).slice(0, 60).join("");
+      return normalizeText(`${description || (state === "traveling" ? "Traveling" : "Abroad")} — DIBS works when you are back in Torn`);
+    }
+    return "Your own war, read-only here — open Faction → War to use DIBS";
+  }
+
+  function syncViewWarRoomLine() {
+    if (!viewOnlyMode() || !runtimeActive) return;
+    const text = viewWarRoomLineText();
+    if (sharedStatus.state !== "offline" || sharedStatus.message !== text) setSharedStatus("offline", text, 0);
   }
 
   // Returns a reason code as well as the time, so a cell without a countdown can
@@ -5692,11 +5829,11 @@
     updateModeBadge();
     if (viewOnlyMode()) {
       // The claim board is not read in VIEW, so say that instead of leaving
-      // the panel reporting a connection that will never be made.
-      if (sharedStatus.state !== "offline" || sharedStatus.message !== "War Room: VIEW read-only") {
-        setSharedStatus("offline", "War Room: VIEW read-only", 0);
-      }
+      // the panel reporting a connection that will never be made. 1.1.14: on a
+      // profile war address the line also says why (viewWarRoomLineText).
+      syncViewWarRoomLine();
       void fetchViewMembers();
+      void fetchViewKeyOwner();
     }
     schedulePresentationLayout();
   }
@@ -6692,6 +6829,7 @@
     runtimeActive = false;
     runtimeGeneration += 1;
     resetLifeState();
+    viewKeyOwner = emptyViewKeyOwner();
     clearTimers();
     stopRouteObserver();
     unmountBridge();
