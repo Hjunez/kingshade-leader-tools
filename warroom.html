@@ -346,6 +346,85 @@
 
   [hidden] { display: none !important; }
 
+  /* ---- Target list look (2026-10, "Sidöversyn"): the KS Scout row fade ----
+     The row is tinted in its FF colour on ONE layer, strongest in the middle and
+     gone at both edges - the same fade, palette and alpha as KS Scout 0.9.1. The
+     FF figure carries a 3 px edge in the same colour; no cell is filled any more.
+     The colour still says only how hard a target is, never whether it may be
+     called: that stays classifyLiveTargetState(). */
+  :root { --row-fade: .22; --row-fade-old: .10; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --row-fade: .28; --row-fade-old: .12; } }
+  :root[data-theme="dark"] { --row-fade: .28; --row-fade-old: .12; }
+  #targetHost tbody tr.faded {
+    background-image: linear-gradient(90deg, rgba(var(--row-rgb), 0) 0%, rgba(var(--row-rgb), var(--row-fade)) 50%, rgba(var(--row-rgb), 0) 100%);
+  }
+  #targetHost tbody tr.faded.faded-old {
+    background-image: linear-gradient(90deg, rgba(var(--row-rgb), 0) 0%, rgba(var(--row-rgb), var(--row-fade-old)) 50%, rgba(var(--row-rgb), 0) 100%);
+  }
+  #targetHost tbody tr.mine.faded { box-shadow: inset 0 0 0 2px var(--accent); }
+  #targetHost td.ffcell.edged { box-shadow: inset 3px 0 0 var(--ff-edge); font-weight: 600; }
+  /* Status reads as coloured text on the row, not as a box. */
+  #targetHost .pill { background: transparent; padding: 0; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+  #targetHost .pill.travel { color: var(--ink); font-weight: 500; }
+  #targetHost .pill .flag { width: 18px; height: 12px; border-radius: 1px; box-shadow: 0 0 0 1px rgba(0,0,0,.25); flex: none; display: block; }
+  /* The hospital time lives in the Status column only. */
+  #targetHost .dibs .when { display: none; }
+  #targetHost .dibs .short { display: none; }
+  /* A button that cannot be pressed is plainly not one you press. */
+  #targetHost .btn[disabled], #targetHost .btn[disabled]:hover {
+    opacity: 1; background: transparent; border-color: var(--line-strong); color: var(--faint);
+  }
+  #targetHost .btn.small { min-width: 112px; }
+  /* Wide screens: the DIBS words on the left of the cell, every button in one
+     straight line on the right. */
+  @media (min-width: 701px) {
+    #targetHost td .toolbar { justify-content: space-between; }
+    #targetHost thead th:last-child, #targetHost tbody td:last-child { width: 1%; min-width: 360px; }
+  }
+  #targetHost .msort { display: none; }
+
+  /* Phones: one row per target, nothing to scroll sideways. The table stays a
+     table; only how its cells are laid out changes, so every binding, Torn ID
+     and button is the same as on a wide screen. */
+  @media (max-width: 700px) {
+    #targetHost .msort { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+    #targetHost .msort button {
+      font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
+      padding: 6px 9px; border-radius: 3px; border: 1px solid var(--line); background: var(--surface-2); color: var(--muted); cursor: pointer;
+    }
+    #targetHost .msort button[aria-pressed="true"] { color: var(--ink); border-color: var(--accent); }
+    #targetHost table, #targetHost tbody { display: block; width: 100%; }
+    #targetHost thead { display: none; }
+    #targetHost tbody tr {
+      display: grid; grid-template-columns: 52px auto minmax(0, 1fr) auto;
+      grid-template-areas: "ff name name act" "ff lv st act" "est why why act";
+      align-items: center; gap: 0 8px; padding: 8px 10px; border-bottom: 1px solid var(--line);
+    }
+    #targetHost tbody td { display: block; padding: 0; border: 0; min-width: 0; }
+    #targetHost tbody td:nth-child(1) { grid-area: name; min-width: 0; }
+    #targetHost tbody td:nth-child(1) .tname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #targetHost tbody td:nth-child(1) .tid { display: none; }
+    #targetHost tbody td:nth-child(2) { grid-area: lv; white-space: nowrap; padding-block: 2px; }
+    #targetHost tbody td:nth-child(2)::before { content: 'Lv '; }
+    #targetHost tbody td:nth-child(3) { grid-area: ff; align-self: end; padding-left: 8px; font-size: 14px; }
+    #targetHost tbody td:nth-child(4) { grid-area: est; align-self: start; padding-left: 8px; font-size: 11px; color: var(--muted); }
+    #targetHost tbody td.ffcell.edged, #targetHost tbody td:nth-child(4).edged-est { box-shadow: inset 3px 0 0 var(--ff-edge); }
+    #targetHost tbody td:nth-child(5) { grid-area: st; min-width: 0; }
+    #targetHost tbody td:nth-child(5) .pill .cty { display: none; }
+    #targetHost tbody td:nth-child(6), #targetHost tbody td:nth-child(6) .toolbar { display: contents; }
+    #targetHost tbody td:nth-child(6) .dibs { grid-area: why; min-width: 0; font-size: 12px; }
+    #targetHost tbody td:nth-child(6) .dibs > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; height: auto; line-height: 1.35; }
+    #targetHost tbody td:nth-child(6) .dibs.rule .top, #targetHost tbody td:nth-child(6) .dibs.rule > .left { display: none; }
+    #targetHost tbody td:nth-child(6) .dibs.rule .short { display: block; }
+    #targetHost tbody td:nth-child(6) .dibs:not(.rule) { display: flex; gap: 6px; }
+    #targetHost tbody td:nth-child(6) button { grid-area: act; min-width: 84px; padding: 7px 8px; }
+  }
+  @media (max-width: 400px) {
+    #targetHost tbody tr { grid-template-columns: 46px auto minmax(0, 1fr) auto; gap: 0 6px; padding: 8px 8px; }
+    #targetHost tbody td:nth-child(6) button { min-width: 72px; padding: 6px 6px; font-size: 11px; }
+    #targetHost tbody td:nth-child(6) .dibs { font-size: 11px; }
+  }
+
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
@@ -2491,16 +2570,81 @@
     return '~' + Math.floor(seconds / 60) + 'm ' + (seconds % 60) + 's left';
   }
 
+  // The Status column is the one place the hospital time is shown. It is read
+  // through hospitalOf(), the same reading the rule function decides on, so the
+  // second it shows is the second DIBS opens on; when that reading has no time
+  // (no clock yet, roster too old) it says only "Hospital".
   function statusText(target) {
     var state = target.state || 'Unknown';
-    var left = target.until ? target.until - Math.floor(getTornNowMs() / 1000) : 0;
     if (state === 'Okay') return 'Okay';
+    if (isHospitalStatusValue(state)) {
+      var hospital = hospitalOf(target);
+      return 'Hospital' + (Number.isFinite(hospital.seconds) ? ' ' + formatCellCountdown(hospital.seconds) : '');
+    }
+    var left = target.until ? target.until - Math.floor(getTornNowMs() / 1000) : 0;
     return state + (left > 0 ? ' ' + (left < 60 ? left + 's' : Math.ceil(left / 60) + 'm') : '');
+  }
+
+  // Travel, read off Torn's own status sentence. ANTAGANDE: the wording is
+  // "Traveling to X", "Returning to Torn from X" and "In X" (not yet checked in a
+  // real answer). Anything else, or a country not in the list, falls back to
+  // Torn's own word with the sentence as the tooltip.
+  var TRAVEL_FLAGS = {
+    'Mexico': '<rect width="6" height="12" fill="#006847"/><rect x="6" width="6" height="12" fill="#fff"/><rect x="12" width="6" height="12" fill="#ce1126"/><circle cx="9" cy="6" r="1.6" fill="#8c6a2c"/>',
+    'Cayman Islands': '<rect width="18" height="12" fill="#00247d"/><rect width="8" height="6" fill="#cf142b" opacity=".85"/><circle cx="13" cy="6" r="2.2" fill="#fff"/>',
+    'Canada': '<rect width="18" height="12" fill="#fff"/><rect width="4.5" height="12" fill="#d52b1e"/><rect x="13.5" width="4.5" height="12" fill="#d52b1e"/><path d="M9 3l1 2 1.4-.6-.6 2.3 1-.2-.8 1.4H7l-.8-1.4 1 .2-.6-2.3L8 5z" fill="#d52b1e"/>',
+    'Hawaii': '<rect width="18" height="12" fill="#fff"/><rect y="1.5" width="18" height="1.5" fill="#d0103a"/><rect y="3" width="18" height="1.5" fill="#00247d"/><rect y="6" width="18" height="1.5" fill="#d0103a"/><rect y="7.5" width="18" height="1.5" fill="#00247d"/><rect y="10.5" width="18" height="1.5" fill="#d0103a"/><rect width="8" height="6" fill="#00247d"/><path d="M0 0l8 6M8 0L0 6" stroke="#fff" stroke-width="1.2"/><path d="M4 0v6M0 3h8" stroke="#cf142b" stroke-width="1.2"/>',
+    'United Kingdom': '<rect width="18" height="12" fill="#00247d"/><path d="M0 0l18 12M18 0L0 12" stroke="#fff" stroke-width="2.4"/><path d="M0 0l18 12M18 0L0 12" stroke="#cf142b" stroke-width=".9"/><path d="M9 0v12M0 6h18" stroke="#fff" stroke-width="3.6"/><path d="M9 0v12M0 6h18" stroke="#cf142b" stroke-width="2"/>',
+    'Argentina': '<rect width="18" height="12" fill="#74acdf"/><rect y="4" width="18" height="4" fill="#fff"/><circle cx="9" cy="6" r="1.4" fill="#f6b40e"/>',
+    'Switzerland': '<rect width="18" height="12" fill="#d52b1e"/><path d="M9 3v6M6 6h6" stroke="#fff" stroke-width="2"/>',
+    'Japan': '<rect width="18" height="12" fill="#fff"/><circle cx="9" cy="6" r="3.4" fill="#bc002d"/>',
+    'China': '<rect width="18" height="12" fill="#de2910"/><circle cx="4" cy="3.5" r="1.8" fill="#ffde00"/><circle cx="7.4" cy="1.6" r=".5" fill="#ffde00"/><circle cx="8.4" cy="3.2" r=".5" fill="#ffde00"/><circle cx="8.4" cy="5" r=".5" fill="#ffde00"/><circle cx="7.4" cy="6.4" r=".5" fill="#ffde00"/>',
+    'UAE': '<rect width="18" height="12" fill="#fff"/><rect width="18" height="4" fill="#00732f"/><rect y="8" width="18" height="4" fill="#000"/><rect width="5" height="12" fill="#ff0000"/>',
+    'South Africa': '<rect width="18" height="12" fill="#fff"/><rect width="18" height="4.6" fill="#e03c31"/><rect y="7.4" width="18" height="4.6" fill="#001489"/><path d="M0 0l8 6-8 6z" fill="#fff"/><path d="M0 1.4L6.2 6 0 10.6z" fill="#007749"/><path d="M0 3.2L3.8 6 0 8.8z" fill="#000"/><path d="M8.4 6h9.6" stroke="#007749" stroke-width="2.4"/>'
+  };
+  var TRAVEL_ALIASES = { 'United Arab Emirates': 'UAE' };
+  function travelOf(target) {
+    var state = target.state || '';
+    if (state !== 'Traveling' && state !== 'Abroad') return null;
+    var said = String(target.description || '').trim();
+    var m, dir = '', where = '';
+    if ((m = /^Traveling to (.+)$/i.exec(said))) { dir = 'to'; where = m[1]; }
+    else if ((m = /^Returning to Torn from (.+)$/i.exec(said))) { dir = 'from'; where = m[1]; }
+    else if ((m = /^In (.+)$/i.exec(said))) { dir = 'in'; where = m[1]; }
+    where = TRAVEL_ALIASES[where] || where;
+    return { dir: dir, where: TRAVEL_FLAGS[where] ? where : '', said: said || state, state: state };
+  }
+  function travelFlag(where) {
+    // Our own drawn flags, built from a fixed list: no outside text ever goes in here.
+    var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'flag');
+    svg.setAttribute('viewBox', '0 0 18 12');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.innerHTML = TRAVEL_FLAGS[where];
+    return svg;
   }
 
   function statusPill(target) {
     var span = document.createElement('span');
     var state = target.state || 'Unknown';
+    var travel = travelOf(target);
+    if (travel) {
+      // A traveller: flag and arrow (to / from / there), the country beside it
+      // on a wide screen, Torn's whole sentence as the tooltip. No second hand.
+      span.className = 'pill travel';
+      span.title = travel.said;
+      span.setAttribute('aria-label', travel.said);
+      if (!travel.where) { span.textContent = travel.state; return span; }
+      var arrow = document.createElement('span');
+      arrow.textContent = travel.dir === 'to' ? '\u2192' : travel.dir === 'from' ? '\u2190' : '\u25cf';
+      var cty = document.createElement('span');
+      cty.className = 'cty';
+      cty.textContent = travel.where;
+      if (travel.dir === 'from') { span.appendChild(arrow); span.appendChild(travelFlag(travel.where)); }
+      else { span.appendChild(travelFlag(travel.where)); span.appendChild(arrow); }
+      span.appendChild(cty);
+      return span;
+    }
     span.className = state === 'Okay' ? 'pill good'
       : (state === 'Hospital' ? 'pill bad' : (state === 'Jail' ? 'pill warn' : 'pill'));
     span.setAttribute('data-status-id', target.id);
@@ -2520,6 +2664,19 @@
   // equivalent - but their real formula may differ in detail. It is one line
   // to change if it ever needs adjusting; there are deliberately no hard-coded
   // thresholds, because steps would show as banding across the table.
+  // KS Scout 0.9.1's FF palette and banding (ffStyle), as values: eleven steps
+  // from FF 1 (blue) to FF 5 (red), clipped at both ends.
+  var SCOUT_FF_PALETTE = ['#1734e8', '#1788e8', '#17dbe8', '#17e8a1', '#17e84e',
+    '#34e817', '#88e817', '#dbe817', '#e8a117', '#e84e17', '#e81734'];
+  function scoutFfColor(ff) {
+    if (typeof ff !== 'number' || !isFinite(ff) || ff <= 0) return null;
+    var clamped = Math.max(1, Math.min(5, ff));
+    return SCOUT_FF_PALETTE[Math.floor(((clamped - 1) / 4) * 10)] || null;
+  }
+  function hexToRgbList(hex) {
+    return parseInt(hex.slice(1, 3), 16) + ', ' + parseInt(hex.slice(3, 5), 16) + ', ' + parseInt(hex.slice(5, 7), 16);
+  }
+
   function ffHue(ff) {
     if (typeof ff !== 'number' || !isFinite(ff)) return null;
     var hue = 240 - (ff - 1) * 60;
@@ -2562,10 +2719,13 @@
     // The colour says how hard the target is. It says nothing about whether it
     // may be called: that is classifyLiveTargetState(), a separate rule
     // deliberately kept in a separate place.
-    var hue = ffHue(row.ff);
-    if (hue !== null) {
-      td.classList.add('tinted');
-      td.style.setProperty('--ff-hue', String(hue));
+    // KS Scout's colour for this FF. The FF figure gets the edge; the row gets
+    // the fade (renderTargets). EST takes the edge only in the phone layout,
+    // where it sits under the FF figure.
+    var edge = scoutFfColor(row.ff);
+    if (edge) {
+      td.classList.add(kind === 'ff' ? 'edged' : 'edged-est');
+      td.style.setProperty('--ff-edge', edge);
     }
     return td;
   }
@@ -2825,7 +2985,7 @@
   // still true. A press on one of them is answered by the page itself - see
   // claimStillAllowed() - and nothing is sent.
   function rulePresentation(target, decision, ctx) {
-    var out = { word: 'Free', wordClass: 'dibs free', note: '', wrap: false, callable: false, lowHp: null,
+    var out = { word: 'Free', wordClass: 'dibs free', note: '', short: '', wrap: false, callable: false, lowHp: null,
       decision: decision, key: '' };
     if (decision.state === TARGET_STATE.BLOCKED) {
       decision = decisionFor(target, { ownTargetId: '', rwPhase: ctx.rwPhase });
@@ -2839,35 +2999,44 @@
         if (life) {
           out.lowHp = Math.round(life.ratio * 100);
           out.note = 'DIBS open · low life';
+          out.short = 'Open · low life';
         } else {
           // The reading aged out between the answer and the drawing.
           out.callable = false;
           out.note = 'checking life';
+          out.short = 'Checking life';
         }
       } else {
         out.note = 'DIBS open';
+        out.short = 'DIBS open';
       }
     } else if (decision.state === TARGET_STATE.FREE) {
       out.word = 'Online';
       out.note = 'free for all - no DIBS';
+      out.short = 'Free for all';
     } else if (decision.state === TARGET_STATE.LOCKED) {
       if (reason === 'hospital-too-early') {
         out.word = 'Locked';
         out.wordClass = 'dibs locked';
-        out.note = 'DIBS opens at ' + formatCellCountdown(CONFIG.gateSeconds);
+        var opensAt = formatCellCountdown(CONFIG.gateSeconds);
+        out.note = 'DIBS opens at ' + opensAt;
+        out.short = 'Locked · opens ' + opensAt;
       } else if (reason === 'fair-fight-too-low' || reason === 'fair-fight-too-high') {
         out.note = 'Outside your FF range (' + ffRangeText() + ')';
+        out.short = 'Outside FF range';
         // Would 20% life or less have opened it? Asked of the rule function,
         // not worked out here.
         if (decisionFor(target, { ownTargetId: '', rwPhase: ctx.rwPhase }, true).state === TARGET_STATE.READY) {
           var seen = Life.fresh(target.id);
           if (Life.profileMissing()) {
             out.note = 'Low-life DIBS needs a new key (Create custom API key)';
+            out.short = 'Low life needs a new key';
             out.wrap = true;
           } else if (Life.keyFailed()) {
             out.note += ' · no life reading';
           } else {
             out.note += ' · HP ' + (seen ? Math.round(seen.ratio * 100) + '%' : '?');
+            out.short += ' · HP ' + (seen ? Math.round(seen.ratio * 100) + '%' : '?');
           }
         }
       }
@@ -2875,13 +3044,16 @@
       // already says there is no live war. The row adds nothing.
     } else if (decision.state === TARGET_STATE.UNAVAILABLE) {
       out.note = rosterIsFresh() ? 'Not in hospital - no DIBS' : 'Roster reading too old - no DIBS';
+      out.short = rosterIsFresh() ? 'Not in hospital' : 'Roster too old';
     } else if (decision.state === TARGET_STATE.UNKNOWN) {
       if (reason === 'hospital-timer-unverifiable') {
         out.word = 'Unknown';
         out.wordClass = 'dibs unknown';
         out.note = 'Hospital time unknown';
+        out.short = 'Hospital time unknown';
       } else {
         out.note = 'FF unknown - cannot check';
+        out.short = 'FF unknown';
       }
     }
     out.key = [decision.state, reason, out.callable ? 1 : 0, out.lowHp === null ? '' : out.lowHp,
@@ -3223,6 +3395,12 @@
           why.className = shown.wrap ? 'left sentence' : 'left';
           why.textContent = shown.note || '\u00a0';
           dibsState.appendChild(why);
+          // The same answer in fewer words, shown only in the phone layout.
+          var shortLine = document.createElement('div');
+          shortLine.className = 'short';
+          shortLine.title = shown.note;
+          shortLine.textContent = shown.short || shown.note || '\u00a0';
+          dibsState.appendChild(shortLine);
           button.className = 'btn small primary';
           if (shown.callable) {
             if (shown.lowHp !== null) {
@@ -3268,6 +3446,16 @@
 
       tdDibs.appendChild(dibsCell);
 
+      // The row fade, from the same FF figure the FF cell shows. Only a row
+      // with a figure is tinted; a stale figure gets the weaker fade.
+      var ffRead = (ffState === 'ok' || ffState === 'stale') ? statSource.get(target.id) : null;
+      var fadeColour = ffRead && ffRead.state === 'ok' ? scoutFfColor(ffRead.ff) : null;
+      if (fadeColour) {
+        tr.classList.add('faded');
+        if (ffState === 'stale') tr.classList.add('faded-old');
+        tr.style.setProperty('--row-rgb', hexToRgbList(fadeColour));
+      }
+
       tr.appendChild(tdName);
       tr.appendChild(tdLevel);
       tr.appendChild(tdFf);
@@ -3278,7 +3466,24 @@
     });
 
     table.appendChild(tbody);
+    // Phones have no column headers to press, so the same sort is offered as a
+    // row of buttons above the list (hidden on a wide screen).
+    var msort = document.createElement('div');
+    msort.className = 'msort';
+    msort.setAttribute('role', 'group');
+    msort.setAttribute('aria-label', 'Sort the list');
+    COLUMNS.forEach(function (column) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.setAttribute('data-focus-key', 'msort:' + column.id);
+      var on = !!(sortState && sortState.id === column.id);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      b.textContent = column.label + (on ? (sortState.dir === 'asc' ? ' \u25b2' : ' \u25bc') : '');
+      b.onclick = function () { setSort(column.id); };
+      msort.appendChild(b);
+    });
     el.targetHost.textContent = '';
+    el.targetHost.appendChild(msort);
     el.targetHost.appendChild(table);
     var focusButton = targetFocusKey && table.querySelector('[data-focus-key="' + targetFocusKey + '"]');
     if (focusButton && !focusButton.disabled) focusButton.focus({ preventScroll: true });
