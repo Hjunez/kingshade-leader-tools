@@ -272,10 +272,22 @@
 
   footer p { margin: 0 0 8px; max-width: 70ch; }
   footer p:last-child { margin-bottom: 0; }
+
+  .backbar { margin-bottom: 18px; }
+  .backbar a {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+    text-decoration: none; border: 1px solid var(--line-strong);
+    border-radius: 3px; padding: 7px 12px; display: inline-block;
+  }
+  .backbar a:hover { color: var(--accent); border-color: var(--accent); }
+  .backbar a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 </style>
 </head>
 <body>
 <div class="wrap">
+  <nav class="backbar"><a href="./">&larr; All tools</a></nav>
+
   <header class="masthead">
     <div>
       <p class="eyebrow">Kingshade Development</p>
@@ -306,7 +318,7 @@
       <div class="card">
         <span class="tag">PC</span>
         <span class="name">KS Torn War Dibs</span>
-        <span class="ver">Version 1.1.10</span>
+        <span class="ver">Version 1.1.14</span>
         <span class="what">Shared DIBS for ranked war, drawn straight into Torn's own Attack column.
           One target, one caller, no double hits. The PC and Torn PDA versions share the same DIBS
           through the faction's own KS War Room server.</span>
@@ -351,7 +363,7 @@
       <div class="card">
         <span class="tag">Torn PDA</span>
         <span class="name">KS Torn War Dibs</span>
-        <span class="ver">Version 1.5.186</span>
+        <span class="ver">Version 1.5.189</span>
         <span class="what">The same shared DIBS as the computer version, built for the phone, so
           the whole faction can call targets from wherever they are playing.</span>
         <div class="facts">
