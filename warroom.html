@@ -401,10 +401,57 @@
   }
   #targetHost .msort { display: none; }
 
+  /* ---- R14-R18 (2026-10) ---- */
+  /* R14. The time left until a traveller lands, beside the flag and the arrow.
+     An empty one is not drawn: no time is better than a guessed one. */
+  #targetHost .pill .eta {
+    font-family: var(--mono); font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums;
+    color: var(--muted); white-space: nowrap;
+  }
+  #targetHost .pill .eta:empty { display: none; }
+  /* R15. The attack link: the DIBS button's size, the outline of a button that
+     cannot be pressed. It is a plain link - the page never presses it. */
+  #targetHost .acts { display: flex; align-items: center; gap: 8px; }
+  #targetHost a.btn.attack {
+    display: inline-flex; align-items: center; justify-content: center; line-height: normal;
+    background: transparent; border-color: var(--line-strong); color: var(--muted);
+  }
+  #targetHost a.btn.attack:hover { border-color: var(--accent); color: var(--accent); }
+  #targetHost a.btn.attack:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #targetHost .a-short { display: none; }
+  /* R16. The online dot before the name: green online, gold idle, grey offline. */
+  /* A name is one word; the dot must never wrap onto a line of its own above it. */
+  #targetHost .tname { white-space: nowrap; }
+  .odot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; flex: none; background: var(--faint); }
+  .odot.on { background: var(--good); }
+  .odot.idle { background: var(--warn); }
+  .odot.off { background: var(--faint); }
+  /* R17. The war line stays at the top of the window while the list scrolls under it. */
+  #warPanel { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 30; }
+  /* R18/R19. The Callable filter: one button, in the head of the list beside the heading. */
+  #callableBtn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  .panel-head .hint { margin-left: auto; }
+
   /* Phones: one row per target, nothing to scroll sideways. The table stays a
      table; only how its cells are laid out changes, so every binding, Torn ID
      and button is the same as on a wide screen. */
   @media (max-width: 700px) {
+    /* The attack button took 36 px from every row (R15). Eight px less gutter on each
+       side of the page gives 16 of them back; without it the longest names, Federal
+       and the Locked note spilled out of their cells on a 360 px phone. */
+    .wrap { padding-left: 12px; padding-right: 12px; }
+    /* R17 on a phone: one small line - who, how the war stands, the score. */
+    #warPanel .warbar { flex-wrap: nowrap; align-items: baseline; gap: 8px; padding: 7px 10px; }
+    #warPanel .warbar .who { font-size: 16px; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #warPanel .warbar .meta { font-size: 12px; flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #warPanel .warbar .score { flex: none; overflow: visible; }
+    #targetHost .a-long { display: none; }
+    #targetHost .a-short { display: inline; }
+    #targetHost tbody td:nth-child(6) .acts { display: contents; }
+    #targetHost tbody td:nth-child(6) a.attack { grid-area: atk; min-width: 34px; padding: 7px 8px; }
+    /* One fixed line height for both buttons, so the glyph's own font (a symbol face
+       is taller than text) can never make the attack button taller than the DIBS one. */
+    #targetHost tbody td:nth-child(6) button, #targetHost tbody td:nth-child(6) a.attack { line-height: 14px; }
     /* One line of sort buttons, also at 360 px. If a phone is narrower still, the
        line scrolls sideways inside its own box and the page never does. */
     #targetHost .msort {
@@ -421,8 +468,8 @@
     #targetHost table, #targetHost tbody { display: block; width: 100%; }
     #targetHost thead { display: none; }
     #targetHost tbody tr {
-      display: grid; grid-template-columns: 52px auto minmax(0, 1fr) auto;
-      grid-template-areas: "ff name name act" "ff lv st act" "est why why act";
+      display: grid; grid-template-columns: 52px auto minmax(0, 1fr) auto auto;
+      grid-template-areas: "ff name name name act" "ff lv st atk act" "est why why atk act";
       align-items: center; gap: 0 8px; padding: 8px 10px; border-bottom: 1px solid var(--line);
     }
     #targetHost tbody td { display: block; padding: 0; border: 0; min-width: 0; }
@@ -453,8 +500,9 @@
     #targetHost tbody td:nth-child(6) button { grid-area: act; min-width: 84px; padding: 7px 8px; }
   }
   @media (max-width: 400px) {
-    #targetHost tbody tr { grid-template-columns: 46px auto minmax(0, 1fr) auto; gap: 0 6px; padding: 8px 8px; }
+    #targetHost tbody tr { grid-template-columns: 46px auto minmax(0, 1fr) auto auto; gap: 0 6px; padding: 8px 8px; }
     #targetHost tbody td:nth-child(6) button { min-width: 72px; padding: 6px 6px; font-size: 11px; }
+    #targetHost tbody td:nth-child(6) a.attack { min-width: 30px; padding: 6px 6px; font-size: 11px; }
     #targetHost tbody td:nth-child(6) .dibs { font-size: 11px; }
   }
 
@@ -572,7 +620,8 @@
           <dd><code>/v2/key/info</code> once, for your own Torn ID and faction.
             <code>/v2/faction/wars</code> for the war that is running right now.
             <code>/v2/faction/{opponent}/members</code> for the other side's roster: their
-            hospital, jail and travel state, and whether they are online.
+            hospital, jail and travel state (with the plane a traveller is on), when they were
+            last active, and whether they are online.
             <code>/v2/faction/members</code> for our own names, so a claim can say who holds it.
             <code>/v2/user/{target}/profile</code> for the life of a target that is about to leave
             hospital, which is what low-life DIBS is decided on: only while the war is live (or
@@ -643,6 +692,25 @@
           <dd>Nothing in Torn, ever. No attacks, no clicks, no navigation, no page scraping, no
             background watching, nothing to do with captcha. The only thing this page writes is a
             line on the faction's own claim board.</dd>
+          <dt>Attack link</dt>
+          <dd>Every row has an Attack link to Torn's own attack page for that player. It is a
+            plain link: this page does not open it, click it or load it, and Torn is asked for
+            nothing until you press it yourself &mdash; your browser then opens Torn in a new
+            tab.</dd>
+          <dt>Landing time</dt>
+          <dd>For a player who is travelling, the row says about how long is left before the
+            plane lands, for example ~1h 54m. It is worked out on this device from the roster
+            reading the page already does: the country and the plane type in Torn's status, a
+            table of flight times per country and plane, and the moment this page saw the
+            player leave &mdash; or, if it did not see that, the player's last action as Torn
+            reports it. Nothing is asked of Torn for it and nothing is stored. It is an
+            estimate, marked ~, and it is shown only when everything it needs is known.</dd>
+          <dt>Dot, Callable and the war line</dt>
+          <dd>The dot before a name is the player's activity from the same roster reading:
+            green online, gold idle, grey offline, no dot when Torn did not say or the reading
+            is too old. Callable shows only the rows whose Take DIBS button can be pressed, and
+            the one you hold; it is kept in memory in this tab and nowhere else. The war line
+            at the top stays in view while you scroll.</dd>
           <dt>FF and Est</dt>
           <dd>From FFScouter &mdash; not from Torn, and not from our claim server. With an FFScouter
             key on this page, this browser asks <code>ffscouter.com</code> for Fair Fight and
@@ -668,6 +736,7 @@
   <section class="panel" id="targetPanel" hidden>
     <div class="panel-head">
       <h2>Targets</h2>
+      <button type="button" class="btn small" id="callableBtn" aria-pressed="false">Callable (0)</button>
       <p class="hint" id="targetHint"></p>
     </div>
     <div class="simreset" id="simResetBar" hidden>
@@ -1393,7 +1462,7 @@
    'ffKey','toggleFfKey','forgetFfKey','ffSaid','ffBar',
    'sessionSaid','sessionState','sessionRetry',
    'warPanel','warWho','warMeta','warScore',
-   'targetPanel','targetHint','staleBar','targetHost',
+   'targetPanel','targetHint','staleBar','targetHost','callableBtn',
    'simBanner','simRealWar','simWireWar','simResetBar','simResetBtn','simResetNote',
    'actionMessage','simResetButtonSize','simResetIdleSize','simResetArmedSize',
    'advServer','advWar','advMe','advClaims','advRoster','advFf','advError','advRaw']
@@ -1631,6 +1700,8 @@
         var target = targetFromRow(row);
         if (target) out.push(target);
       });
+      // R14: the reading before this one is what shows a player taking off.
+      Flights.update(targets, out);
       targets = out;
       stamps.targets = Date.now();
       return targets;
@@ -1664,6 +1735,9 @@
       var rawActivity = (action && typeof action.status === 'string') ? action.status.trim().toLowerCase() : '';
       var activity = (rawActivity === 'online' || rawActivity === 'idle' || rawActivity === 'offline')
         ? rawActivity : null;
+      // R14: when the player last did something, in Torn's seconds, or 0. Only the
+      // landing time reads it, and only for a traveller it did not see take off.
+      var actionAt = action ? Number(action.timestamp) : 0;
       return {
         id: id,
         name: text(row.name) || ('#' + id),
@@ -1672,7 +1746,9 @@
         description: usable ? text(status.description) : '',
         details: usable ? text(status.details) : '',
         until: usable ? until : 0,
-        activity: usable ? activity : null
+        activity: usable ? activity : null,
+        plane: usable ? text(status.plane_image_type) : '',
+        lastAction: (usable && Number.isFinite(actionAt) && actionAt > 0) ? Math.floor(actionAt) : 0
       };
     }
 
@@ -1726,6 +1802,7 @@
         identity = null; war = null; targets = null; ownNames = null;
         stamps = { identity: 0, war: 0, targets: 0, ownNames: 0 };
         lastError = ''; lastDiagnostic = '';
+        Flights.forget();
       }
     };
   })();
@@ -2693,6 +2770,144 @@
     return svg;
   }
 
+  // ------------------------------------------------- R14: time to landing
+  //
+  // About how long is left before a traveller lands. The same reckoning as KS
+  // Scout 0.9.1 (TRAVEL_TIMES_MINUTES, normalizePlaneType, travelTableColumn,
+  // the observed take-off and the last-action fallback), without its learning
+  // and without storing anything: every figure here is worked out from the
+  // roster reading the page already does and lives in memory until the page is
+  // closed. It asks Torn for nothing.
+  //
+  // The flight times in minutes, per country and plane - Scout's table, value
+  // for value. The page spells the Emirates "UAE" (travelCountryOf folds
+  // "United Arab Emirates" into it), so that is the key here.
+  var TRAVEL_TIMES_MINUTES = Object.freeze({
+    'Mexico': { standard: 26, light_aircraft: 18, wlt: 13, business: 8 },
+    'Cayman Islands': { standard: 35, light_aircraft: 25, wlt: 18, business: 11 },
+    'Canada': { standard: 41, light_aircraft: 29, wlt: 20, business: 12 },
+    'Hawaii': { standard: 134, light_aircraft: 94, wlt: 67, business: 40 },
+    'United Kingdom': { standard: 159, light_aircraft: 111, wlt: 80, business: 48 },
+    'Argentina': { standard: 167, light_aircraft: 117, wlt: 83, business: 50 },
+    'Switzerland': { standard: 175, light_aircraft: 123, wlt: 88, business: 53 },
+    'Japan': { standard: 225, light_aircraft: 158, wlt: 113, business: 68 },
+    'China': { standard: 242, light_aircraft: 169, wlt: 121, business: 72 },
+    'UAE': { standard: 271, light_aircraft: 190, wlt: 135, business: 81 },
+    'South Africa': { standard: 297, light_aircraft: 208, wlt: 149, business: 89 }
+  });
+
+  // Torn's status.plane_image_type as a column of the table, or '' when it is
+  // not one the page knows. Scout calls every unknown plane an airliner; this
+  // page does not: a plane it cannot name gives no time rather than a guessed one.
+  function travelPlaneColumn(value) {
+    var raw = String(value || '').toLowerCase();
+    if (raw === 'airliner') return 'standard';
+    if (raw === 'light_aircraft') return 'light_aircraft';
+    if (raw === 'wlt' || raw === 'private_jet') return 'wlt';
+    return '';
+  }
+
+  // The whole flight in seconds, or null when the country or the plane is not known.
+  function travelFlightSeconds(target) {
+    var trip = travelOf(target);
+    if (!trip || trip.state !== 'Traveling' || !trip.where) return null;
+    var row = TRAVEL_TIMES_MINUTES[trip.where];
+    var column = travelPlaneColumn(target.plane);
+    var minutes = row && column ? Number(row[column]) : NaN;
+    return Number.isFinite(minutes) && minutes > 0 ? Math.round(minutes * 60) : null;
+  }
+
+  // When each traveller took off, as this page worked it out. Torn's seconds,
+  // per Torn ID, for as long as the flight lasts; nothing is written anywhere.
+  var Flights = (function () {
+    // Torn ID -> { sig, source, lastAction, at }. at is the take-off in Torn's
+    // seconds, or null until the page has a clock to put it on (the first roster
+    // reading can arrive a moment before the first clock reading does).
+    var departures = new Map();
+
+    // One flight is one sentence and one plane. Another sentence is another flight.
+    function signature(target) { return target.description + '|' + target.plane; }
+
+    // The take-off, put on Torn's clock when there is one: the moment the page
+    // saw it (observed) - or the player's last action, held to no more than one
+    // whole flight back (Scout's last-action-fallback, without a learned offset).
+    function settle(flight, seconds) {
+      if (flight.at !== null || !tornClockReady()) return;
+      var now = getTornNowMs() / 1000;
+      flight.at = flight.source === 'observed'
+        ? now
+        : Math.max(now - seconds + 1, Math.min(now, flight.lastAction));
+    }
+
+    // Called with the reading before this one (or null) and the reading that has
+    // just arrived. A player who was in the earlier reading and was not Traveling,
+    // and is now: took off in between - the take-off is this reading (the safest).
+    // Anybody else already on the way: the player's last action. Anything missing
+    // - the country, the plane, the last action - and there is no take-off at all.
+    function update(previous, current) {
+      if (!previous) departures.clear();
+      var before = Object.create(null);
+      (previous || []).forEach(function (target) { before[target.id] = target; });
+      var seen = Object.create(null);
+      current.forEach(function (target) {
+        seen[target.id] = true;
+        if (target.state !== 'Traveling') { departures.delete(target.id); return; }
+        var sig = signature(target);
+        var kept = departures.get(target.id);
+        if (kept && kept.sig === sig) { settle(kept, travelFlightSeconds(target)); return; }
+        departures.delete(target.id);
+        var seconds = travelFlightSeconds(target);
+        if (seconds === null) return;
+        var earlier = before[target.id];
+        var flight = null;
+        if (earlier && earlier.state && earlier.state !== 'Traveling') flight = { sig: sig, source: 'observed', lastAction: 0, at: null };
+        else if (target.lastAction > 0) flight = { sig: sig, source: 'last-action', lastAction: target.lastAction, at: null };
+        if (!flight) return;
+        settle(flight, seconds);
+        departures.set(target.id, flight);
+      });
+      departures.forEach(function (flight, id) { if (!seen[id]) departures.delete(id); });
+    }
+
+    // The moment the plane lands, in Torn's seconds, or null.
+    function landingAt(target) {
+      if (target.state !== 'Traveling') return null;
+      var flight = departures.get(target.id);
+      if (!flight || flight.sig !== signature(target)) return null;
+      var seconds = travelFlightSeconds(target);
+      if (seconds === null) return null;
+      settle(flight, seconds);
+      return flight.at === null ? null : flight.at + seconds;
+    }
+
+    // Seconds left, or null: no clock, nothing known, or already over.
+    function leftSeconds(target) {
+      if (!tornClockReady()) return null;
+      var at = landingAt(target);
+      if (at === null) return null;
+      var left = at - getTornNowMs() / 1000;
+      return left > 0 ? left : null;
+    }
+
+    // For the sort: when it lands, or Infinity when no time can be given.
+    function order(target) {
+      var left = leftSeconds(target);
+      return left === null ? Infinity : landingAt(target);
+    }
+
+    return { update: update, leftSeconds: leftSeconds, order: order, forget: function () { departures.clear(); } };
+  })();
+
+  // "~1h 54m" over an hour, "~23m" under it; '' when there is no time to give.
+  // Rounded up, like the hospital time: never less than the wait there is.
+  function travelEtaText(target) {
+    var left = Flights.leftSeconds(target);
+    if (left === null) return '';
+    var minutes = Math.ceil(left / 60);
+    var hours = Math.floor(minutes / 60);
+    return '~' + (hours > 0 ? hours + 'h ' + (minutes % 60) + 'm' : minutes + 'm');
+  }
+
   function statusPill(target) {
     var span = document.createElement('span');
     var state = target.state || 'Unknown';
@@ -2712,6 +2927,15 @@
       if (travel.dir === 'from') { span.appendChild(arrow); span.appendChild(travelFlag(travel.where)); }
       else { span.appendChild(travelFlag(travel.where)); span.appendChild(arrow); }
       span.appendChild(cty);
+      // R14: the time to landing beside them. A player already abroad gets none.
+      // The second hand writes the text; an empty one is not drawn.
+      if (travel.state === 'Traveling') {
+        var eta = document.createElement('span');
+        eta.className = 'eta';
+        eta.setAttribute('data-eta-id', target.id);
+        eta.textContent = travelEtaText(target);
+        span.appendChild(eta);
+      }
       return span;
     }
     span.className = state === 'Okay' ? 'pill good'
@@ -2993,6 +3217,13 @@
         // Same state: inside Hospital, Jail and Federal, out soonest first. until
         // is an absolute timestamp, so this order does not churn as it counts down.
         if (a.state === 'Hospital' || a.state === 'Jail' || a.state === 'Federal') return (a.until || 0) - (b.until || 0);
+        // Inside Traveling (R14): the one that lands first comes first, a flight
+        // with no time to give last. The landing is an absolute moment, so this
+        // order does not churn as the minutes count down.
+        if (a.state === 'Traveling') {
+          var landsA = Flights.order(a), landsB = Flights.order(b);
+          return landsA === landsB ? 0 : (landsA < landsB ? -1 : 1);
+        }
         return 0;
       } },
     { id: 'dibs', label: 'DIBS',
@@ -3039,6 +3270,15 @@
       return sign * d;
     });
   }
+
+  // R18. Only the rows whose Take DIBS button can be pressed, and the one this
+  // member holds. In memory for the life of the page: no key, no storage.
+  var callableOnly = false;
+  function toggleCallable() {
+    callableOnly = !callableOnly;
+    renderTargets();
+  }
+  el.callableBtn.addEventListener('click', toggleCallable);
 
   var pendingTarget = '';
 
@@ -3195,6 +3435,11 @@
     el.targetHost.querySelectorAll('[data-status-id]').forEach(function (cell) {
       var target = byId[cell.getAttribute('data-status-id')];
       if (target) cell.textContent = statusTimeOf(target);
+    });
+    // R14: the time to landing counts down with the same hand.
+    el.targetHost.querySelectorAll('[data-eta-id]').forEach(function (cell) {
+      var target = byId[cell.getAttribute('data-eta-id')];
+      if (target) cell.textContent = travelEtaText(target);
     });
     el.targetHost.querySelectorAll('[data-claim-id]').forEach(function (cell) {
       var claim = board.claims[cell.getAttribute('data-claim-id')];
@@ -3398,6 +3643,8 @@
     table.appendChild(thead);
 
     var tbody = document.createElement('tbody');
+    var callableCount = 0;   // rows whose Take DIBS button can be pressed (R18)
+    var keptCount = 0;       // rows left on screen by the filter
 
     rows.forEach(function (target) {
       var tr = document.createElement('tr');
@@ -3414,6 +3661,18 @@
       link.target = '_blank';
       link.rel = 'noopener noreferrer';
       link.textContent = target.name;
+      // R16: online / idle / offline from the roster reading, read the way the
+      // DIBS rules read it. No dot when Torn did not say or the reading is too old.
+      var activity = activityOf(target);
+      if (activity) {
+        var dot = document.createElement('span');
+        var activityWord = activity === 'online' ? 'Online' : (activity === 'idle' ? 'Idle' : 'Offline');
+        dot.className = 'odot ' + (activity === 'online' ? 'on' : (activity === 'idle' ? 'idle' : 'off'));
+        dot.setAttribute('role', 'img');
+        dot.setAttribute('aria-label', activityWord);
+        dot.title = activityWord;
+        name.appendChild(dot);
+      }
       name.appendChild(link);
       var idLine = document.createElement('div');
       idLine.className = 'tid';
@@ -3447,6 +3706,10 @@
       button.className = 'btn small';
       button.textContent = 'Take DIBS';
       button.disabled = true;
+      // R18: whether the row is one to call (counted) and whether the filter
+      // keeps it (a row to call, or the one this member holds).
+      var callableRow = false;
+      var keptRow = false;
 
       if (!boardUsable) {
         // Never the last known list. Either the server just said it, or the
@@ -3487,6 +3750,7 @@
           shortClaim.textContent = claimShortText(mine ? 'Yours' : holder, estimateLeft(claim, board));
           dibsState.appendChild(shortClaim);
           if (mine) {
+            keptRow = true;
             tr.className = 'mine';
             button.textContent = 'Release';
             button.disabled = !canClaim || actBusy;
@@ -3534,6 +3798,8 @@
           dibsState.appendChild(shortLine);
           button.className = 'btn small primary';
           if (shown.callable) {
+            callableRow = true;
+            keptRow = true;
             if (shown.lowHp !== null) {
               // The scripts' low-life button: pink, and it says the life.
               button.className = 'btn small lowhp';
@@ -3570,7 +3836,29 @@
       }
 
       if (pendingTarget === target.id) { button.disabled = true; button.textContent = '…'; }
-      dibsCell.appendChild(button);
+      // R15: a plain link to Torn's attack page for this player, left of the DIBS
+      // button, on every row. The page never presses it: the player does, and
+      // the browser then opens Torn in a new tab.
+      var attack = document.createElement('a');
+      attack.className = 'btn small attack';
+      attack.href = 'https://www.torn.com/loader.php?sid=attack&user2ID=' + target.id;
+      attack.target = '_blank';
+      attack.rel = 'noopener noreferrer';
+      attack.setAttribute('aria-label', 'Attack ' + target.name);
+      var attackLong = document.createElement('span');
+      attackLong.className = 'a-long';
+      attackLong.textContent = 'Attack';
+      var attackShort = document.createElement('span');
+      attackShort.className = 'a-short';
+      attackShort.setAttribute('aria-hidden', 'true');
+      attackShort.textContent = '⚔';
+      attack.appendChild(attackLong);
+      attack.appendChild(attackShort);
+      var acts = document.createElement('div');
+      acts.className = 'acts';
+      acts.appendChild(attack);
+      acts.appendChild(button);
+      dibsCell.appendChild(acts);
 
       // Simulation only, and only on a target nobody holds: claiming one that
       // "Take as other" used to sit here in simulation: a button that claimed
@@ -3600,6 +3888,12 @@
       tr.appendChild(tdEst);
       tr.appendChild(tdStatus);
       tr.appendChild(tdDibs);
+      // R18: the filter hides a row and nothing more. The row is built, kept up
+      // to date by the second hand and counted all the same, so one that becomes
+      // callable shows itself at the next drawing.
+      if (callableRow) callableCount += 1;
+      if (callableOnly && !keptRow) tr.hidden = true;
+      else keptCount += 1;
       tbody.appendChild(tr);
     });
 
@@ -3620,9 +3914,20 @@
       b.onclick = function () { setSort(column.id); };
       msort.appendChild(b);
     });
+    // R18/R19: the filter is the one button in the head of the list, beside the
+    // heading, on a phone and on a wide screen alike. Not in .msort: that line
+    // scrolls sideways on a phone and a button at its end could not be seen.
+    el.callableBtn.textContent = 'Callable (' + callableCount + ')';
+    el.callableBtn.setAttribute('aria-pressed', callableOnly ? 'true' : 'false');
     el.targetHost.textContent = '';
     el.targetHost.appendChild(msort);
     el.targetHost.appendChild(table);
+    if (callableOnly && keptCount === 0) {
+      var nothing = document.createElement('p');
+      nothing.className = 'empty';
+      nothing.textContent = 'No target can be called right now.';
+      el.targetHost.appendChild(nothing);
+    }
     var focusButton = targetFocusKey && table.querySelector('[data-focus-key="' + targetFocusKey + '"]');
     if (focusButton && !focusButton.disabled) focusButton.focus({ preventScroll: true });
 
