@@ -2933,9 +2933,11 @@
   // through statSource, and a row that has none sits last whichever way the list
   // is turned; numberCompare below is what keeps it there.
 
-  var STATE_RANK = { Okay: 1, Hospital: 2, Traveling: 3, Abroad: 4, Federal: 5 };
+  // Ascending Status order: Hospital first (the ones about to come out), then
+  // Okay, Traveling, Abroad, Jail, Federal, and anything else last.
+  var STATE_RANK = { Hospital: 1, Okay: 2, Traveling: 3, Abroad: 4, Jail: 5, Federal: 6 };
 
-  function stateRank(target) { return STATE_RANK[target.state] || 6; }
+  function stateRank(target) { return STATE_RANK[target.state] || 7; }
 
   // Case-blind, and digits read as numbers, so a name that starts with a figure
   // or an underscore lands somewhere predictable instead of wherever the code
@@ -2988,9 +2990,9 @@
       compare: function (a, b) {
         var byState = stateRank(a) - stateRank(b);
         if (byState) return byState;
-        // Same state: inside Hospital and Federal, out soonest first. until is
-        // an absolute timestamp, so this order does not churn as it counts down.
-        if (a.state === 'Hospital' || a.state === 'Federal') return (a.until || 0) - (b.until || 0);
+        // Same state: inside Hospital, Jail and Federal, out soonest first. until
+        // is an absolute timestamp, so this order does not churn as it counts down.
+        if (a.state === 'Hospital' || a.state === 'Jail' || a.state === 'Federal') return (a.until || 0) - (b.until || 0);
         return 0;
       } },
     { id: 'dibs', label: 'DIBS',
