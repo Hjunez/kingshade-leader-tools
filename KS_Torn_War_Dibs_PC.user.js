@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PC
 // @namespace    kingshade.torn
-// @version      1.1.14
+// @version      1.1.15
 // @downloadURL  https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @description  PC TEST: DIBS as a native roster column beside Torn's Attack cell; FF and Est from FFScouter's get-stats API. War Stuff Enhanced is detected and shown read-only; it never blocks.
@@ -17,6 +17,40 @@
 // ==/UserScript==
 
 /*
+ * KS Torn War Dibs PC v1.1.15 -- CANDIDATE (hotfix during the war)
+ *
+ * ONE MAIN CHANGE: the profile war address that uses userID is recognised. Name,
+ * namespace, update address and every storage name are those of 1.1.14.
+ *
+ * FIXED
+ *   - While travelling Torn can open your faction's war as
+ *     factions.php?step=profile&userID=<your player ID>#/war/rank; 1.1.14 did
+ *     not recognise that address, so no panel was shown.
+ * CHANGED
+ *   - factions.php?step=profile&userID=<player ID>#/war/rank is now a VIEW
+ *     address, exactly like factions.php?step=profile&ID=<faction ID>#/war/rank.
+ *     The parameter must be spelled userID. If the address has both ID and
+ *     userID, ID wins and the address is treated as in 1.1.14. On a userID
+ *     address the address itself names no faction, so VIEW reads only the
+ *     factions on the war card (your own faction is one of them).
+ *   - When the userID is the player ID that owns the Torn key, the War Room
+ *     line says it is your own war (the texts of 1.1.14). Any other userID
+ *     gives "War Room: VIEW read-only".
+ *   - Nothing else changes: still VIEW, no claim, no release, no report, no
+ *     request to the KS War Room server, no /wars, no life reads, no new kind
+ *     of request. The own mode (step=your&type=1) is untouched.
+ * KNOWN ISSUES
+ *   - A candidate without a fresh life read still shows FFX.XX (locked) until
+ *     the read arrives, and a click cannot start that read. To be fixed in a
+ *     later version.
+ *   - The RW line still reads "RW: UNKNOWN" while you travel (VIEW does not
+ *     fetch /wars).
+ * VERIFICATION
+ *   - Synthetic only: the whole script in Chromium against stand-in backends.
+ *     Not run against the real Torn or FFScouter, and not run while travelling
+ *     in the real game. See RAPPORT_PC_1.1.15.txt.
+ *
+ * ---------------------------------------------------------------------------
  * KS Torn War Dibs PC v1.1.14 -- CANDIDATE (hotfix during the war)
  *
  * ONE MAIN CHANGE: the panel says why it is read-only while you travel. Name,
@@ -566,7 +600,8 @@
  * reads or writes, no own-wars call, no target basic check. (Written for
  * v1.0.x, which also refused FFScouter and key/info in VIEW. Since v0.1.0 VIEW
  * also reads FFScouter's get-stats, and since v1.1.14 it reads /v2/key/info
- * once on a profile war address, for the War Room line only.) The faction ID
+ * once on a profile war address (step=profile with ID=<faction ID>, or since
+ * v1.1.15 with userID=<player ID>), for the War Room line only.) The faction ID
  * is pinned to the one in the URL, so VIEW cannot be pointed at any other
  * faction. The button stays locked; no CLAIM or RELEASE is reachable.
  *
@@ -587,8 +622,9 @@
  * per-row rect measurement, per-row and per-attack-cell ResizeObserver targets
  * and the rAF row layout loop. Column width is measured once per roster mount.
  *
- * VIEW mode: on any other faction's /war/rank route the column renders
- * read-only. While VIEW mode is active every network call is refused at the
+ * VIEW mode: on any other faction's /war/rank route (and, since v1.1.15, on
+ * the userID=<player ID> profile route Torn uses while you travel) the column
+ * renders read-only. While VIEW mode is active every network call is refused at the
  * transport, except the few listed at isViewModePermittedRequest, and every
  * shared write is refused at the control.
  *
@@ -604,8 +640,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs PC",
-    version: "1.1.14",
-    instanceKey: "__ksTornWarDibsPcV1114",
+    version: "1.1.15",
+    instanceKey: "__ksTornWarDibsPcV1115",
     rowHostPrefix: "ks-twd-wse-row-v010-",
     rosterStyleId: "ks-twd-wse-roster-style-v010",
     panelId: "ks-twd-wse-panel",
@@ -1141,12 +1177,16 @@
     }
   }
 
-  // Another faction's Ranked War, reached from its public profile. Rendering is
+  // Another faction's Ranked War, reached from its public profile (or, since
+  // 1.1.15, the userID profile address Torn uses while you travel). Rendering is
   // allowed here so the roster column can be inspected outside an own war.
   // Authority is not: viewOnlyMode() gates every write and every request.
   // The public faction ID of the profile Ranked War page currently open, or "".
   // Every VIEW-mode request is pinned to this value, so VIEW can never be
   // pointed at a faction whose page the user is not actually looking at.
+  // (1.1.15: while travelling Torn can also open the war as
+  // step=profile&userID=<player ID>; see viewedUserIdFromRoute. That address
+  // names no faction, so this function returns "" for it.)
   function viewedFactionIdFromRoute(value = location.href) {
     try {
       const url = new URL(value, location.href);
@@ -1160,8 +1200,32 @@
     }
   }
 
+  // 1.1.15: the player ID of the profile Ranked War page currently open, or "".
+  // Same address rules as viewedFactionIdFromRoute, but the parameter is spelled
+  // exactly userID. If the address also has an ID parameter, ID wins and this
+  // returns "" (the address is then treated as in 1.1.14). It only tells which
+  // player the address names; it adds no faction to viewPermittedFactionIds.
+  function viewedUserIdFromRoute(value = location.href) {
+    try {
+      const url = new URL(value, location.href);
+      const hashPath = String(url.hash || "").slice(1).split("?", 1)[0].replace(/\/+$/, "");
+      if (!/\/factions\.php$/i.test(url.pathname)) return "";
+      if (url.searchParams.get("step") !== "profile" || hashPath !== "/war/rank") return "";
+      if (url.searchParams.has("ID")) return "";
+      const id = String(url.searchParams.get("userID") || "").trim();
+      return validTargetId(id) ? String(Number(id)) : "";
+    } catch {
+      return "";
+    }
+  }
+
+  // A profile war address of either kind: ID=<faction ID> or userID=<player ID>.
+  function isProfileWarRoute(value = location.href) {
+    return viewedFactionIdFromRoute(value) !== "" || viewedUserIdFromRoute(value) !== "";
+  }
+
   function isForeignRankedWarRoute(value = location.href) {
-    return Boolean(viewedFactionIdFromRoute(value));
+    return isProfileWarRoute(value);
   }
 
   function isAnyRankedWarRoute(value = location.href) {
@@ -1588,16 +1652,18 @@
   // endpoint for a faction rendered on the current page is refused. v0.1.0 adds
   // one more permitted request, FFScouter's get-stats: it only reads FF and
   // battle-stat estimates and touches no claim. v1.1.14 adds one more, Torn's
-  // /v2/key/info: only on a profile war address (viewedFactionIdFromRoute() is
-  // not empty) and only for the call fetchViewKeyOwner makes (viewKeyInfoGrant),
-  // which asks whose key this is so the War Room line can say why VIEW is
-  // read-only. The KS War Room server stays refused.
+  // /v2/key/info: only on a profile war address (isProfileWarRoute(): ID=<faction
+  // ID>, or since v1.1.15 userID=<player ID>) and only for the call
+  // fetchViewKeyOwner makes (viewKeyInfoGrant), which asks whose key this is so
+  // the War Room line can say why VIEW is read-only. The members list is still
+  // allowed only for the factions of viewPermittedFactionIds (on a userID
+  // address: the factions on the war card). The KS War Room server stays refused.
   function isViewModePermittedRequest(rawUrl) {
     try {
       const url = new URL(String(rawUrl || ""));
       if (url.origin === SCRIPT.ffscouterOrigin && url.pathname === STATS_API.getStats) return true;
       if (url.origin !== SCRIPT.tornApiOrigin) return false;
-      if (url.pathname === SCRIPT.tornKeyInfoPath) return viewKeyInfoGrant && viewedFactionIdFromRoute() !== "";
+      if (url.pathname === SCRIPT.tornKeyInfoPath) return viewKeyInfoGrant && isProfileWarRoute();
       return viewPermittedFactionIds().some(id => url.pathname === `/v2/faction/${id}/members`);
     } catch {
       return false;
@@ -3573,7 +3639,7 @@
   // (no capability check) and stores nothing. Not repeated for the same key
   // and credential epoch; after a failure not before VIEW_KEY_OWNER_RETRY_MS.
   async function fetchViewKeyOwner() {
-    if (!viewOnlyMode() || viewedFactionIdFromRoute() === "") return false;
+    if (!viewOnlyMode() || !isProfileWarRoute()) return false;
     const key = effectiveTornApiKey();
     if (!key || !runtimeActive || !isRuntimeEligible()) return false;
     const credentialEpoch = tornCredentialEpoch;
@@ -3586,7 +3652,7 @@
       key === effectiveTornApiKey() &&
       credentialEpoch === tornCredentialEpoch &&
       viewOnlyMode() &&
-      viewedFactionIdFromRoute() !== ""
+      isProfileWarRoute()
     );
     owner.inFlight = true;
     try {
@@ -3618,8 +3684,13 @@
   //   anything else (other faction, key owner not known)     -> as before
   function viewWarRoomLineText() {
     const routeFactionId = viewedFactionIdFromRoute();
+    const routeUserId = viewedUserIdFromRoute();
     const owner = viewKeyOwner;
-    if (!routeFactionId || !owner.playerId || owner.factionId !== routeFactionId) return "War Room: VIEW read-only";
+    const ownWar = Boolean(owner.playerId) && (
+      (routeFactionId !== "" && owner.factionId === routeFactionId) ||
+      (routeUserId !== "" && owner.playerId === routeUserId)
+    );
+    if (!ownWar) return "War Room: VIEW read-only";
     const status = viewMemberStatusForTarget(owner.playerId);
     const state = normalizeText(status?.state).toLowerCase();
     if (state === "traveling" || state === "abroad") {
