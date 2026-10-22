@@ -381,15 +381,16 @@
 
       <div class="card">
         <span class="tag">Torn PDA</span>
-        <span class="name">Kingshade Scout</span>
-        <span class="ver">Version 0.8.8</span>
-        <span class="what">Fair fight and estimated respect on the people in front of you, plus
-          faction status and FFScouter's travel estimates.</span>
+        <span class="name">KS Scout</span>
+        <span class="ver">Version 0.9.4</span>
+        <span class="what">Fair fight and estimated battle stats on the faction lists you open,
+          live status with hospital and travel countdowns, filters and sorting.
+          Never runs on Ranked War lists.</span>
         <div class="facts">
-          <div class="row"><span class="k">Runs on</span><span class="v">Torn faction pages</span></div>
-          <div class="row"><span class="k">Network</span><span class="v"><code>api.torn.com</code> and <code>ffscouter.com</code>. Nothing else.</span></div>
-          <div class="row"><span class="k">Stores</span><span class="v">Your key and a short-lived scout cache in your own browser only.</span></div>
-          <div class="row"><span class="k">Torn key</span><span class="v">Yes. Faction <code>basic</code> and user <code>basic</code>.</span></div>
+          <div class="row"><span class="k">Runs on</span><span class="v">Torn faction pages, except Ranked War lists</span></div>
+          <div class="row"><span class="k">Network</span><span class="v"><code>api.torn.com</code> (faction basic) and <code>ffscouter.com</code>. Nothing else.</span></div>
+          <div class="row"><span class="k">Stores</span><span class="v">Your key (unencrypted), settings, manual values and a short cache in Torn PDA only. Never uploaded anywhere else.</span></div>
+          <div class="row"><span class="k">Torn key</span><span class="v">Yes. A custom key: user <code>basic</code>, <code>battlestats</code>, <code>hof</code>, <code>attacks</code>, <code>personalstats</code> and faction <code>basic</code>, as FFScouter requires. KS Scout itself only reads faction <code>basic</code>.</span></div>
         </div>
         <div class="get">
           <a class="btn" href="Kingshade_Scout_Torn_PDA.user.js">Install</a>
@@ -397,21 +398,10 @@
         </div>
       </div>
 
-      <div class="card">
-        <span class="tag">Torn PDA</span>
+      <div class="card planned">
+        <span class="tag">Retired</span>
         <span class="name">KS War Tools</span>
-        <span class="ver">Version 0.8.8</span>
-        <span class="what">The war helpers for the phone, laid over Torn's own faction pages.</span>
-        <div class="facts">
-          <div class="row"><span class="k">Runs on</span><span class="v">Torn faction pages</span></div>
-          <div class="row"><span class="k">Network</span><span class="v">None of its own. It reads the page you are already looking at.</span></div>
-          <div class="row"><span class="k">Stores</span><span class="v">Your settings in your own browser only. Never uploaded.</span></div>
-          <div class="row"><span class="k">Torn key</span><span class="v">No.</span></div>
-        </div>
-        <div class="get">
-          <a class="btn" href="KS_War_Tools_Torn_PDA.user.js">Install</a>
-          <span class="file">KS_War_Tools_Torn_PDA.user.js</span>
-        </div>
+        <span class="what">Merged into KS Scout 0.9.0. You can turn it off or remove it in Torn PDA.</span>
       </div>
 
     </div>
@@ -446,9 +436,10 @@
   <footer>
     <p>These scripts read Torn's official API and the page you have open yourself. None of them
       click, attack, travel or act for you — every move in Torn stays yours.</p>
-    <p>Your Torn key, where a script needs one, stays encrypted in your own browser and is sent to Torn.
-      The one exception is KS Torn War Dibs: it also sends the key to the faction's KS War Room server to sign
-      you in, and that server does not store it.</p>
+    <p>War Dibs keeps your Torn key encrypted in your own browser and also
+      sends it to the faction's KS War Room server to sign you in; that
+      server does not store it. KS Scout keeps its key unencrypted in Torn
+      PDA and sends it only to Torn and FFScouter.</p>
   </footer>
 </div>
 </body>
