@@ -2706,12 +2706,30 @@
     if (state === 'Okay') return 'Okay';
     return isHospitalStatusValue(state) ? 'Hospital' : state;
   }
+  // R21. A hospital stay of 48 hours or more: the rule reading (hospitalRemainingSeconds)
+  // has no time for it - it was copied from the scripts, where such a target is locked
+  // anyway - so hospitalOf() says "in hospital, time unknown" and the row said
+  // "Hospital time unknown" about a target whose Torn status carries a perfectly good end
+  // time. This is only for drawing: the seconds left when the status is hospital, the
+  // reading is fresh and its end time is a valid moment at least CONFIG.maxHospitalSeconds
+  // away; otherwise null, and the row says what it said before. The rules are not asked
+  // and not changed: the same target is still UNKNOWN to decisionFor().
+  function longHospitalSeconds(target) {
+    if (!target || !readingIsFresh(Roster.stamps().targets)) return null;
+    if (!isHospitalStatusValue(target.state) && !isHospitalStatusValue(target.description) && !isHospitalStatusValue(target.details)) return null;
+    var until = Number(target.until);
+    if (!Number.isFinite(until) || until <= 0) return null;
+    var left = Math.ceil(until - getTornNowMs() / 1000);
+    return left >= CONFIG.maxHospitalSeconds ? left : null;
+  }
   function statusTimeOf(target) {
     var state = target.state || 'Unknown';
     if (state === 'Okay') return '';
     if (isHospitalStatusValue(state)) {
       var hospital = hospitalOf(target);
-      return Number.isFinite(hospital.seconds) ? formatCellCountdown(hospital.seconds) : '';
+      if (Number.isFinite(hospital.seconds)) return formatCellCountdown(hospital.seconds);
+      var longLeft = longHospitalSeconds(target);
+      return longLeft === null ? '' : formatCellCountdown(longLeft);
     }
     // Jail and Federal: the same way the hospital time is written (3d0h, 15:00).
     var left = target.until ? target.until - Math.floor(getTornNowMs() / 1000) : 0;
@@ -3222,7 +3240,12 @@
         if (byState) return byState;
         // Same state: inside Hospital, Jail and Federal, out soonest first. until
         // is an absolute timestamp, so this order does not churn as it counts down.
-        if (a.state === 'Hospital' || a.state === 'Jail' || a.state === 'Federal') return (a.until || 0) - (b.until || 0);
+        // A hospital stay with no end time Torn gave is last in the group, after the longest one (R21).
+        if (a.state === 'Hospital') {
+          var outA = a.until > 0 ? a.until : Infinity, outB = b.until > 0 ? b.until : Infinity;
+          return outA === outB ? 0 : (outA < outB ? -1 : 1);
+        }
+        if (a.state === 'Jail' || a.state === 'Federal') return (a.until || 0) - (b.until || 0);
         // Inside Traveling (R14): the one that lands first comes first, a flight
         // with no time to give last. The landing is an absolute moment, so this
         // order does not churn as the minutes count down.
@@ -3425,6 +3448,26 @@
     return out;
   }
 
+  // What a row says, as rulePresentation() has it - and for the one thing it cannot
+  // draw (R21): a target in hospital for 48 hours or more. The rule function has no
+  // time for it and answers UNKNOWN, which the row used to say as "Hospital time
+  // unknown". Torn does give the end time, and a stay that long is locked just as
+  // one of three minutes is, so the row is drawn the way rulePresentation() draws a
+  // locked target with more than 2:00 left: it is asked about exactly that, with the
+  // time from longHospitalSeconds(). Only the drawing changes. The target is still
+  // UNKNOWN to decisionFor(), the button has no handler and is disabled, and a press
+  // would be refused by claimStillAllowed() as for any target that cannot be called.
+  function presentationOf(target, decision, ctx) {
+    var shown = rulePresentation(target, decision, ctx);
+    var read = shown.decision;
+    if (read.state !== TARGET_STATE.UNKNOWN || read.reason !== 'hospital-timer-unverifiable') return shown;
+    var left = longHospitalSeconds(target);
+    if (left === null) return shown;
+    return rulePresentation(target, Object.assign({}, read, {
+      state: TARGET_STATE.LOCKED, reason: 'hospital-too-early', seconds: left
+    }), ctx);
+  }
+
   // The second hand changes text only. Torn IDs keep updates tied to a player
   // even when the table has been sorted or a full redraw is waiting for a click.
   //
@@ -3461,7 +3504,7 @@
     el.targetHost.querySelectorAll('tr[data-rule]').forEach(function (tr) {
       var target = byId[tr.getAttribute('data-target-id')];
       if (!target) return;
-      var shown = rulePresentation(target, decisionFor(target, ctx), ctx);
+      var shown = presentationOf(target, decisionFor(target, ctx), ctx);
       if (shown.key !== tr.getAttribute('data-rule')) { redraw = true; return; }
       var cell = tr.querySelector('[data-hosp-id]');
       if (cell) cell.textContent = hospitalText(shown.decision);
@@ -3491,7 +3534,9 @@
       if (!target) return;
       // The instant the remaining time, rounded up, first reads the gate.
       var ms = (target.until - CONFIG.gateSeconds) * 1000 - getTornNowMs();
-      if (isFinite(ms) && ms < soonest) soonest = ms;
+      // A browser timer holds 2^31 - 1 ms at most and a longer one fires at once; a locked
+      // target with weeks to go (R21) is left to the second hand, which looks every second.
+      if (isFinite(ms) && ms < soonest && ms < 2147483647) soonest = ms;
     });
     if (soonest === Infinity) return;
     gateTimer = setTimeout(function () {
@@ -3768,7 +3813,7 @@
           // Nobody holds it. Whether it can be called is the rule function's
           // answer for this row - the same answer the scripts give on Torn's
           // own war page - and what the cell says is read off that answer.
-          var shown = rulePresentation(target, decisions[target.id], ruleCtx);
+          var shown = presentationOf(target, decisions[target.id], ruleCtx);
           tr.setAttribute('data-rule', shown.key);
           dibsState.className = shown.wordClass + ' rule';
           // The word stays Free whenever the target is free on the board:
