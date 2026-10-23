@@ -277,6 +277,9 @@
   td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: baseline; }
   td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
   td.name { font-weight: 500; }
+  td.name a.profile { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--faint); }
+  td.name a.profile:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  td.name a.profile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   td .sub { display: block; color: var(--faint); font-size: 12px; }
 
   tr.stale-critical td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
@@ -407,6 +410,9 @@
             active member comes first.</dd>
           <dt>Last action order</dt>
           <dd>A member who is online right now always counts as the most recently active.</dd>
+          <dt>Names</dt>
+          <dd>Click a name to open that player's Torn profile in a new tab. That is an ordinary
+            link you click yourself; this page makes no extra calls to Torn for it.</dd>
           <dt>Call tag</dt>
           <dd>Every request is tagged <code>KSLeaderBoard</code>, so you can recognise it in your own
             API key log.</dd>
@@ -829,7 +835,21 @@
 
         var nameCell = document.createElement('td');
         nameCell.className = 'name';
-        nameCell.textContent = m.name;
+        /* The name opens the player's Torn profile in a new tab, so this list stays put.
+           Only a positive whole-number ID gets a link; anything else stays plain text. */
+        var profileId = (typeof m.id === 'number' || (typeof m.id === 'string' && /^\d+$/.test(m.id)))
+          ? Number(m.id) : NaN;
+        if (Number.isInteger(profileId) && profileId > 0) {
+          var link = document.createElement('a');
+          link.className = 'profile';
+          link.href = 'https://www.torn.com/profiles.php?XID=' + profileId;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          link.textContent = m.name;
+          nameCell.appendChild(link);
+        } else {
+          nameCell.appendChild(document.createTextNode(m.name));
+        }
         var sub = document.createElement('span');
         sub.className = 'sub';
         sub.textContent = 'ID ' + m.id;
