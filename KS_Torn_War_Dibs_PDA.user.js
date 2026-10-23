@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PDA
 // @namespace    kingshade.torn
-// @version      1.5.190
+// @version      1.5.191
 // @description  Roster-local PDA presentation with v1.5.145 authority and shared-claim safety.
 // @author       Kingshade
 // @match        https://www.torn.com/factions.php*
@@ -15,6 +15,43 @@
 // ==/UserScript==
 
 /*
+ * 1.5.191 (2026-10-22): the Est box is gone; FF and stats are small marks like
+ * KS Scout's. Looks only. ONE MAIN CHANGE. Name, namespace, update address and
+ * every storage name are those of 1.5.190.
+ * CHANGED
+ *   - Torn's own Score cell is never hidden any more. The "Est 233k" box that
+ *     sat on top of it and covered Torn's score is gone.
+ *   - The FF value is a round coloured circle (22 px at most, never more than
+ *     the row height minus 4 px), the same colours, number format and cap as
+ *     the FF circle in KS Scout 0.9.4: FF with one decimal, "20+" above 20,
+ *     dark text on the middle colours and white text on the two ends. No FF
+ *     value, no circle.
+ *   - The circle is centred on the faction icon of the row when the row has one
+ *     (found inside the member cell and measured on every layout); the icon is
+ *     the same on every row of a war and may be covered. Without an icon it sits
+ *     at the right edge of the honor bar, low, as the old pill did.
+ *   - The stats estimate is a small dark mark (12 px high, "233k", no "Est")
+ *     next to the circle: under it if that fits inside the row, else to the
+ *     right of it, else (circle at the honor bar's right edge) to the left.
+ *     It never covers more than 40 px of the honor bar and never the Score,
+ *     Status or Attack cell. No estimate, no mark.
+ *   - A Score cell that an older version hid (an update without a page load)
+ *     is shown again the next time the row is drawn.
+ * KNOWN ISSUES
+ *   - The markup of the faction icon on the war list in Torn PDA is not
+ *     measured. The row layout is therefore computed from measured rectangles
+ *     at run time and has the fallback above; which of the two paths a row took
+ *     is written to data-place on the FF circle. To be settled on the phone.
+ * VERIFICATION
+ *   - Synthetic only: the whole script in Chromium (touch emulation) against
+ *     stand-in Torn, FFScouter and KS servers, at 360, 390 and 412 px. Never run
+ *     in Torn PDA or against the real Torn, FFScouter or KS server. See
+ *     RAPPORT_PDA_1.5.191.txt.
+ * Everything else is unchanged from 1.5.190: the DIBS button and its place in
+ * the Status cell, the DIBS rules (FF 2.00-3.40, hospital 2:00 or less, low
+ * life 4.50), the limits, the clock, the server, the texts, the storage, the
+ * requests and the panel.
+ *
  * 1.5.190 (2026-10-22): the panel says why it is read-only while you travel.
  * Same change as PC 1.1.14 and 1.1.15. ONE MAIN CHANGE. Name, namespace, update
  * address and every storage name are those of 1.5.189.
@@ -451,8 +488,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs",
-    version: "1.5.190",
-    instanceKey: "__ksTornWarDibsPdaV15190Test",
+    version: "1.5.191",
+    instanceKey: "__ksTornWarDibsPdaV15191Test",
     layerId: "ks-twd-pda-layer",
     rowHostPrefix: "ks-twd-pda-row-",
     panelId: "ks-twd-pda-panel",
@@ -5074,9 +5111,33 @@
   // PDA-owned presentation. Torn's Ranked War DOM is read-only.
   // ---------------------------------------------------------------------------
 
+  // 1.5.191: the eleven colours, the dark/white text rule and the "20+" cap of
+  // the FF circle in KS Scout 0.9.4 (FF_PALETTE, ffStyle, FF_INK_DARK,
+  // FF_INK_LIGHT, FF_NO_DATA_COLOR, FF_BADGE_CAP). Dark text on the colours 1-9
+  // and white on 0 and 10: that is what clears 4.5:1 contrast on them.
   const SCOUT_PALETTE = Object.freeze([
-    "#3057e1", "#3274ff", "#29a9ff", "#27d7f2", "#28d8b8",
-    "#35d96f", "#85dd28", "#d9df24", "#f3b326", "#f57c1f", "#ef3340"
+    "#1734e8", "#1788e8", "#17dbe8", "#17e8a1", "#17e84e",
+    "#34e817", "#88e817", "#dbe817", "#e8a117", "#e84e17", "#e81734"
+  ]);
+  const FF_INK_DARK = "#0C0A08";
+  const FF_INK_LIGHT = "#FFFFFF";
+  const FF_NO_DATA_COLOR = "#4b5563";
+  const FF_BADGE_CAP = 20;
+  const FF_CIRCLE_MAX_PX = 22;
+  const STATS_MARK_MAX_HEIGHT_PX = 12;
+  const STATS_MARK_MAX_WIDTH_PX = 40;
+  // Where the faction icon of a row can be, inside the member cell, in the order
+  // tried. The first element with a real size that does not hold the name link
+  // wins. factionWrap / factionImage are measured on Torn PDA's member pages
+  // (KS_Row_Measure 2026-10-21); the others are the shapes Scout 0.9.4 also
+  // looks for. The war list's own markup is not measured.
+  const FACTION_ICON_SELECTORS = Object.freeze([
+    "[class*='factionWrap']",
+    "img[class*='factionImage']",
+    "img[class*='faction' i]",
+    "img[src*='factiontag' i]",
+    "img[src*='faction_tag' i]",
+    "a[href*='factions.php'] img"
   ]);
 
   // DEMO.
@@ -5339,12 +5400,27 @@
     return String(Math.round(value));
   }
 
-  function scoutColorForFairFight(value) {
+  function scoutFairFightIndex(value) {
     const ffValue = Number(value);
-    if (!Number.isFinite(ffValue) || ffValue <= 0) return "#4b5563";
+    if (!Number.isFinite(ffValue) || ffValue <= 0) return -1;
     const ff = Math.max(1, Math.min(5, ffValue));
-    const index = Math.max(0, Math.min(10, Math.floor(((ff - 1) / 4) * 10)));
-    return SCOUT_PALETTE[index];
+    return Math.max(0, Math.min(10, Math.floor(((ff - 1) / 4) * 10)));
+  }
+
+  function scoutColorForFairFight(value) {
+    const index = scoutFairFightIndex(value);
+    return index < 0 ? FF_NO_DATA_COLOR : SCOUT_PALETTE[index];
+  }
+
+  // Scout 0.9.4 ffStyle().ink: dark text on colours 1-9, white on 0 and 10.
+  function scoutInkForFairFight(value) {
+    const index = scoutFairFightIndex(value);
+    return index >= 1 && index <= 9 ? FF_INK_DARK : FF_INK_LIGHT;
+  }
+
+  // Scout 0.9.4 badgeModel(): FF with ONE decimal, "20+" above the cap.
+  function fairFightCircleText(value) {
+    return value > FF_BADGE_CAP ? `${FF_BADGE_CAP}+` : value.toFixed(1);
   }
 
   function ensureInlinePanel(sourceShadow = rowPlaneShadow()) {
@@ -5548,9 +5624,10 @@
         [data-role='row-host'] { position:absolute; display:block; overflow:visible; pointer-events:none; contain:layout style; font-family:Arial,sans-serif; }
         .presenter { position:absolute; display:none; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; pointer-events:none; text-align:center; }
         .presenter[hidden] { display:none !important; }
-        .ff,.est,.hospital { border:1px solid rgba(15,23,42,.55); border-radius:4px; color:#fff; background:rgba(15,23,42,.88); text-shadow:0 1px 1px #000; font-weight:900; line-height:14px; }
-        .ff { font-size:7px; }
-        .est { font-size:7px; }
+        .hospital { border:1px solid rgba(15,23,42,.55); border-radius:4px; color:#fff; background:rgba(15,23,42,.88); text-shadow:0 1px 1px #000; font-weight:900; line-height:14px; }
+        /* 1.5.191: a round FF circle and a small dark stats mark, as in KS Scout. */
+        .ff { align-items:center; justify-content:center; padding:0; border:0; border-radius:50%; color:#fff; font:700 10px/1 Arial,sans-serif; font-variant-numeric:tabular-nums; }
+        .est { padding:0 2px; border:1px solid rgba(148,163,184,.45); border-radius:4px; color:#e2e8f0; background:rgba(15,23,42,.92); font:700 8px/10px Arial,sans-serif; text-overflow:clip; }
         .hospital { color:#ffe2e2; background:rgba(127,29,29,.88); border-color:rgba(248,113,113,.75); font-size:7px; }
         button[data-role='dibs'] { position:absolute; display:none; min-width:34px; min-height:30px; margin:0; padding:1px 2px; border:1px solid #718096; border-radius:6px; background:rgba(26,32,44,.96); color:#e2e8f0; font:900 8px/1.05 Arial,sans-serif; text-align:center; touch-action:manipulation; -webkit-tap-highlight-color:transparent; pointer-events:auto; overflow:hidden; }
         button[data-role='dibs'] .label { display:block; font:900 12px/1.15 Arial,sans-serif; white-space:nowrap; }
@@ -5753,10 +5830,11 @@
     if (cell.style.visibility !== next) cell.style.visibility = next;
   }
 
-  // Same rule for the Score cell. The Est box was drawn on top of Torn's own
-  // score and the score read through behind it -- two numbers in one small cell
-  // (owner, 2026-09-05). KS takes the cell only when it has an estimate to put
-  // there; with no estimate the box goes away and Torn's score is untouched.
+  // The Score cell. Up to 1.5.190 the Est box was drawn on top of Torn's own
+  // score and the cell was hidden while it held an estimate. Since 1.5.191 KS
+  // draws no box on the Score cell and never hides it: this function is only
+  // called with false, to give a cell back that an older version left hidden
+  // (an update without a page load) and when a binding is retired.
   function setNativeScoreHidden(binding, hidden) {
     const cell = binding?.anchors?.est;
     if (!(cell instanceof HTMLElement)) return;
@@ -6066,10 +6144,132 @@
       layerRect,
       rowRect,
       memberRect: resolved.anchors.honor?.getBoundingClientRect() || null,
-      estRect: resolved.anchors.est?.getBoundingClientRect() || null,
+      memberCellRect: resolved.anchors.member?.getBoundingClientRect() || null,
+      iconRect: factionIconRect(resolved),
+      // The cells the marks must never cover.
+      guardRects: [resolved.anchors.score, resolved.anchors.level, resolved.anchors.status, resolved.anchors.attack]
+        .filter(cell => cell instanceof HTMLElement)
+        .map(cell => cell.getBoundingClientRect())
+        .filter(rect => rect.width > 0 && rect.height > 0),
       statusRect: resolved.anchors.status?.getBoundingClientRect() || null,
       attackRect: resolved.anchors.attack?.getBoundingClientRect() || null
     };
+  }
+
+  // The faction icon of a row: the first element of FACTION_ICON_SELECTORS inside
+  // the member cell that has a real size, is no bigger than an icon, and does not
+  // hold the name link. Returns its rectangle and the selector that found it, or
+  // null (the fallback placement is then used).
+  function factionIconRect(resolved) {
+    const member = resolved.anchors.member;
+    if (!(member instanceof HTMLElement)) return null;
+    const rowHeight = resolved.row.getBoundingClientRect().height;
+    for (const selector of FACTION_ICON_SELECTORS) {
+      let candidates;
+      try { candidates = member.querySelectorAll(selector); } catch { continue; }
+      for (const element of candidates) {
+        if (!(element instanceof Element) || element.closest("[data-role='row-host']")) continue;
+        if (resolved.profile instanceof Element && (element.contains(resolved.profile) || resolved.profile.contains(element))) continue;
+        const rect = element.getBoundingClientRect();
+        if (rect.width < 6 || rect.height < 6 || rect.width > 60 || rect.height > rowHeight) continue;
+        return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height, selector };
+      }
+    }
+    return null;
+  }
+
+  function setMarkBox(element, display, box) {
+    Object.assign(element.style, {
+      display,
+      left: `${box.left.toFixed(2)}px`,
+      top: `${box.top.toFixed(2)}px`,
+      width: `${box.width.toFixed(2)}px`,
+      height: `${box.height.toFixed(2)}px`
+    });
+  }
+
+  // Width of the stats text in 8 px bold Arial, estimated per character so no
+  // layout read is needed (digits 4.6, "." 2.4, "m" 7.2, "b" "k" "t" 4.8).
+  // The 6 px added by the caller are the border and the padding.
+  function statsMarkTextWidth(text) {
+    let width = 0;
+    for (const char of String(text)) {
+      width += char === "." ? 2.4 : char === "m" ? 7.2 : /[0-9]/.test(char) ? 4.6 : 4.8;
+    }
+    return width;
+  }
+
+  function hideMark(element) {
+    if (!(element instanceof HTMLElement)) return;
+    element.style.display = "none";
+    element.dataset.place = "none";
+  }
+
+  // 1.5.191: the FF circle and the stats mark. Everything is computed from the
+  // rectangles measured in this frame, relative to the row: the circle is
+  // centred on the faction icon when the row has one (data-place "icon"), else it
+  // sits at the right edge of the honor bar, low (data-place "honor"). The stats
+  // mark goes under the circle if that fits inside the row, else to the right of
+  // it, else to the left of it, and is dropped (data-place "none") if none of the
+  // three keeps it inside the member cell and off the Score, Level, Status and
+  // Attack cells. It is at most 40 px wide, so it can cover at most 40 px of the
+  // honor bar.
+  function layoutRowMarks(measurement, ff, est) {
+    const { rowRect, memberRect, memberCellRect, iconRect, guardRects } = measurement;
+    const rowW = rowRect.width;
+    const rowH = rowRect.height;
+    const diameter = Math.min(FF_CIRCLE_MAX_PX, Math.floor(rowH - 4));
+    if (!(diameter >= 10) || (!iconRect && !memberRect)) { hideMark(ff); hideMark(est); return; }
+
+    let left;
+    let top;
+    let place;
+    if (iconRect) {
+      place = "icon";
+      left = (iconRect.left + iconRect.right) / 2 - rowRect.left - diameter / 2;
+      top = (iconRect.top + iconRect.bottom) / 2 - rowRect.top - diameter / 2;
+    } else {
+      place = "honor";
+      left = Math.max(memberRect.left - rowRect.left, memberRect.right - rowRect.left - 2 - diameter);
+      top = memberRect.bottom - rowRect.top - 1 - diameter;
+    }
+    top = Math.max(0, Math.min(rowH - diameter, top));
+    const circle = { left, top, width: diameter, height: diameter };
+    if (ff instanceof HTMLElement) {
+      setMarkBox(ff, "flex", circle);
+      ff.style.fontSize = `${(diameter * (ff.textContent.length >= 4 ? .36 : .45)).toFixed(1)}px`;
+      ff.dataset.place = place;
+      ff.dataset.iconSel = iconRect ? iconRect.selector : "";
+    }
+
+    if (!(est instanceof HTMLElement)) return;
+    const text = est.textContent;
+    if (!text) { hideMark(est); return; }
+    const height = Math.min(STATS_MARK_MAX_HEIGHT_PX, Math.floor(rowH - 2));
+    const width = Math.min(STATS_MARK_MAX_WIDTH_PX, Math.max(18, Math.ceil(statsMarkTextWidth(text) + 6)));
+    const cellLeft = memberCellRect ? memberCellRect.left - rowRect.left : 0;
+    const cellRight = memberCellRect ? memberCellRect.right - rowRect.left : rowW;
+    const guards = guardRects.map(rect => ({
+      left: rect.left - rowRect.left, right: rect.right - rowRect.left,
+      top: rect.top - rowRect.top, bottom: rect.bottom - rowRect.top
+    }));
+    const fits = box => {
+      const right = box.left + width;
+      const bottom = box.top + height;
+      if (box.left < Math.max(0, cellLeft) - .5 || right > Math.min(rowW, cellRight) + .5 || box.top < -.5 || bottom > rowH + .5) return false;
+      return !guards.some(g => box.left < g.right - .5 && right > g.left + .5 && box.top < g.bottom - .5 && bottom > g.top + .5);
+    };
+    const middle = circle.top + diameter / 2 - height / 2;
+    const options = [
+      ["under", { left: circle.left + diameter / 2 - width / 2, top: circle.top + diameter + 1 }],
+      ["right", { left: circle.left + diameter + 1, top: middle }],
+      ["left", { left: circle.left - 1 - width, top: middle }]
+    ];
+    const chosen = options.find(([, box]) => fits(box));
+    if (!chosen) { hideMark(est); return; }
+    setMarkBox(est, "block", { left: chosen[1].left, top: chosen[1].top, width, height });
+    est.style.lineHeight = `${Math.max(0, height - 2)}px`;
+    est.dataset.place = chosen[0];
   }
 
   function applyRowBindingLayout(measurement) {
@@ -6092,18 +6292,7 @@
     const est = binding.host.querySelector(`[data-role='est']`);
     const hospital = binding.host.querySelector(`[data-role='hospital']`);
     const dibs = binding.host.querySelector(`[data-role='dibs']`);
-    const memberRect = measurement.memberRect;
-    if (memberRect && ff instanceof HTMLElement) {
-      const pillWidth = Math.min(52, Math.max(30, memberRect.width * .38));
-      const pillRect = {
-        left: memberRect.right - pillWidth - 2,
-        top: memberRect.bottom - Math.min(15, memberRect.height) - 1,
-        width: pillWidth,
-        height: Math.min(15, memberRect.height)
-      };
-      setOwnGeometry(ff, pillRect, rowRect);
-    } else if (ff instanceof HTMLElement) ff.style.display = "none";
-    setOwnGeometry(est, measurement.estRect, rowRect, { inset: 1 });
+    layoutRowMarks(measurement, ff, est);
     // The countdown moved into the button, which now owns the Status cell.
     // Two boxes cannot share one cell on a phone.
     setOwnGeometry(hospital, null, rowRect);
@@ -6286,12 +6475,35 @@
   // print "FF -" on every row with no value yet, covering part of the member
   // name (owner Demo-off screenshot 2026-09-05). visibility, not display: the
   // layout pass runs after this one and would undo a display change.
+  //
+  // 1.5.191: the pill is a round circle ("2.4", "20+"), coloured and numbered
+  // as the FF circle in KS Scout 0.9.4; the exact value is in data-ff.
   function renderFairFightBadge(ff, shown) {
     if (!(ff instanceof HTMLElement)) return;
     const hasFf = Number.isFinite(shown) && shown > 0;
-    ff.textContent = hasFf ? `FF ${shown.toFixed(2)}` : "";
+    const ink = hasFf ? scoutInkForFairFight(shown) : FF_INK_LIGHT;
+    ff.textContent = hasFf ? fairFightCircleText(shown) : "";
+    ff.dataset.ff = hasFf ? String(shown) : "";
     ff.style.background = hasFf ? scoutColorForFairFight(shown) : "rgba(15,23,42,.88)";
+    ff.style.color = ink;
+    ff.style.textShadow = ink === FF_INK_LIGHT ? "0 1px 1px #000" : "none";
     ff.style.visibility = hasFf ? "visible" : "hidden";
+  }
+
+  // 1.5.191: the stats estimate as a small mark ("233k"), no word "Est", no
+  // mark without an estimate. It has its own place on the row; Torn's Score
+  // cell is not involved.
+  function renderStatsBadge(est, estimate) {
+    if (!(est instanceof HTMLElement)) return;
+    const hasEstimate = Boolean(estimate) && estimate !== "-";
+    const text = hasEstimate ? estimate : "";
+    // The mark's width and place depend on its text: a changed text needs a
+    // new layout pass, which a render-only frame does not do.
+    if (est.textContent !== text) {
+      est.textContent = text;
+      schedulePresentationFrame({ layout: true });
+    }
+    est.style.visibility = hasEstimate ? "visible" : "hidden";
   }
 
   function renderRowBinding(binding, resolved, rwPhase) {
@@ -6308,12 +6520,10 @@
     const estimate = demoActive()
       ? `${(1.2 + (Number(resolved.id) % 40) / 10).toFixed(1)}m`
       : formatBattleStatsEstimate(stats);
-    const hasEstimate = Boolean(estimate) && estimate !== "-";
-    if (est instanceof HTMLElement) {
-      est.textContent = hasEstimate ? `Est ${estimate}` : "";
-      est.style.visibility = hasEstimate ? "visible" : "hidden";
-    }
-    setNativeScoreHidden(binding, hasEstimate);
+    renderStatsBadge(est, estimate);
+    // Torn's Score cell is never hidden since 1.5.191; this gives it back if an
+    // older version left it hidden (an update without a page load).
+    setNativeScoreHidden(binding, false);
     const hospitalState = computeHospitalSeconds(resolved);
     // The separate hospital box is retired: the button owns the Status cell and
     // carries the countdown. The element is kept, emptied and hidden, so nothing
@@ -6389,7 +6599,7 @@
       const ff = host?.querySelector?.(`[data-role='ff']`);
       const est = host?.querySelector?.(`[data-role='est']`);
       renderFairFightBadge(ff, ffValue);
-      if (est instanceof HTMLElement) est.textContent = `Est ${formatBattleStatsEstimate(stats)}`;
+      renderStatsBadge(est, formatBattleStatsEstimate(stats));
     }
   }
 
