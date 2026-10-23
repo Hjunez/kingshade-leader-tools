@@ -399,8 +399,14 @@
           <dd>None. This page only reads. It never attacks, sends, spends or changes anything.</dd>
           <dt>Position order</dt>
           <dd>Sorting by position follows the faction's ranking, not the alphabet: Leader,
-            Co-leader, Sgt at Arms, Warden, Recruiter, Chainbreaker, Prospect, Recruit, Outcast.
-            A position the page does not recognise sorts last.</dd>
+            Co-leader, Sgt at Arms, Technician, Warden, Chainbreaker, Recruiter, Prospect, Recruit,
+            Outcast. A position the page does not recognise sorts last.</dd>
+          <dt>Status order</dt>
+          <dd>Sorting by status follows availability, not the alphabet: Okay, Traveling, Abroad,
+            Jail, Hospital, Federal, then anything else. Within one status, the most recently
+            active member comes first.</dd>
+          <dt>Last action order</dt>
+          <dd>A member who is online right now always counts as the most recently active.</dd>
           <dt>Call tag</dt>
           <dd>Every request is tagged <code>KSLeaderBoard</code>, so you can recognise it in your own
             API key log.</dd>
@@ -490,14 +496,51 @@
       'coleader': 2,
       'co leader': 2,
       'sgt at arms': 3,
-      'warden': 4,
-      'recruiter': 5,
+      'technician': 4,
+      'warden': 5,
       'chainbreaker': 6,
-      'prospect': 7,
-      'recruit': 8,
-      'outcast': 9
+      'recruiter': 7,
+      'prospect': 8,
+      'recruit': 9,
+      'outcast': 10
     };
     var UNRANKED_POSITION = 50;
+
+    /* Status order is the faction's choice (Kingshade 2026-10-23): most available first.
+       Torn returns the state as text; anything not listed here sorts after these, then by
+       its own name, so a new state never disappears. */
+    var STATE_RANK = {
+      'okay': 1,
+      'traveling': 2,
+      'abroad': 3,
+      'jail': 4,
+      'hospital': 5,
+      'federal': 6
+    };
+    var UNRANKED_STATE = 50;
+
+    function stateRank(state) {
+      var key = String(state || '').trim().toLowerCase();
+      return Object.prototype.hasOwnProperty.call(STATE_RANK, key)
+        ? STATE_RANK[key]
+        : UNRANKED_STATE;
+    }
+
+    /* Oldest activity first. Someone who is online right now counts as the most recently
+       active, whatever their last_action timestamp says — the Last action column already
+       shows them as "online", so the order has to agree with what is on screen. */
+    function compareActivity(a, b) {
+      var aOnline = a.lastStatus === 'Online';
+      var bOnline = b.lastStatus === 'Online';
+      if (aOnline && bOnline) return 0;
+      if (aOnline) return 1;
+      if (bOnline) return -1;
+      return a.lastTimestamp - b.lastTimestamp;
+    }
+
+    function compareName(a, b) {
+      return a.name.localeCompare(b.name, 'en', { sensitivity: 'base' });
+    }
 
     function positionRank(name) {
       var key = String(name || '').trim().toLowerCase();
@@ -736,10 +779,23 @@
           if (result === 0) result = a.position.localeCompare(b.position, 'en', { sensitivity: 'base' });
           if (result === 0) result = a.name.localeCompare(b.name, 'en', { sensitivity: 'base' });
         }
-        else if (sortKey === 'state') result = a.state.localeCompare(b.state, 'en', { sensitivity: 'base' });
+        else if (sortKey === 'state') {
+          result = stateRank(a.state) - stateRank(b.state);
+          if (result === 0) result = a.state.localeCompare(b.state, 'en', { sensitivity: 'base' });
+          if (result === 0) {
+            /* Same status: most recently active first, then name — in both directions, so the
+               order inside a group never depends on what the API happened to return. */
+            result = -compareActivity(a, b);
+            if (result === 0) result = compareName(a, b);
+            return result;
+          }
+        }
         else if (sortKey === 'level') result = b.level - a.level;
         else if (sortKey === 'days') result = b.days - a.days;
-        else result = a.lastTimestamp - b.lastTimestamp; /* oldest action first */
+        else {
+          result = compareActivity(a, b); /* oldest action first, online last */
+          if (result === 0) return compareName(a, b);
+        }
         return result * sortDir;
       });
       return copy;
