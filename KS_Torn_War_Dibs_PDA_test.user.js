@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         KS Torn War Dibs PDA
+// @name         KS Torn War Dibs PDA TEST
 // @namespace    kingshade.torn
 // @version      1.5.191
 // @description  Roster-local PDA presentation with v1.5.145 authority and shared-claim safety.
