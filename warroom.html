@@ -427,7 +427,10 @@
   .odot.idle { background: var(--warn); }
   .odot.off { background: var(--faint); }
   /* R17. The war line stays at the top of the window while the list scrolls under it. */
-  #warPanel { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 30; }
+  /* R20: top is 0, not env(safe-area-inset-top). Torn PDA's web view reports the height of the
+     status bar as the safe-area inset although the view does not lie under it, which left a
+     40 px gap above the stuck panel with list rows showing in it. */
+  #warPanel { position: sticky; top: 0; z-index: 30; }
   /* R18/R19. The Callable filter: one button, in the head of the list beside the heading. */
   #callableBtn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
   .panel-head .hint { margin-left: auto; }
@@ -469,7 +472,10 @@
     #targetHost thead { display: none; }
     #targetHost tbody tr {
       display: grid; grid-template-columns: 52px auto minmax(0, 1fr) auto auto;
-      grid-template-areas: "ff name name name act" "ff lv st atk act" "est why why atk act";
+      /* R20: the attack and DIBS buttons share rows 2-3 (one centre, side by side) and the
+         name has the whole top row. With the DIBS button over all three rows and the attack
+         button beside it, the name's box ran into the attack button's top edge. */
+      grid-template-areas: "ff name name name name" "ff lv st atk act" "est why why atk act";
       align-items: center; gap: 0 8px; padding: 8px 10px; border-bottom: 1px solid var(--line);
     }
     #targetHost tbody td { display: block; padding: 0; border: 0; min-width: 0; }
