@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kingshade Scout for Torn PDA
 // @namespace    https://kingshade.tools/
-// @version      0.9.4
+// @version      0.9.5
 // @downloadURL  https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/Kingshade_Scout_Torn_PDA.user.js
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/Kingshade_Scout_Torn_PDA.user.js
 // @description  KS Scout for Torn PDA: FF/EST, live faction status, countdowns, filters and sorting. Never runs on Ranked War lists.
@@ -14,6 +14,30 @@
 // @run-at       document-idle
 // @noframes
 // ==/UserScript==
+//
+// 0.9.5: Words on the screen only, after the first run on a computer (Chrome + Tampermonkey, 2026-10-24). No logic, request,
+// storage or layout changes.
+//
+// FIXED
+// - On a computer the panel said "KS · PDA · v0.9.4". The sub line now names where the script runs: "KS · PDA" in Torn PDA,
+//   "KS · PC" anywhere else (read once at start: Torn PDA provides PDA_httpGet before userscripts run, Tampermonkey does not).
+// - Switching tab or window while "Save & load data" / "Retry FFScouter" was loading showed "Saved, but the data did not load.
+//   Tap Retry FFScouter." Nothing had failed: requests wait while the page is hidden or unfocused. The line now reads
+//   "Paused · this tab is not active. The data loads when you come back to it." and goes away by itself once the data has loaded.
+// CHANGED
+// - The footer and the "Data storage" disclosure say "this browser" on a computer and "this Torn PDA webview" in Torn PDA.
+// KNOWN ISSUES
+// - Seen once on a computer: one travelling member kept Torn's own "Traveling" text (cut to "Trav...") and was not counted
+//   under Travel. The cause is not proven (possibly Torn's faction data did not show the trip yet), so nothing is changed for it.
+// VERIFICATION
+// - Synthetic only (KS PDA Testrigg). Acceptance test:
+// - 1. Torn PDA: update KS Scout to 0.9.5. The sub line in the panel reads "KS · PDA · v0.9.5". FF circles, names and statuses
+//      look as in 0.9.4.
+// - 2. Computer (Tampermonkey): update KS Scout to 0.9.5. The sub line reads "KS · PC · v0.9.5".
+// - 3. Computer: open the gear, press "Save & load data", and at once click another tab. Come back after 30 seconds: the line
+//      reads "Paused · this tab is not active. ..." or has already gone; FF fills in by itself, no "Retry FFScouter".
+//
+// HISTORY. The text of 0.9.4, which this version replaces:
 //
 // 0.9.4: One change after the phone test of 0.9.3: the order of Soonest.
 //
@@ -304,7 +328,12 @@
     }
 
     const NAME = "KS Scout";
-    const VERSION = "0.9.4";
+    const VERSION = "0.9.5";
+    // Where the script runs, read once at start: Torn PDA injects PDA_httpGet (and its flutter bridge) before userscripts run;
+    // Tampermonkey on a computer has neither. Only used for words on the screen ("PDA" / "PC", "this browser").
+    const ON_TORN_PDA = typeof window.PDA_httpGet === "function" || typeof window.flutter_inappwebview !== "undefined";
+    const PLATFORM_LABEL = ON_TORN_PDA ? "PDA" : "PC";
+    const STORE_PLACE = ON_TORN_PDA ? "this Torn PDA webview" : "this browser";
     const API_BASE = "https://ffscouter.com/api/v1";
     const TORN_API_BASE = "https://api.torn.com";
     const PREFIX = "kingshade-scout:";
@@ -4454,7 +4483,7 @@
     // Panel: one panel above the first member list
     // ---------------------------------------------------------------------------------------------
 
-    const FOOTER_TEXT = "Reads the faction page you have open, Torn's official API (faction basic) and FFScouter. Requests only while this page is open and focused, and never on a Ranked War list. Never clicks, attacks or navigates for you. Your key, settings, manual values and a short cache stay unencrypted in this Torn PDA webview. KS has no server and receives nothing.";
+    const FOOTER_TEXT = `Reads the faction page you have open, Torn's official API (faction basic) and FFScouter. Requests only while this page is open and focused, and never on a Ranked War list. Never clicks, attacks or navigates for you. Your key, settings, manual values and a short cache stay unencrypted in ${STORE_PLACE}. KS has no server and receives nothing.`;
 
     const CHIPS = [
         ["all", "All"],
@@ -4481,7 +4510,7 @@
     };
 
     const DISCLOSURE_ITEMS = [
-        ["Data storage", "KS Scout stores the key, settings, manual values, notes, cached FF/EST response data (including estimate/source/spy metadata), status data and travel data locally in this Torn PDA webview until cleared or removed. The key is stored unencrypted in this Torn PDA webview. FFScouter separately stores/uses registered key data under its own policy."],
+        ["Data storage", `KS Scout stores the key, settings, manual values, notes, cached FF/EST response data (including estimate/source/spy metadata), status data and travel data locally in ${STORE_PLACE} until cleared or removed. The key is stored unencrypted in ${STORE_PLACE}. FFScouter separately stores/uses registered key data under its own policy.`],
         ["Data sharing", "Torn API receives the key for faction/basic. FFScouter receives the key for a registration request you explicitly trigger, plus /check-key, /get-stats and /player-flights; visible target IDs are included for stats and flight lookups. KS Scout has no server and its developer receives nothing."],
         ["Purpose of use", "Register a new key with FFScouter only when you press the registration button; display FF/EST values; check FFScouter registration status/premium entitlement; show estimated flight landing/window/method; map visible faction members; and show faction status/timers, filters and sorting."],
         ["Key storage & sharing", "KS Scout stores the key locally and sends it over HTTPS only to Torn API and FFScouter. FFScouter key storage/access is governed by its own terms and data policy."],
@@ -4510,7 +4539,7 @@
                 <span class="ksui-mark" aria-hidden="true">KS</span>
                 <div class="kss-headtext">
                     <div class="ksui-title">KS SCOUT</div>
-                    <div class="ksui-sub">KS · PDA · <span class="kss-ver">v${VERSION}</span></div>
+                    <div class="ksui-sub">KS · ${PLATFORM_LABEL} · <span class="kss-ver">v${VERSION}</span></div>
                 </div>
                 <span class="ksui-pill unknown" data-k="pill" role="status">CHECKING</span>
                 <button type="button" class="kss-btn kss-icon" data-act="gear" aria-label="Settings" aria-expanded="false">⚙︎</button>
@@ -5075,6 +5104,11 @@
             } else if (outcome?.kind === "error") {
                 setStatusLine(failures.ff || "FFScouter request failed", "stop", "manual");
                 setIfChanged(button, "Retry FFScouter");
+            } else if (!isPageVisible()) {
+                // The tab or the window lost focus while loading: every request waits until the page is in front again, so
+                // nothing failed. Shown as an automatic line, so it goes away by itself once the data has loaded.
+                setStatusLine("Paused · this tab is not active. The data loads when you come back to it.", "wait", "auto");
+                setIfChanged(button, "Save & load data");
             } else {
                 setStatusLine("Saved, but the data did not load. Tap Retry FFScouter.", "stop", "manual");
                 setIfChanged(button, "Retry FFScouter");
