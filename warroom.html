@@ -440,6 +440,28 @@
   #callableBtn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
   .panel-head .hint { margin-left: auto; }
 
+  /* ---- R22 (2026-10): honor bars ----
+     The player's honor bar is Torn's own 200 x 19 picture; the name is drawn on top of it as text,
+     white with a black 1 px outline, centred. The row keeps the height of a plain name: the name line
+     is 1.5em (the line height of the body) with or without a bar, so a bar that arrives moves nothing.
+     On a phone the name area is about 252 px at 360 px, so 200 px fits; max-width keeps the bar inside
+     a narrower one. The Honor bars button sits beside Callable and may go to the next line. */
+  #honorBtn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  #targetHost .tname.hbar { display: flex; align-items: center; height: 1.5em; }
+  #targetHost .tname a.hlink {
+    position: relative; display: block; flex: 0 1 200px; width: 200px; max-width: 100%; height: 19px;
+    border-bottom: 0; color: #fff;
+  }
+  #targetHost .tname a.hlink:hover { color: #fff; border-color: transparent; }
+  #targetHost .hlink img { display: block; width: 200px; max-width: 100%; height: 19px; }
+  #targetHost .hlink .hname {
+    position: absolute; left: 0; top: 0; right: 0; bottom: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; line-height: 19px; font-weight: 600; white-space: nowrap; color: #fff;
+    text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000,
+      0 -1px 0 #000, 0 1px 0 #000, -1px 0 0 #000, 1px 0 0 #000;
+  }
+
   /* Phones: one row per target, nothing to scroll sideways. The table stays a
      table; only how its cells are laid out changes, so every binding, Torn ID
      and button is the same as on a wide screen. */
@@ -640,6 +662,7 @@
             online and have 2:00 or less left, one at a time, each
             target at most every ten seconds and at most thirty readings a minute &mdash; plus one
             reading when you press Take DIBS on a target above Fair Fight 3.40.
+            The same profile call is also made once per target for its honor bar, at most ten a minute - see Honor bars.
             <strong>When you press Take DIBS</strong> the page asks Torn twice before anything is
             sent, as the scripts do: <code>/v2/faction/wars</code> (is the war still live) and
             <code>/v2/user/{target}/basic</code> (is the target still in hospital with 2:00 or
@@ -697,7 +720,8 @@
           <dd>Your Torn key and your FFScouter key if you gave one, in this browser's local storage
             on this device, as plain text &mdash; this page does not encrypt them. They stay until
             you press Forget key or clear the browser's site data. The column you last sorted the
-            list by is kept there too. Nothing else &mdash; and not the sign-in slip. Each key has
+            list by is kept there too. Your choice for Honor bars is kept there as well, once you have
+            pressed that button. Nothing else &mdash; and not the sign-in slip. Each key has
             its own Forget button above.</dd>
           <dt>Writes</dt>
           <dd>Nothing in Torn, ever. No attacks, no clicks, no navigation, no page scraping, no
@@ -722,6 +746,17 @@
             is too old. Callable shows only the rows whose Take DIBS button can be pressed, and
             the one you hold; it is kept in memory in this tab and nowhere else. The war line
             at the top stays in view while you scroll.</dd>
+          <dt>Honor bars</dt>
+          <dd>Each row can show the player's honor bar behind the name, with the name written on it.
+            To know which bar a player wears, this page reads the honor ID from the same profile call
+            it already makes for life: once per target and war, at most ten a minute, never while a
+            target is about to leave hospital (3:00 or less left), and only while this page is on
+            screen. The picture itself is loaded straight from <code>www.torn.com</code> by your
+            browser; this page does not copy it, does not save it and sends no page address along with
+            the request. Torn staff have approved this. The Honor bars button above the list switches
+            all of it off: no profile call for bars, no pictures, plain names. It is on until you turn
+            it off on this device. Where anything is missing &mdash; no honor, a key without profile,
+            a picture Torn does not deliver &mdash; the name is shown plain.</dd>
           <dt>FF and Est</dt>
           <dd>From FFScouter &mdash; not from Torn, and not from our claim server. With an FFScouter
             key on this page, this browser asks <code>ffscouter.com</code> for Fair Fight and
@@ -748,6 +783,7 @@
     <div class="panel-head">
       <h2>Targets</h2>
       <button type="button" class="btn small" id="callableBtn" aria-pressed="false">Callable (0)</button>
+      <button type="button" class="btn small" id="honorBtn" aria-pressed="true">Honor bars</button>
       <p class="hint" id="targetHint"></p>
     </div>
     <div class="simreset" id="simResetBar" hidden>
@@ -777,6 +813,7 @@
         <dt>Roster</dt><dd id="advRoster" class="tid"></dd>
         <dt>FF and EST</dt><dd id="advFf" class="tid"></dd>
         <dt>Life</dt><dd id="advLife" class="tid"></dd>
+        <dt>Honor bars</dt><dd id="advHonors" class="tid"></dd>
         <dt>Clock</dt><dd id="advClock" class="tid"></dd>
         <dt>Last refusal</dt><dd id="advError" class="tid"></dd>
       </dl>
@@ -1473,7 +1510,7 @@
    'ffKey','toggleFfKey','forgetFfKey','ffSaid','ffBar',
    'sessionSaid','sessionState','sessionRetry',
    'warPanel','warWho','warMeta','warScore',
-   'targetPanel','targetHint','staleBar','targetHost','callableBtn',
+   'targetPanel','targetHint','staleBar','targetHost','callableBtn','honorBtn','advHonors',
    'simBanner','simRealWar','simWireWar','simResetBar','simResetBtn','simResetNote',
    'actionMessage','simResetButtonSize','simResetIdleSize','simResetArmedSize',
    'advServer','advWar','advMe','advClaims','advRoster','advFf','advError','advRaw']
@@ -2056,6 +2093,313 @@
   })();
 
   // ====================================================== LIFE ends here ===
+
+  // =========================================================================
+  // HONORS - the honor bar behind a player's name (R22).
+  //
+  // Torn staff have approved two things: reading honor_id out of the user profile
+  // in the API, and loading the picture straight from Torn's own address, without
+  // copying or storing it. That is all this block does.
+  //
+  //   - honor_id comes out of the same profile call Life uses (Roster.loadLife),
+  //     so it goes through the page's one road to Torn and its 100 a minute
+  //   - one target at a time, one reading every HONOR_READ_INTERVAL_MS at most
+  //   - only while the Honor bars button is on, the page is on screen and the
+  //     roster is there; never in the minutes a target is about to leave hospital
+  //     (the life readings and the DIBS presses then have all the room)
+  //   - each target once a war; the result lives in memory and nowhere else
+  //   - the picture is asked for once per honor ID per page load, with no referrer
+  //
+  // Nothing here decides anything about DIBS and nothing here reads CONFIG.
+  // Whatever is missing, the row shows the plain name.
+  // =========================================================================
+
+  var HONOR_IMAGE_BASE = 'https://www.torn.com/images/honors/';
+  var HONOR_READ_INTERVAL_MS = 6000;
+  var HONOR_PAUSE_SECONDS = 180;
+  var HONOR_ID_MAX = 999999;
+  var HONOR_STORE = 'ks-war-room-honors';
+  var HONOR_RETRY_MAX = 3;
+
+  var Honors = (function () {
+    var on = read(HONOR_STORE) !== 'off';   // on unless this device was told otherwise
+    var outcomes = {};         // targetId -> { honorId or null, fetchedAt, source, schemaVersion }
+    var failures = {};         // targetId -> readings that failed this war
+    var images = {};           // honorId -> loading | ok | refused (kept for the page load)
+    var held = {};             // honorId -> the Image that loaded it
+    var pending = null;        // the one reading that is out, or null
+    var lastStart = 0;         // when the last reading started
+    var profileMissing = false;   // Torn code 16: the key has no profile selection
+    var keyFailureCode = null;    // Torn code 2, 10, 13 or 18: the key is dead
+    var retryAfter = 0;           // Torn code 5, 9 or 17: leave it alone until then
+    var capabilityKey = '';
+    var warKey = '';
+    var contextSerial = 0;
+
+    // A whole number from 1 to HONOR_ID_MAX, nothing else. It is the only thing that
+    // ever goes into the picture's address.
+    function isHonorId(value) {
+      return typeof value === 'number' && Number.isSafeInteger(value) && value >= 1 && value <= HONOR_ID_MAX;
+    }
+
+    function imageUrl(honorId) {
+      return isHonorId(honorId) ? HONOR_IMAGE_BASE + String(honorId) + '/f.png' : '';
+    }
+
+    // A new key or a new war is a new question: what was read for the old one is gone.
+    function syncContext() {
+      var key = el.apiKey.value.trim();
+      var war = Roster.war();
+      var warId = war ? war.warId : '';
+      var changed = false;
+      if (key && key !== capabilityKey) {
+        capabilityKey = key;
+        profileMissing = false;
+        keyFailureCode = null;
+        retryAfter = 0;
+        changed = true;
+      }
+      if (warId && warId !== warKey) {
+        warKey = warId;
+        changed = true;
+      }
+      if (changed) {
+        outcomes = {};
+        failures = {};
+        contextSerial += 1;
+      }
+    }
+
+    function targetById(targetId) {
+      var targets = Roster.targets() || [];
+      for (var i = 0; i < targets.length; i++) {
+        if (targets[i].id === targetId) return targets[i];
+      }
+      return null;
+    }
+
+    // Is any target inside the last HONOR_PAUSE_SECONDS of its hospital stay?
+    function windowOpen(targets) {
+      for (var i = 0; i < targets.length; i++) {
+        var hospital = hospitalOf(targets[i]);
+        if (hospital.isHospital && Number.isFinite(hospital.seconds) && hospital.seconds <= HONOR_PAUSE_SECONDS) return true;
+      }
+      return false;
+    }
+
+    // The targets still to read: soonest out first, as the Status sort has them. A target
+    // that failed waits behind the ones not tried yet.
+    function candidates(targets) {
+      var column = columnById('status');
+      return targets
+        .filter(function (target) { return !outcomes[target.id] && (failures[target.id] || 0) < HONOR_RETRY_MAX; })
+        .sort(function (a, b) {
+          return ((failures[a.id] || 0) - (failures[b.id] || 0)) || column.compare(a, b) || (Number(a.id) - Number(b.id));
+        });
+    }
+
+    // What the page does about honor bars right now, and why.
+    function plan(now) {
+      if (!on) return { what: 'off' };
+      if (profileMissing) return { what: 'no-profile' };
+      if (keyFailureCode !== null) return { what: 'rejected' };
+      if (now < retryAfter) return { what: 'resting' };
+      var war = Roster.war();
+      var targets = Roster.targets();
+      if (!Roster.identity() || !war || !targets) return { what: 'waiting' };
+      if (document.hidden) return { what: 'hidden' };
+      if (tornHalted || now < tornBackoffUntil) return { what: 'waiting' };
+      var due = candidates(targets);
+      if (!due.length) return { what: 'done' };
+      if ((SIM || war.state === 'live') && windowOpen(targets)) return { what: 'paused' };
+      if (actBusy || pending) return { what: 'busy' };
+      var wait = lastStart + HONOR_READ_INTERVAL_MS - now;
+      if (wait > 0) return { what: 'spacing', wait: wait };
+      return { what: 'go', id: due[0].id };
+    }
+
+    function accept(targetId, payload, startedAt) {
+      var profile = payload && payload.profile;
+      if (!profile || typeof profile !== 'object' || String(profile.id) !== String(targetId)) return false;
+      outcomes[targetId] = {
+        honorId: isHonorId(profile.honor_id) ? profile.honor_id : null,
+        fetchedAt: startedAt, source: 'torn-profile', schemaVersion: 1
+      };
+      return true;
+    }
+
+    // A reading that did not give an answer. A few tries, then the plain name for the war.
+    function failed(targetId) {
+      failures[targetId] = (failures[targetId] || 0) + 1;
+      if (failures[targetId] >= HONOR_RETRY_MAX) {
+        outcomes[targetId] = { honorId: null, fetchedAt: Date.now(), source: 'torn-profile', schemaVersion: 1 };
+      }
+    }
+
+    // The picture is asked for once per honor ID. A row shows the bar only after it has loaded.
+    function preload(honorId) {
+      if (images[honorId]) return;
+      var url = imageUrl(honorId);
+      if (!url) return;
+      images[honorId] = 'loading';
+      var probe = new Image();
+      // Kept for the page load: while it lives the browser reuses the loaded picture for every row
+      // that wears the same bar, also after the button has been off and on again.
+      held[honorId] = probe;
+      probe.referrerPolicy = 'no-referrer';
+      probe.onload = function () {
+        images[honorId] = probe.naturalWidth > 0 ? 'ok' : 'refused';
+        renderTargets();
+        updateLine();
+      };
+      probe.onerror = function () {
+        images[honorId] = 'refused';
+        renderTargets();
+        updateLine();
+      };
+      probe.src = url;
+    }
+
+    async function readOne(target) {
+      var id = target.id;
+      var serial = contextSerial;
+      var key = capabilityKey;
+      var startedAt = Date.now();
+      lastStart = startedAt;
+      // An answer that comes after a new war, a new key, Forget key or the button turned off is not written.
+      var current = function () {
+        return serial === contextSerial && on && key === el.apiKey.value.trim();
+      };
+      var operation = (async function () {
+        try {
+          var payload = await Roster.loadLife(id);
+          if (!current()) return;
+          if (accept(id, payload, startedAt)) {
+            var honorId = outcomes[id].honorId;
+            if (honorId !== null) {
+              preload(honorId);
+              if (images[honorId] === 'ok') renderTargets();
+            }
+          } else {
+            failed(id);
+          }
+        } catch (error) {
+          if (!current()) return;
+          var apiCode = Number(error && error.tornCode);
+          if (apiCode === 16) {
+            profileMissing = true;
+            outcomes = {};
+            renderTargets();
+          } else if (apiCode === 2 || apiCode === 10 || apiCode === 13 || apiCode === 18) {
+            keyFailureCode = apiCode;
+            outcomes = {};
+            renderTargets();
+          } else if (apiCode === 5 || apiCode === 9 || apiCode === 17) {
+            retryAfter = Date.now() + 60000;
+          } else {
+            failed(id);
+          }
+        }
+      })();
+      pending = operation;
+      try {
+        await operation;
+      } finally {
+        if (pending === operation) pending = null;
+        updateLine();
+      }
+    }
+
+    // The line in Advanced, in plain words.
+    function line() {
+      var step = plan(Date.now());
+      if (step.what === 'off') return 'off on this device';
+      if (step.what === 'no-profile') return 'key lacks profile · honor bars off';
+      if (step.what === 'rejected') return 'API key rejected · honor bars off';
+      if (step.what === 'paused') return 'paused · a target is about to leave hospital';
+      var targets = Roster.targets() || [];
+      var read = 0, shown = 0, bare = 0, refused = 0;
+      targets.forEach(function (target) {
+        var outcome = outcomes[target.id];
+        if (!outcome) return;
+        read += 1;
+        if (outcome.honorId === null) { bare += 1; return; }
+        if (images[outcome.honorId] === 'ok') shown += 1;
+        else if (images[outcome.honorId] === 'refused') refused += 1;
+      });
+      var text = 'on · ' + read + ' of ' + targets.length + ' read · ' + shown + ' shown · ' + bare +
+        ' without a bar · ' + refused + (refused === 1 ? ' image' : ' images') + ' refused by Torn';
+      if (step.what === 'spacing') text += ' · next read in ' + Math.ceil(step.wait / 1000) + ' s';
+      else if (step.what === 'go') text += ' · next read now';
+      else if (step.what === 'done') text += ' · all read';
+      else if (step.what === 'busy') text += ' · waiting for a press to finish';
+      else if (step.what === 'resting') text += ' · resting, Torn asked for a pause';
+      else if (step.what === 'hidden') text += ' · page not on screen';
+      else text += ' · waiting for the roster';
+      return text;
+    }
+
+    function updateLine() { el.advHonors.textContent = line(); }
+
+    // Called once a second by the second hand: starts a reading when everything allows it.
+    function kick() {
+      syncContext();
+      var step = plan(Date.now());
+      if (step.what === 'go') {
+        var target = targetById(step.id);
+        if (target) readOne(target);
+      }
+      updateLine();
+    }
+
+    function paint() { el.honorBtn.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+
+    function setOn(value) {
+      on = !!value;
+      write(HONOR_STORE, on ? 'on' : 'off');
+      contextSerial += 1;
+      paint();
+      renderTargets();
+      updateLine();
+    }
+
+    function barFor(targetId) {
+      if (!on) return 0;
+      var outcome = outcomes[targetId];
+      return outcome && outcome.honorId !== null && images[outcome.honorId] === 'ok' ? outcome.honorId : 0;
+    }
+
+    function imageFor(honorId) {
+      var img = document.createElement('img');
+      img.setAttribute('referrerpolicy', 'no-referrer');
+      img.alt = '';
+      img.setAttribute('aria-hidden', 'true');
+      img.setAttribute('width', '200');
+      img.setAttribute('height', '19');
+      img.src = imageUrl(honorId);
+      return img;
+    }
+
+    return {
+      kick: kick,
+      barFor: barFor,
+      imageFor: imageFor,
+      line: line,
+      paint: paint,
+      setOn: setOn,
+      isOn: function () { return on; },
+      // The values go with the key. When the last reading started does not: forgetting
+      // a key is not a way round the spacing.
+      forget: function () {
+        outcomes = {}; failures = {};
+        capabilityKey = ''; warKey = '';
+        profileMissing = false; keyFailureCode = null; retryAfter = 0;
+        contextSerial += 1;
+      }
+    };
+  })();
+
+  // ==================================================== HONORS ends here ===
 
   // =========================================================================
   // FF SOURCE - the only place that talks to FFScouter.
@@ -3314,6 +3658,10 @@
   }
   el.callableBtn.addEventListener('click', toggleCallable);
 
+  // R22. The Honor bars button: on or off, remembered on this device once it has been pressed.
+  el.honorBtn.addEventListener('click', function () { Honors.setOn(!Honors.isOn()); });
+  Honors.paint();
+
   var pendingTarget = '';
 
   // The last refusal the server gave, and which row it belongs to.
@@ -3717,6 +4065,19 @@
       link.target = '_blank';
       link.rel = 'noopener noreferrer';
       link.textContent = target.name;
+      // R22: the honor bar behind the name, when the button is on and the picture has loaded.
+      // The link is the same link; the name is written on the picture, in its own span.
+      var barId = Honors.barFor(target.id);
+      if (barId) {
+        link.textContent = '';
+        link.className = 'hlink';
+        link.appendChild(Honors.imageFor(barId));
+        var barName = document.createElement('span');
+        barName.className = 'hname';
+        barName.textContent = target.name;
+        link.appendChild(barName);
+        name.className = 'tname hbar';
+      }
       // R16: online / idle / offline from the roster reading, read the way the
       // DIBS rules read it. No dot when Torn did not say or the reading is too old.
       var activity = activityOf(target);
@@ -4049,6 +4410,7 @@
       : 'not loaded';
     el.advFf.textContent = ffAdvancedLine();
     el.advLife.textContent = Life.statusLine();
+    el.advHonors.textContent = Honors.line();
     el.advClock.textContent = tornClockLabel();
     var advErr = Claims.lastError() || Roster.lastError() || '';
     var advDiag = Roster.lastDiagnostic();
@@ -4786,6 +5148,8 @@
     Roster.forget();
     // What Torn said about targets' life was read with that key. It goes too.
     Life.forget();
+    // The honor IDs were read with that key as well.
+    Honors.forget();
     // The sign-in was made from that key. It goes with it.
     Session.forget();
     Claims.drop();
@@ -4867,6 +5231,7 @@
   function secondHand() {
     updateTargetTimes();
     lifeQueueKick();
+    Honors.kick();
     // Which clock is being counted on can change between two full redraws -
     // a measure thrown away, a new one taken - and the line says so at once.
     el.advClock.textContent = tornClockLabel();
