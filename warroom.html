@@ -68,7 +68,7 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 20px 72px; display: flex; flex-direction: column; gap: 22px; }
+  .wrap { max-width: 1320px; margin: 0 auto; padding: 28px 20px 72px; display: flex; flex-direction: column; gap: 22px; }
 
   .backbar a {
     font-family: var(--display); font-weight: 600; font-size: 13px;
@@ -229,14 +229,17 @@
 
   /* One cell holds the DIBS state and the button that acts on it. Where the
      button sits is decided by the width of the window and by nothing in the
-     row: beside the state on a wide screen, under it on a narrow one. It used
-     to wrap wherever the text happened to be long, and then a row grew and
-     shrank with what it said - and a list whose rows change height moves
-     under the finger. */
+     row. It used to wrap wherever the text happened to be long, and then a row
+     grew and shrank with what it said - and a list whose rows change height
+     moves under the finger.
+     R22b: the buttons sit under the state at every width, not only under 1000 px.
+     Side by side the widest rows (a 51 character note, Attack and Take DIBS
+     beside it) need 1277 to 1330 px for the whole table, more than the 1278 px
+     the frame (.wrap, 1320 px) can give, and #targetHost then hid the Take DIBS
+     buttons behind a sideways scroll. Under the state the same rows need about
+     1090 px. */
   td .toolbar { gap: 8px 10px; flex-wrap: nowrap; }
-  @media (max-width: 1000px) {
-    td .toolbar { flex-direction: column; align-items: flex-start; }
-  }
+  td .toolbar { flex-direction: column; align-items: flex-start; }
 
   /* Sortable headers. Same face and colour as before; a real button, so the
      list can be ordered from the keyboard, and the whole header cell is the
@@ -395,6 +398,8 @@
      phone it used to beat the narrower widths set for phones below, and took so
      much of the row that a long name was cut short. */
   @media (min-width: 701px) {
+    /* R22b: the two lines of a state (20 px + 18 px), also where the word line is not drawn. */
+    #targetHost .dibs { min-height: 38px; }
     #targetHost .btn.small { min-width: 112px; }
     #targetHost td .toolbar { justify-content: space-between; }
     #targetHost thead th:last-child, #targetHost tbody td:last-child { width: 1%; min-width: 360px; }
