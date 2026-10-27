@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         KS Black Market PDA
 // @namespace    kingshade.ks-black-market
-// @version      0.2.0
-// @description  Best runs abroad for every item sold abroad (export, import, round trip) for members of Politically Incorrect. Reads only from the KS Black Market server. Never clicks, navigates or contacts Torn.
+// @version      0.3.0
+// @description  Travel advisor: the best runs abroad for every item sold abroad, and when to leave Torn to land right after a restock, for members of Politically Incorrect. Reads only from the KS Black Market server. Never clicks, navigates or contacts Torn.
 // @author       Kingshade
 // @match        https://www.torn.com/*
 // @noframes
@@ -15,14 +15,17 @@
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Black_Market_PDA.user.js
 // ==/UserScript==
 /*
- * KS Black Market 0.2.0 (PDA) — disclosure
- * What it does : shows the best runs abroad for every item sold abroad, not only drugs (export, import and round trip)
- *                for the travel method and the number of item slots you pick. Black Market goods come with a profit
- *                range (q10 / q50 / q90) and the chance of a profit; goods from an ordinary shop (which buys back at 75%
- *                of its price, a fixed price) come with a certain profit. Four buttons filter the lists: All, Drugs,
- *                Black Market, Shop items. Each row also shows the cash you need to buy it. The numbers are calculated
- *                by the KS server from public price data and sent to this script. For members of Politically
- *                Incorrect only. Measurement, not advice; there are no buy or travel buttons.
+ * KS Black Market 0.3.0 (PDA) — disclosure
+ * What it does : your travel advisor. It lists the best runs abroad for every item sold abroad, not only drugs (best
+ *                trips, sell abroad, bring home) for the travel method and the number of item slots you pick, strictly
+ *                ordered by the profit you can expect per hour of flying. For goods you bring home it also says WHEN to
+ *                leave Torn to land right after a restock, and how likely it is that the stock is still there when you
+ *                land. Black Market goods come with a profit range (q10 / q50 / q90); goods from an ordinary shop (which
+ *                buys back at 75% of its price, a fixed price) come with a certain profit. Four buttons filter the
+ *                lists: All, Drugs, Black Market, Shop items. Tap a row for the details, including the cash you need.
+ *                The numbers (also the restock times) are calculated by the KS server from public price and stock data
+ *                and sent to this script. For members of Politically Incorrect only. Measurement, not advice; there
+ *                are no buy or travel buttons, and no sound or notification.
  * Requests     : only https://ks-blackmarket.hans-viklund.workers.dev — POST /login (your Torn key, once per sign-in) and
  *                POST /latest when you open the panel and then every 60 seconds, but only while the panel is open and
  *                the tab is visible. The server asks Torn once per sign-in whose key it is (/v2/key/info). This script
@@ -31,13 +34,18 @@
  *                captcha is VISIBLE; then its own button hides until the captcha is gone. It never touches a captcha.
  *                It runs in the top page only, never inside iframes.
  * Storage      : script manager storage, keys starting with "ksBm.v1." (your Torn key, travel method, item slots, list
- *                filter). The
+ *                filter, selected tab). The
  *                sign-in token is kept in memory only. Nothing is written to Torn's page or to localStorage.
  * Sharing      : your Torn key is sent to the KS Black Market server (a Cloudflare Worker) when you sign in. The server
  *                checks it with Torn, does not store it and does not log it. Nothing else is sent anywhere.
  * API key      : your own Torn key at access level Public is enough (no selections needed). It is used only for the
  *                faction membership check. If Torn rejects the key, or it does not belong to the faction, the saved
  *                key is removed and not tried again.
+ *
+ * CHANGELOG 0.3.0
+ * ADDED        : restock timer — when to leave Torn to land right after a restock, and the chance the stock is still there.
+ * CHANGED      : simpler panel with tabs, two-line rows sorted by expected profit per hour.
+ *                Nothing changes in what the script requests or shares; it also saves which tab you picked (ksBm.v1.tab).
  *
  * CHANGELOG 0.2.0
  * ADDED        : every item sold abroad, not only drugs; filter buttons; cash needed.
@@ -74,7 +82,7 @@
  */
 (function () {
 'use strict';
-var KSBM_VERSION = '0.2.0';
+var KSBM_VERSION = '0.3.0';
 var KSBM_PLATFORM = 'PDA';
 
 /* ================= KS Black Market — core (shared by PC and PDA) =================
@@ -110,6 +118,23 @@ var KSBM_CORE = (function () {
   var GROUPS = ['all', 'drugs', 'bm', 'shop'];
   var GROUP_LABEL = { all: 'All', drugs: 'Drugs', bm: 'Black Market', shop: 'Shop items' };
   var DEFAULT_GROUP = 'all';
+  // The three tabs under the filter buttons: the key is what is saved under ksBm.v1.tab.
+  var TABS = ['trips', 'export', 'import'];
+  var TAB_LABEL = { trips: 'Best trips', export: 'Sell abroad', import: 'Bring home' };
+  var DEFAULT_TAB = 'trips';
+  var LIST_MAX = 10;                 // every tab shows its ten best
+  var UNKNOWN_MAX = 5;               // and at most five more whose chance is not known yet
+  var RESTOCK_STATES = ['EMPTY', 'IN_STOCK', 'UNKNOWN'];
+  var RESTOCK_REASONS = ['few_events', 'late', 'no_events'];
+  var GRID_N = 19;
+  var LEAVE_NOW_S = 60;              // "LEAVE NOW" when the departure is at most this far away
+  var LEAVE_SOON_S = 3600;           // "Leave in <m> min" within the hour, "Leave at <hh:mm> TCT" after that
+  var SURE_P = 0.5;                  // below this chance (even with the best landing) the stock sells out first
+  var HIDE_P = 0.20;                 // below this chance a run is no advice: it is not listed at all
+  var BIN_S = 120;                   // the curve of a row has one value per 2 minutes
+  var CURVE_LEN = 330;
+  var LANDING_WINDOW_S = 360 * 60;   // the best landing is looked for in [now + F, now + F + 360 min]
+  var SELLBACK_CAP = 100;            // a few units left by a sell-back still count as empty
 
   var METHODS = ['standard', 'airstrip', 'wlt', 'business'];
   var DRUGS = ['Cannabis', 'Ecstasy', 'Ketamine', 'LSD', 'Opium', 'PCP', 'Shrooms', 'Speed', 'Vicodin', 'Xanax'];
@@ -168,6 +193,49 @@ var KSBM_CORE = (function () {
       im_age_s: d.im_age_s, market_price: d.market_price, buy_cost_cum: d.buy_cost_cum.slice() };
   }
 
+  /* The restock forecast of a row (server 0.4.0). A row without it, or with one that does not pass, is simply "Stock timing
+   * unknown" - never a guess. Checked as strictly as ks_blackmarket/output.py checks it. Returns the clean copy or null. */
+  function isInt(x) { return isNum(x) && Math.floor(x) === x; }
+  function sanitizeGrid(g) {
+    if (g === null) return { ok: true, value: null };
+    if (!Array.isArray(g) || g.length !== GRID_N) return { ok: false };
+    for (var i = 0; i < GRID_N; i++) {
+      if (!isInt(g[i]) || g[i] < 0) return { ok: false };
+      if (i > 0 && g[i] < g[i - 1]) return { ok: false };
+    }
+    return { ok: true, value: g.slice() };
+  }
+  function sanitizeRestock(rs, qty) {
+    if (!isPlainObject(rs)) return null;
+    if (!has(RESTOCK_STATES, rs.state)) return null;
+    if (rs.reason !== null && !has(RESTOCK_REASONS, rs.reason)) return null;
+    if ((rs.state === 'UNKNOWN') !== (rs.reason !== null)) return null;
+    if (rs.since !== null && !(isInt(rs.since) && rs.since > 0)) return null;
+    var a = sanitizeGrid(rs.a_grid), b = sanitizeGrid(rs.b_grid);
+    if (!a.ok || !b.ok) return null;
+    if (!isInt(rs.n_a) || rs.n_a < 0 || !isInt(rs.n_b) || rs.n_b < 0) return null;
+    var curve = null;
+    if (rs.curve !== null) {
+      if (!Array.isArray(rs.curve) || rs.curve.length !== CURVE_LEN) return null;
+      for (var ci = 0; ci < CURVE_LEN; ci++) if (!isInt(rs.curve[ci]) || rs.curve[ci] < 0 || rs.curve[ci] > 1000) return null;
+      curve = rs.curve.slice();
+    }
+    if ((curve === null) !== (rs.state === 'UNKNOWN')) return null;           // EMPTY / IN_STOCK have a curve, UNKNOWN has none
+    var hit = null;
+    if (rs.hit !== null) {
+      var h = rs.hit;
+      if (!isPlainObject(h) || !isInt(h.n) || !isInt(h.within_120) || !isInt(h.within_300)) return null;
+      if (!(h.n > 0 && h.within_120 >= 0 && h.within_120 <= h.within_300 && h.within_300 <= h.n)) return null;
+      hit = { n: h.n, within_120: h.within_120, within_300: h.within_300 };
+    }
+    if (rs.state !== 'UNKNOWN') {
+      if (rs.since === null || a.value === null || b.value === null) return null;
+      if (rs.state === 'EMPTY' && !(isNum(qty) && qty <= SELLBACK_CAP)) return null;      // what the row says must match
+      if (rs.state === 'IN_STOCK' && !(isNum(qty) && qty > 0)) return null;
+    }
+    return { state: rs.state, since: rs.since, a_grid: a.value, b_grid: b.value, n_a: rs.n_a, n_b: rs.n_b, hit: hit, reason: rs.reason, curve: curve };
+  }
+
   // ---- one row. schema 2: a drug, always Black Market (the old server knew nothing else). schema 3: any item.
   function sanitizeRow(r, schema) {
     if (!isPlainObject(r)) return null;
@@ -210,7 +278,8 @@ var KSBM_CORE = (function () {
       pm[m] = { flight_min: v.flight_min, export_r: ew.value, import_r: iw.value, im_window_source: source };
     }
     return { drug: r.drug, country: r.country, bm_status: r.bm_status, bm_price: r.bm_price, bm_qty: r.bm_qty,
-      bm_age_s: r.bm_age_s, shop_type: shop, sell_rule: SELL_RULE[shop], stock: stock, group: group, per_method: pm };
+      bm_age_s: r.bm_age_s, shop_type: shop, sell_rule: SELL_RULE[shop], stock: stock, group: group, per_method: pm,
+      restock: v3 ? sanitizeRestock(r.restock, r.bm_qty) : null };
   }
 
   /* The /latest answer {ok, receivedAt, serverAge, data}. Returns {ok:true, env} or {ok:false, reason}.
@@ -327,6 +396,8 @@ var KSBM_CORE = (function () {
     var d = latest.drugs[row.drug];
     if (!d || row.bm_status !== 'OK' || d.im_status !== 'OK' || n < 1) return null;
     var nEff = Math.min(n, row.bm_qty || 0);
+    // Sold out now but with a restock forecast: the restock is assumed to be enough for your item slots (same as analysis.py).
+    if (row.restock && row.restock.state === 'EMPTY') nEff = n;
     if (nEff <= 0) return null;
     if (d.sell_net_per_unit === null || d.im_lowest === null) return null;
     var bm = row.bm_price;
@@ -345,7 +416,7 @@ var KSBM_CORE = (function () {
     return { kind: 'import', drug: row.drug, country: row.country, n: n, n_eff: nEff, bm_price: bm, shop_type: row.shop_type,
       stock: row.stock, window_source: pm.im_window_source, fixed: false, point: point, q: q, window_n: w ? w.n : null,
       flight_min: pm.flight_min, basis: basis, per_hour: basis / (2 * pm.flight_min / 60.0),
-      p_win: w ? pAboveGrid(w.grid, rStarImport(bm, d.im_lowest)) : null, cash_needed: bm * nEff };
+      p_win: w ? pAboveGrid(w.grid, rStarImport(bm, d.im_lowest)) : null, cash_needed: bm * nEff, restock: row.restock || null };
   }
 
   // Same order as analysis.evaluate_all: by profit per hour, best first (ties keep the order of the rows).
@@ -365,14 +436,184 @@ var KSBM_CORE = (function () {
     return { exp: exp, imp: imp };
   }
 
-  // Rows with a window first, rows without ("no window") after them; inside each group by profit per hour.
-  // A fixed shop price needs no window: its profit is certain, so it counts as having one.
-  function windowedFirst(list) {
-    return list.slice().sort(function (a, b) {
-      var wa = a.q || a.fixed ? 0 : 1, wb = b.q || b.fixed ? 0 : 1;
-      if (wa !== wb) return wa - wb;
-      return b.per_hour - a.per_hour;
-    });
+  /* ---------- the restock forecast: the chance that the stock is there when you land ----------
+   * The server (renewal model, stage 4.1) sends a curve per row: 330 promille values, value i = the chance at generatedAt + (i + 1) x 120 s.
+   * The panel only picks from it: the bin in [now + F, now + F + 360 min] with the highest value, the earliest on a tie. */
+
+  // Returns {i, v} (v in promille) or null when no bin of the curve lies in the window (the data is too old). Whole seconds only.
+  function chooseFromCurve(curve, generatedAt, nowS, F) {
+    var off = Math.floor(nowS) - generatedAt;
+    var lo = Math.ceil((F + off) / BIN_S) - 1;
+    var hi = Math.floor((F + off + LANDING_WINDOW_S) / BIN_S) - 1;
+    if (lo < 0) lo = 0;
+    if (hi > curve.length - 1) hi = curve.length - 1;
+    if (lo > hi) return null;
+    var best = lo;
+    for (var i = lo + 1; i <= hi; i++) if (curve[i] > curve[best]) best = i;
+    return { i: best, v: curve[best] };
+  }
+
+  // What the restock forecast says about leaving NOW. F = flight time in seconds one way. Never a guess: known is false for UNKNOWN,
+  // for a row without the field and when the curve is too old to reach the window.
+  function stockAdvice(rs, nowS, F, generatedAt) {
+    var none = { known: false, state: 'UNKNOWN', p: null, landing: null, depart: null, restock: rs || null, flight_s: F };
+    if (!rs || rs.state === 'UNKNOWN' || !rs.curve) return none;
+    var c = chooseFromCurve(rs.curve, generatedAt, nowS, F);
+    if (c === null) return none;
+    var landing = generatedAt + (c.i + 1) * BIN_S;
+    return { known: true, state: rs.state, p: c.v / 1000, landing: landing, depart: landing - F, restock: rs, flight_s: F };
+  }
+
+  // The little label on a row. Recomputed every second from the same advice, so it counts down without a new fetch.
+  //   LEAVE NOW (green) | Leave in <m> min (yellow, rounded up) | Leave at <hh:mm> TCT (yellow) | Sells out first (grey) |
+  //   Stock timing unknown (grey)
+  function timeMark(adv, nowS) {
+    if (!adv || !adv.known) return { kind: 'unknown', tone: 'grey', text: 'Stock timing unknown' };
+    if (adv.p < SURE_P) return { kind: 'sells', tone: 'grey', text: 'Sells out first' };
+    var wait = adv.depart - nowS;
+    if (wait <= LEAVE_NOW_S) return { kind: 'now', tone: 'green', text: 'LEAVE NOW' };
+    if (wait <= LEAVE_SOON_S) return { kind: 'soon', tone: 'yellow', text: 'Leave in ' + Math.ceil(wait / 60) + ' min' };
+    return { kind: 'later', tone: 'yellow', text: 'Leave at ' + fmtTct(adv.depart) + ' TCT' };
+  }
+
+  /* ---------- the lists: expected profit per hour, strictly in order ---------- */
+
+  // chance = p_stock x p_win. An export needs no stock timing (p_stock = 1); a fixed shop price has p_win = 1 (or 0).
+  // null = not known: no window, or no restock forecast.
+  function chanceOf(e, adv) {
+    var pw = e.p_win;
+    if (!pw) return null;
+    if (e.kind === 'export') return { p: pw.p };
+    if (!adv || !adv.known) return null;
+    return { p: adv.p * pw.p };
+  }
+
+  // Expected profit per hour of flying: profit (q50) x chance / (2 x flight hours). null while the chance is not known.
+  function expectedPerHour(basis, chance, flightMin) {
+    if (!chance) return null;
+    return basis * chance.p / (2 * flightMin / 60.0);
+  }
+
+  // A round trip: both legs have to work, so the chances multiply. A leg that is missing counts as certain.
+  function tripChance(t, advImport) {
+    var p = 1;
+    if (t.export) { var ce = chanceOf(t.export, null); if (ce === null) return null; p *= ce.p; }
+    if (t.import) { var ci = chanceOf(t.import, advImport); if (ci === null) return null; p *= ci.p; }
+    return { p: p };
+  }
+
+  function nameOfCountry(code) { return COUNTRY_NAMES.hasOwnProperty(code) ? COUNTRY_NAMES[code] : '?'; }
+
+  // One list entry. kind: export | import | trip.
+  function entryOf(kind, e, t, adv) {
+    var isTrip = kind === 'trip';
+    var flight = (isTrip ? t : e).flight_min;
+    var basis = isTrip ? t.total : e.basis;
+    var chance = isTrip ? tripChance(t, adv) : chanceOf(e, adv);
+    var needsStock = kind === 'import' || (isTrip && !!t.import);                 // an export needs no stock timing
+    var stockKnown = !needsStock || (!!adv && adv.known);
+    return {
+      needsStock: needsStock, stockKnown: stockKnown, hidden: needsStock && stockKnown && adv.p < HIDE_P,
+      kind: kind, key: kind + '|' + (isTrip ? t.country : e.drug + '|' + e.country),
+      name: isTrip ? nameOfCountry(t.country) : e.drug, country: isTrip ? t.country : e.country,
+      e: e, t: t, basis: basis, flight_min: flight, advice: adv, chance: chance,
+      perHour: expectedPerHour(basis, chance, flight)
+    };
+  }
+
+  function tieBreak(a, b) {
+    if (a.name !== b.name) return a.name < b.name ? -1 : 1;
+    return a.country < b.country ? -1 : (a.country > b.country ? 1 : 0);
+  }
+  function byPerHour(a, b) { return b.perHour !== a.perHour ? b.perHour - a.perHour : tieBreak(a, b); }
+  function byBasis(a, b) { return b.basis !== a.basis ? b.basis - a.basis : tieBreak(a, b); }
+  // Only runs that would pay (profit per trip above zero) are listed - a list of losses is no advice.
+  // ranked: entries whose chance is known, strictly by expected profit per hour, the ten best.
+  // unknown: entries whose chance is not known yet (no window, or no restock forecast) that would pay, by profit per trip.
+  function split(entries) {
+    var ranked = entries.filter(function (x) { return x.basis > 0 && x.perHour !== null; }).sort(byPerHour).slice(0, LIST_MAX);
+    var unknown = entries.filter(function (x) { return x.perHour === null && x.basis > 0; }).sort(byBasis).slice(0, UNKNOWN_MAX);
+    return { ranked: ranked, unknown: unknown };
+  }
+
+  // The three lists of the panel for a latest.json, a method, a number of item slots and a filter. nowS = server time now.
+  function advise(latest, method, n, flt, nowS) {
+    var all = evaluateAll(latest, method, n, flt);
+    var advOf = function (i) { return stockAdvice(i.restock, nowS, i.flight_min * 60, latest.generated_at); };
+    var impEntries = all.imp.map(function (i) { return entryOf('import', i, null, advOf(i)); });
+    var expEntries = all.exp.map(function (e) { return entryOf('export', e, null, null); });
+    var trips = roundTrips(all.exp, all.imp).map(function (t) { return entryOf('trip', null, t, t.import ? advOf(t.import) : null); });
+    var shown = function (x) { return !x.hidden; };                                // chance below 0.20: no advice
+    return { trips: split(trips.filter(shown)), export: split(expEntries), import: split(impEntries.filter(shown)) };
+  }
+
+  /* ---------- what a row says (pure text, tested against the Python numbers) ---------- */
+
+  var FIXED_PROFIT = 'Fixed shop price, so this profit is certain if you buy at these prices.';
+  var FIXED_LOSS = 'Fixed shop price, so this trip loses money at these prices.';
+  var NO_RANGE_EXPORT = 'Not enough price history yet, so no range or chance.';
+  var NO_RANGE_IMPORT = 'No price range yet (price history too short)';
+  var UNKNOWN_GROUP_TITLE = 'Not enough history yet';
+  var LEGEND = 'Per hour = expected profit per hour of flying, after the 5% Item Market fee. Tap a row for details.';
+
+  // The two lines of a compact row. group: 'ranked' (the big number is expected profit per hour) or 'unknown' (the chance
+  // is not known yet; the big number is the profit per trip, which is what that group is sorted by).
+  function rowView(en, nowS, group) {
+    var left = en.kind === 'trip' ? en.name : en.name + (en.kind === 'export' ? ' → ' : ' ← ') + countryName(en.country);
+    var big = group === 'ranked' ? fmtPerHour(en.perHour) : fmtSignedCompact(en.basis) + '/trip';
+    var mark = en.needsStock && en.stockKnown ? timeMark(en.advice, nowS) : null;       // only when the chance of stock is known
+    var parts = [];
+    if (mark) parts.push(mark.text);
+    if (group === 'ranked') {
+      parts.push(fmtSignedCompact(en.basis) + ' per trip');
+      parts.push(fmtChance(en.chance) + ' chance');
+    } else {
+      parts.push(en.stockKnown ? 'price history too short' : 'stock timing unknown');
+    }
+    return { left: left, big: big, mark: mark, line2: parts.join(' · '), positive: group === 'ranked' ? en.perHour >= 0 : en.basis >= 0 };
+  }
+
+  function exportLines(L, e) {
+    var c = countryName(e.country);
+    var shop = e.shop_type === STD;
+    L.push('Buy ' + e.n + ' in Torn at ' + fmtMoney(e.cost / e.n) + ' each · ' + (shop
+      ? 'the ' + c + ' shop pays ' + fmtMoney(e.sell_unit) + ' each (75% of its price)'
+      : 'sell at ' + fmtMoney(e.bm_price) + ' each in ' + c));
+    L.push(e.fixed ? (e.point > 0 ? FIXED_PROFIT : FIXED_LOSS)
+      : (e.q ? 'Usually ' + fmtSigned(e.q.q10) + ' to ' + fmtSigned(e.q.q90) + ' · chance of profit: ' + fmtChance({ p: e.p_win.p }) : NO_RANGE_EXPORT));
+    L.push('Cash needed: ' + fmtCompact(e.cash_needed));
+  }
+
+  function importLines(L, i, adv) {
+    var rs = i.restock;
+    L.push('Buy ' + i.n_eff + ' in ' + countryName(i.country) + ' at ' + fmtMoney(i.bm_price) + ' each · sell on the Item Market at home'
+      + (i.n_eff < i.n ? ' (only ' + i.n_eff + ' in stock)' : ''));
+    L.push(i.q ? 'Usually ' + fmtSigned(i.q.q10) + ' to ' + fmtSigned(i.q.q90) + ' per trip' : NO_RANGE_IMPORT);
+    if (rs && rs.state === 'EMPTY' && adv && adv.known) {
+      L.push('Restock expected ' + fmtTct(rs.since + rs.a_grid[9]) + ' TCT (usually ' + fmtTct(rs.since + rs.a_grid[1]) + '–' + fmtTct(rs.since + rs.a_grid[17]) + ')');
+      L.push('Leave at ' + fmtTct(adv.depart) + ' TCT to land at ' + fmtTct(adv.landing) + ' TCT');
+    } else if (rs && rs.state === 'IN_STOCK') {
+      L.push('In stock now: ' + i.stock + ' · usually lasts ' + fmtHM(Math.floor(rs.b_grid[9] / 60)) + ' after a restock');
+    }
+    if (rs && rs.hit) L.push('Restock forecast hit: ' + rs.hit.within_300 + ' of the last ' + rs.hit.n + ' within 5 min');
+    L.push('Chance the stock is there when you land: ' + (adv && adv.known ? fmtChance({ p: adv.p }) : 'unknown'));
+    L.push('Cash needed: ' + fmtCompact(i.cash_needed));
+  }
+
+  // The lines that fold out under a row, one sentence each. Every row ends with the flight time.
+  function detailLines(en, nowS) {
+    var L = [];
+    if (en.kind === 'export') exportLines(L, en.e);
+    else if (en.kind === 'import') importLines(L, en.e, en.advice);
+    else {
+      var t = en.t;
+      L.push((t.export ? 'Out: ' + t.export.drug + ' (' + fmtSigned(t.export.basis) + ')' : 'Out: nothing') + ' · '
+        + (t.import ? 'Home: ' + t.import.drug + ' (' + fmtSigned(t.import.basis) + ')' : 'Home: nothing'));
+      if (t.import) importLines(L, t.import, en.advice);
+      else if (t.export) exportLines(L, t.export);
+    }
+    L.push('Flight ' + fmtHM(en.flight_min) + ' each way');
+    return L;
   }
 
   // Port of analysis.round_trips: best positive export + best positive import per country.
@@ -413,14 +654,23 @@ var KSBM_CORE = (function () {
   function validMethod(m) { return has(METHODS, m) ? m : DEFAULT_METHOD; }
   function validGroup(g) { return has(GROUPS, g) ? g : DEFAULT_GROUP; }
 
+  function validTab(t) { return has(TABS, t) ? t : DEFAULT_TAB; }
+
+  // The clock. The panel counts time on the SERVER's clock, so a wrong clock on the phone or PC does not move a departure.
+  // offset = (receivedAt / 1000 + serverAge) - the local time when the answer came; server time = local time + offset.
+  function clockOffsetS(env, fetchedAtMs) { return env.receivedAt / 1000 + env.serverAge - fetchedAtMs / 1000; }
+  function serverNowS(offsetS, localMs) { return localMs / 1000 + offsetS; }
+
   // Everything the panel shows, decided here. state: NO_DATA | STALE | STATUS | OK.
+  // opts: { method, seats, group, tab, elapsedS, nowS }  (nowS = server time; without it the time the file was made plus its age)
   function buildView(env, opts) {
     var method = validMethod(opts && opts.method);
     var seats = clampSeats(opts && opts.seats);
     var group = validGroup(opts && opts.group);
+    var tab = validTab(opts && opts.tab);
     var elapsed = opts && opts.elapsedS || 0;
-    var view = { method: method, seats: seats, group: group, state: 'NO_DATA', headline: HEADLINE.NO_DATA, detail: '', ageS: null,
-      status: null, exp: [], imp: [], trips: [], dropped: 0 };
+    var view = { method: method, seats: seats, group: group, tab: tab, state: 'NO_DATA', headline: HEADLINE.NO_DATA, detail: '',
+      ageS: null, status: null, lists: null, nowS: null, dropped: 0 };
     if (!env) return view;
     var age = dataAgeS(env, elapsed);
     view.ageS = age;
@@ -438,12 +688,11 @@ var KSBM_CORE = (function () {
       view.detail = STATUS_TEXT[env.latest.status];
       return view;
     }
-    var all = evaluateAll(env.latest, method, seats, group);
+    var nowS = opts && isNum(opts.nowS) ? Math.floor(opts.nowS) : env.latest.generated_at + Math.floor(age);
+    view.nowS = nowS;
     view.state = 'OK';
     view.headline = HEADLINE.OK;
-    view.exp = windowedFirst(all.exp).slice(0, 10);
-    view.imp = windowedFirst(all.imp).slice(0, 10);
-    view.trips = roundTrips(all.exp, all.imp).slice(0, 5);
+    view.lists = advise(env.latest, method, seats, group, nowS);
     return view;
   }
 
@@ -462,14 +711,6 @@ var KSBM_CORE = (function () {
     if (a >= 1e6) return s + '$' + (a / 1e6).toFixed(2) + 'M';
     if (a >= 1e3) return s + '$' + (a / 1e3).toFixed(1) + 'k';
     return s + '$' + Math.round(a);
-  }
-  // Chance of profit in words: "over 95%" / "under 5%" at the edge of the quantile grid, else a whole percent.
-  function fmtP(pw) {
-    if (!pw) return 'unknown';
-    var pct = Math.round(pw.p * 100);
-    if (pw.bound === 'ge') return 'over ' + pct + '%';
-    if (pw.bound === 'le') return 'under ' + pct + '%';
-    return pct + '%';
   }
   // Plus in front of a gain, minus in front of a loss.
   function fmtSigned(x) {
@@ -490,6 +731,21 @@ var KSBM_CORE = (function () {
     if (s < 3600) return Math.floor(s / 60) + ' min ' + (s % 60) + ' s';
     return Math.floor(s / 3600) + ' h ' + Math.floor((s % 3600) / 60) + ' min';
   }
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  // A clock time in TCT (= UTC), rounded UP to the minute so that nobody leaves a few seconds too early.
+  function fmtTct(epochS) {
+    var m = Math.ceil(epochS / 60);
+    return pad2(Math.floor(m / 60) % 24) + ':' + pad2(m % 60);
+  }
+  // Chance as text everywhere: under 0.05 "under 5%", 0.90 or more "90%+" (the model is calibrated to about 90% at best, nothing higher
+  // is shown), otherwise rounded DOWN to a multiple of 5 ("85%").
+  function fmtChance(c) {
+    if (!c) return 'unknown';
+    if (c.p < 0.05) return 'under 5%';
+    if (c.p >= 0.9) return '90%+';
+    return (Math.floor(c.p * 20 + 1e-9) * 5) + '%';
+  }
+  function fmtPerHour(x) { return fmtSignedCompact(x) + '/h'; }
   function countryName(code) { return COUNTRY_NAMES.hasOwnProperty(code) ? COUNTRY_NAMES[code] : '?'; }
 
   return {
@@ -499,10 +755,16 @@ var KSBM_CORE = (function () {
     shopSellUnit: shopSellUnit, MAX_ROWS: MAX_ROWS, MAX_ROWS_V3: MAX_ROWS_V3,
     pyRound: pyRound, sanitizeEnvelope: sanitizeEnvelope, dataAgeS: dataAgeS, sellNetPerUnit: sellNetPerUnit,
     pAboveGrid: pAboveGrid, rStarExport: rStarExport, rStarImport: rStarImport, exportEval: exportEval,
-    importEval: importEval, evaluateAll: evaluateAll, windowedFirst: windowedFirst, roundTrips: roundTrips,
+    importEval: importEval, evaluateAll: evaluateAll, roundTrips: roundTrips,
+    TABS: TABS, TAB_LABEL: TAB_LABEL, DEFAULT_TAB: DEFAULT_TAB, validTab: validTab, advise: advise, stockAdvice: stockAdvice,
+    timeMark: timeMark, chooseFromCurve: chooseFromCurve, chanceOf: chanceOf, sanitizeRestock: sanitizeRestock,
+    clockOffsetS: clockOffsetS, serverNowS: serverNowS, fmtTct: fmtTct, fmtChance: fmtChance, fmtPerHour: fmtPerHour,
+    LIST_MAX: LIST_MAX, UNKNOWN_MAX: UNKNOWN_MAX, HIDE_P: HIDE_P, SURE_P: SURE_P,
+    rowView: rowView, detailLines: detailLines, LEGEND: LEGEND, UNKNOWN_GROUP_TITLE: UNKNOWN_GROUP_TITLE, FIXED_PROFIT: FIXED_PROFIT,
+    FIXED_LOSS: FIXED_LOSS,
     clampSeats: clampSeats, validMethod: validMethod, buildView: buildView,
     NO_DATA_TEXT: NO_DATA_TEXT, fmtSigned: fmtSigned, fmtSignedCompact: fmtSignedCompact,
-    fmtMoney: fmtMoney, fmtCompact: fmtCompact, fmtP: fmtP, fmtHM: fmtHM, fmtAge: fmtAge, countryName: countryName
+    fmtMoney: fmtMoney, fmtCompact: fmtCompact, fmtHM: fmtHM, fmtAge: fmtAge, countryName: countryName
   };
 })();
 
@@ -675,11 +937,13 @@ var KSBM_IO = (function () {
     var method = await load('method', KSBM_CORE.DEFAULT_METHOD);
     var seats = await load('seats', KSBM_CORE.DEFAULT_SEATS);
     var group = await load('group', KSBM_CORE.DEFAULT_GROUP);
+    var tab = await load('tab', KSBM_CORE.DEFAULT_TAB);
     return {
       key: KSBM_API.validKey(key) ? key : '',
       method: KSBM_CORE.validMethod(method),
       seats: KSBM_CORE.clampSeats(seats),
-      group: KSBM_CORE.validGroup(group)
+      group: KSBM_CORE.validGroup(group),
+      tab: KSBM_CORE.validTab(tab)
     };
   }
 
@@ -722,6 +986,8 @@ var KSBM_IO = (function () {
  * One small "BM" button and one panel, both inside their own shadow root on a host element that is a direct child of
  * <html>. Nothing of Torn's page is read, moved, hidden or styled. Every piece of text is set with textContent from
  * our own formatting of numbers; nothing from the server is ever put in as HTML.
+ * The text of every row comes from KSBM_CORE.rowView / detailLines (pure functions, tested against the Python numbers);
+ * this file only puts it on the screen.
  */
 var KSBM_UI = (function () {
   'use strict';
@@ -752,19 +1018,28 @@ var KSBM_UI = (function () {
     'button.btn{background:#2f3f2b;color:#e6f2e0;border:1px solid #577a4b;border-radius:4px;padding:4px 10px;font-size:12.5px;cursor:pointer}',
     'button.btn.sec{background:#2a2a2a;border-color:#555;color:#ddd}',
     '.note{color:#9a9a9a;font-size:11.5px}.settings .note{margin:6px 0}',
-    'h3{font-size:12.5px;line-height:1.3;margin:12px 0 4px;color:#cfe8c4}',
-    '.row{padding:5px 0;border-top:1px solid #2c2c2c}',
-    '.r1{display:flex;justify-content:space-between;gap:8px}.r1 .name{font-weight:700}',
-    '.val{font-weight:700}.pos{color:#8fd16f}.neg{color:#e8827f}',
-    '.r2{color:#b5b5b5;font-size:12px}',
-    '.tag{display:inline-block;padding:0 5px;border-radius:3px;background:#4a3d1a;color:#f3dca3;font-size:10.5px;margin-left:4px}',
-    '.empty{color:#999;padding:4px 0}',
+    'h3{font-size:12.5px;line-height:1.3;margin:12px 0 2px;color:#9a9a9a;font-weight:700}',
     '.filters{display:none;flex-wrap:wrap;gap:6px;margin:10px 0 0}.filters.show{display:flex}',
     '.filters button{background:#2a2a2a;color:#ddd;border:1px solid #555;border-radius:15px;padding:5px 12px;font-size:12.5px;cursor:pointer}',
     '.filters button.on{background:#3d6a2f;border-color:#8fd16f;color:#fff;font-weight:700}',
+    '.tabs{display:none;gap:4px;margin:8px 0 2px;border-bottom:1px solid #333}.tabs.show{display:flex}',
+    '.tabs button{flex:1;background:none;color:#aaa;border:0;border-bottom:3px solid transparent;padding:7px 4px;font-size:13px;cursor:pointer}',
+    '.tabs button.on{color:#fff;font-weight:700;border-bottom-color:#8fd16f}',
+    '.row{padding:7px 2px;border-top:1px solid #2c2c2c;cursor:pointer}.row:first-child{border-top:0}',
+    '.row:focus-visible{outline:2px solid #8fd16f;outline-offset:-2px}',
+    '.r1{display:flex;justify-content:space-between;align-items:baseline;gap:8px}',
+    '.name{font-weight:700;min-width:0;overflow-wrap:anywhere}',
+    '.big{font-weight:700;font-size:16px;white-space:nowrap}.pos{color:#8fd16f}.neg{color:#e8827f}',
+    '.r2{color:#b5b5b5;font-size:12px;margin-top:1px}',
+    '.mark{display:inline-block;padding:0 6px;border-radius:3px;font-weight:700;font-size:11.5px}',
+    '.mark.green{background:#2d5a24;color:#d8f5cc}.mark.yellow{background:#5a4514;color:#f3dca3}.mark.grey{background:#333;color:#aaa;font-weight:400}',
+    '.details{display:none;margin:5px 0 2px;padding-left:8px;border-left:2px solid #444}.row.open .details{display:block}',
+    '.details .d{color:#cfcfcf;font-size:12px;margin:2px 0}',
+    '.empty{color:#999;padding:6px 0}',
     '.foot{margin-top:8px;color:#aaa;font-size:11.5px;border-top:1px solid #333;padding-top:6px}',
+    '.legend{margin-top:8px}',
     '.pda .bm{width:44px;height:44px;border-radius:22px}.pda button.btn{padding:8px 12px}.pda .close{font-size:26px;padding:0 8px}',
-    '.pda .filters button{padding:10px 14px}'
+    '.pda .filters button{padding:10px 14px}.pda .tabs button{padding:11px 2px}.pda .row{padding:10px 2px}'
   ].join('');
 
   function h(tag, cls, text) {
@@ -783,13 +1058,10 @@ var KSBM_UI = (function () {
   var METHOD_LONG = { standard: 'Standard', airstrip: 'Airstrip (Private Island)', wlt: 'WLT (Wind Lines shares)', business: 'Business Class ticket' };
   var SLOTS_HELP = 'How many items you can carry when you travel. Airstrip, WLT and Business give 15; suitcase, the Excursion faction perk, job specials and the Smuggling For Beginners book add more. Highest possible: ' + KSBM_CORE.MAX_SEATS + '.';
   var PRIVACY = 'Your key is sent only to the KS Black Market server, which checks with Torn that you are in Politically Incorrect. The server does not store it. A Public key is enough. This script never contacts Torn.';
-  var EXPLAIN = 'Per trip = with your item slots, after the 5% Item Market fee. Usually = 8 of 10 past cases ended inside this range. Chance of profit = how often the same trip made money in the past. NEW PRICE = the price is too new to have a history yet.';
   var NOTE = 'Measurement, not advice. Prices abroad change about every 5 minutes.';
-  var FIXED_PROFIT = 'Fixed shop price, so this profit is certain if you buy at these prices.';
-  var FIXED_LOSS = 'Fixed shop price, so this trip loses money at these prices.';
-  var AVERAGE_PRICE = " · range based on Torn's average price";
+  var EMPTY_TEXT = 'Nothing pays right now.';
 
-  /* cb: { onToggle(open), onSaveKey(text), onRemoveKey(), onMethod(m), onSeats(n), onGroup(g), onRetry() } */
+  /* cb: { onToggle(open), onSaveKey(text), onRemoveKey(), onMethod(m), onSeats(n), onGroup(g), onTab(t), onRetry() } */
   function create(platform, cb) {
     var host = document.createElement('div');
     host.id = 'ks-bm-host';
@@ -847,7 +1119,7 @@ var KSBM_UI = (function () {
     var discl = h('div', 'note', PRIVACY);
     add(settings, summary, f1, f1b, f2, f3, f3b, discl);
 
-    // ---- the filter above the lists: All / Drugs / Black Market / Shop items
+    // ---- the filter above the tabs: All / Drugs / Black Market / Shop items
     var filters = h('div', 'filters');
     filters.setAttribute('role', 'group');
     filters.setAttribute('aria-label', 'Show');
@@ -862,10 +1134,25 @@ var KSBM_UI = (function () {
       filters.appendChild(b);
     });
 
+    // ---- the three tabs under the filter: Best trips / Sell abroad / Bring home
+    var tabs = h('div', 'tabs');
+    tabs.setAttribute('role', 'tablist');
+    var tabBtns = {};
+    C.TABS.forEach(function (t) {
+      var b = h('button', null, C.TAB_LABEL[t]);
+      b.type = 'button';
+      b.setAttribute('role', 'tab');
+      b.setAttribute('data-tab', t);
+      b.setAttribute('aria-selected', 'false');
+      b.addEventListener('click', function () { openKey = null; cb.onTab(t); });
+      tabBtns[t] = b;
+      tabs.appendChild(b);
+    });
+
     var lists = h('div', 'lists');
-    var legend = h('div', 'note legend', EXPLAIN);
+    var legend = h('div', 'note legend', C.LEGEND);
     var foot = h('div', 'foot', NOTE);
-    add(panel, head, meta, msg, settings, filters, lists, legend, foot);
+    add(panel, head, meta, msg, settings, filters, tabs, lists, legend, foot);
     add(wrap, panel, btn);
     shadow.appendChild(wrap);
 
@@ -877,59 +1164,65 @@ var KSBM_UI = (function () {
     methodSel.addEventListener('change', function () { cb.onMethod(methodSel.value); });
     seatsIn.addEventListener('change', function () { seatsIn.value = String(C.clampSeats(seatsIn.value)); cb.onSeats(seatsIn.value); });
 
-    function row(kind) { var r = h('div', 'row'); r.setAttribute('data-kind', kind); return r; }
-    function money(cls, v) { return h('span', 'val ' + (v < 0 ? 'neg' : 'pos'), C.fmtMoney(v)); }
+    // ---- the rows. Whole row = one button: it folds its details out and in; only one row is open at a time.
+    var openKey = null;                 // the row that is folded out (survives a new fetch while the row is still in the list)
+    var rowEls = [];                    // [{ el, key }] of the rows on screen
+    var markEls = [];                   // [{ span, adv, shown }] the time labels on screen, redrawn every second
 
-    function newPrice() { return h('span', 'tag', 'NEW PRICE'); }
-    function perTrip(v) { return h('span', 'val ' + (v < 0 ? 'neg' : 'pos'), C.fmtSigned(v) + ' per trip'); }
-    function tail(e) {
-      return C.fmtSignedCompact(e.per_hour) + ' per hour · flight ' + C.fmtHM(e.flight_min) + ' each way';
-    }
-    // Third line of an export / import row: the usual range and the chance, or why there is none.
-    function rangeLine(e) {
-      return e.q
-        ? 'Usually ' + C.fmtSigned(e.q.q10) + ' to ' + C.fmtSigned(e.q.q90) + ' · chance of profit: ' + C.fmtP(e.p_win)
-        : 'Not enough price history yet, so no range or chance.';
-    }
-
-    function cashLine(e) { return 'Cash needed: ' + C.fmtCompact(e.cash_needed); }
-
-    function renderEval(e) {
-      var r = row(e.kind);
-      var l1 = h('div', 'r1');
-      var name = h('span', 'name', e.drug + (e.kind === 'export' ? ' → ' : ' ← ') + C.countryName(e.country));
-      if (!e.q && !e.fixed) add(name, document.createTextNode(' '), newPrice());
-      add(l1, name, perTrip(e.basis));
-      var c = C.countryName(e.country);
-      var shop = e.shop_type === 'STANDARD';
-      var buy = e.kind === 'export'
-        ? 'Buy ' + e.n + ' in Torn at ' + C.fmtMoney(e.cost / e.n) + ' each · ' + (shop
-          ? 'the ' + c + ' shop pays ' + C.fmtMoney(e.sell_unit) + ' each (75% of its price)'
-          : 'sell at ' + C.fmtMoney(e.bm_price) + ' each in ' + c)
-        : 'Buy ' + e.n_eff + ' in ' + c + '\'s ' + (shop ? 'shop' : 'Black Market') + ' at ' + C.fmtMoney(e.bm_price)
-          + ' each · sell on the Item Market at home' + (e.q && e.window_source === 'market_value' ? AVERAGE_PRICE : '')
-          + (e.n_eff < e.n ? ' (only ' + e.n_eff + ' in stock)' : '');
-      var third = e.fixed ? (e.point > 0 ? FIXED_PROFIT : FIXED_LOSS) : rangeLine(e);
-      return add(r, l1, h('div', 'r2', buy), h('div', 'r2', third), h('div', 'r2', tail(e)), h('div', 'r2', cashLine(e)));
+    function setOpenRow(key) {
+      openKey = key;
+      rowEls.forEach(function (r) {
+        var on = r.key === key;
+        r.el.classList.toggle('open', on);
+        r.el.setAttribute('aria-expanded', on ? 'true' : 'false');
+      });
     }
 
-    function renderTrip(t) {
-      var r = row('trip');
-      var l1 = h('div', 'r1');
-      add(l1, h('span', 'name', C.countryName(t.country)), h('span', 'val ' + (t.total < 0 ? 'neg' : 'pos'), C.fmtSigned(t.total) + ' per round trip'));
-      var out = t.export ? 'Out: ' + t.export.drug + ' (' + C.fmtSigned(t.export.basis) + ')' : 'Out: nothing';
-      var back = t.import ? 'Home: ' + t.import.drug + ' (' + C.fmtSigned(t.import.basis) + ')' : 'Home: nothing';
-      var noWin = (t.export && !t.export.q && !t.export.fixed) || (t.import && !t.import.q);
-      var l3 = h('div', 'r2', tail(t) + ' · cash needed ' + C.fmtCompact(t.cash_needed));
-      if (noWin) add(l3, document.createTextNode(' '), newPrice());
-      return add(r, l1, h('div', 'r2', out + ' · ' + back), l3);
+    function paintMark(m, mark) {
+      m.span.className = 'mark ' + mark.tone;
+      m.span.textContent = mark.text;
     }
 
-    function section(title, kind, items, renderOne, emptyText) {
-      var s = h('div', 'list-' + kind);
-      s.appendChild(h('h3', null, title));
-      if (!items.length) s.appendChild(h('div', 'empty', emptyText));
-      items.forEach(function (it) { s.appendChild(renderOne(it)); });
+    function renderRow(en, group, nowS) {
+      var rv = C.rowView(en, nowS, group);
+      var r = h('div', 'row');
+      r.setAttribute('role', 'button');
+      r.setAttribute('tabindex', '0');
+      r.setAttribute('data-kind', en.kind);
+      r.setAttribute('data-group', group);
+      r.setAttribute('aria-expanded', 'false');
+      var l1 = add(h('div', 'r1'), h('span', 'name', rv.left), h('span', 'big ' + (rv.positive ? 'pos' : 'neg'), rv.big));
+      var l2 = h('div', 'r2');
+      if (rv.mark) {
+        var span = h('span', 'mark ' + rv.mark.tone, rv.mark.text);
+        markEls.push({ span: span, adv: en.advice });
+        l2.appendChild(span);
+        l2.appendChild(document.createTextNode(' · ' + rv.line2.slice(rv.mark.text.length + 3)));
+      } else {
+        l2.textContent = rv.line2;
+      }
+      var det = h('div', 'details');
+      C.detailLines(en, nowS).forEach(function (line) { det.appendChild(h('div', 'd', line)); });
+      add(r, l1, l2, det);
+      var toggle = function () { setOpenRow(openKey === en.key ? null : en.key); };
+      r.addEventListener('click', toggle);
+      r.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(); }
+      });
+      rowEls.push({ el: r, key: en.key });
+      return r;
+    }
+
+    function renderList(list, nowS) {
+      var s = h('div', 'list');
+      if (!list.ranked.length && !list.unknown.length) s.appendChild(h('div', 'empty', EMPTY_TEXT));
+      list.ranked.forEach(function (en) { s.appendChild(renderRow(en, 'ranked', nowS)); });
+      if (list.unknown.length) {
+        var g = h('div', 'unknown-group');
+        g.appendChild(h('h3', null, C.UNKNOWN_GROUP_TITLE));
+        list.unknown.forEach(function (en) { g.appendChild(renderRow(en, 'unknown', nowS)); });
+        s.appendChild(g);
+      }
       return s;
     }
 
@@ -941,7 +1234,7 @@ var KSBM_UI = (function () {
       btn.className = 'bm' + (tone ? ' ' + tone : '');
       meta.textContent = view.ageS === null
         ? 'No prices received yet.'
-        : 'Prices updated ' + C.fmtAge(view.ageS) + ' ago · ' + view.seats + ' item slots · ' + METHOD_LABEL[view.method] + (view.dropped ? ' · ' + view.dropped + ' unreadable row(s) skipped' : '');
+        : METHOD_LABEL[view.method] + ' · ' + view.seats + ' item slots · prices ' + C.fmtAge(view.ageS) + ' old' + (view.dropped ? ' · ' + view.dropped + ' unreadable row(s) skipped' : '');
       var text = ctx.message ? ctx.message.text : (view.state === 'STALE' || view.state === 'STATUS' ? view.detail : '');
       msg.textContent = text;
       msg.className = 'msg' + (text ? ' show' : '') + (ctx.message && ctx.message.tone === 'bad' ? ' bad' : '');
@@ -953,19 +1246,35 @@ var KSBM_UI = (function () {
       if (document.activeElement !== seatsIn && shadow.activeElement !== seatsIn) seatsIn.value = String(ctx.settings.seats);
       if (!ctx.settings.key) settings.open = true;
 
-      filters.classList.toggle('show', view.state === 'OK');
+      var ok = view.state === 'OK';
+      filters.classList.toggle('show', ok);
+      tabs.classList.toggle('show', ok);
       C.GROUPS.forEach(function (g) {
         var on = g === view.group;
         filterBtns[g].classList.toggle('on', on);
         filterBtns[g].setAttribute('aria-pressed', on ? 'true' : 'false');
       });
+      C.TABS.forEach(function (t) {
+        var on = t === view.tab;
+        tabBtns[t].classList.toggle('on', on);
+        tabBtns[t].setAttribute('aria-selected', on ? 'true' : 'false');
+      });
 
       lists.textContent = '';
-      if (view.state === 'OK') {
-        lists.appendChild(section('Sell abroad — buy in Torn, sell in the Black Market abroad', 'export', view.exp, renderEval, 'Nothing pays right now.'));
-        lists.appendChild(section('Bring home — buy in the Black Market abroad, sell on the Item Market at home', 'import', view.imp, renderEval, 'Nothing pays right now.'));
-        lists.appendChild(section('Both ways — best item out and best item home, same country', 'trips', view.trips, renderTrip, 'Nothing pays right now.'));
+      rowEls = [];
+      markEls = [];
+      if (ok) {
+        lists.appendChild(renderList(view.lists[view.tab], view.nowS));
+        setOpenRow(rowEls.some(function (r) { return r.key === openKey; }) ? openKey : null);
+      } else {
+        openKey = null;
       }
+      legend.style.display = ok ? '' : 'none';
+    }
+
+    // Redraws the time labels from the advice they already have: a new second, no new data, no reordering.
+    function tickMarks(nowS) {
+      markEls.forEach(function (m) { paintMark(m, C.timeMark(m.adv, nowS)); });
     }
 
     return {
@@ -976,7 +1285,8 @@ var KSBM_UI = (function () {
       setOpen: function (open) { wrap.classList.toggle('open', !!open); },
       setHidden: function (hidden) { wrap.classList.toggle('hidden', !!hidden); },
       collapseSettings: function () { settings.open = false; },
-      render: render
+      render: render,
+      tickMarks: tickMarks
     };
   }
 
@@ -991,6 +1301,7 @@ var KSBM_UI = (function () {
   'use strict';
 
   var POLL_MS = 60000;
+  var TICK_MS = 1000;              // the little time labels count down on the server's clock, once a second, only while the panel is open
   var CAPTCHA_CHECK_DEBOUNCE_MS = 2000;
   var CAPTCHA_SELECTOR = 'iframe[src*="captcha" i],iframe[src*="turnstile" i],iframe[title*="captcha" i],[id*="captcha" i],[class*="captcha" i]';
 
@@ -1002,9 +1313,9 @@ var KSBM_UI = (function () {
 
   var state = {
     open: false, disposed: false, env: null, fetchedAt: 0, message: null, seq: 0, appliedSeq: 0, epoch: 0, inflight: 0,
-    retryAt: 0, captcha: false,
-    settings: { key: '', method: KSBM_CORE.DEFAULT_METHOD, seats: KSBM_CORE.DEFAULT_SEATS, group: KSBM_CORE.DEFAULT_GROUP },
-    timer: null, staleTimer: null, captchaTimer: null, lastStart: 0, observer: null
+    retryAt: 0, captcha: false, clockOffsetS: 0,
+    settings: { key: '', method: KSBM_CORE.DEFAULT_METHOD, seats: KSBM_CORE.DEFAULT_SEATS, group: KSBM_CORE.DEFAULT_GROUP, tab: KSBM_CORE.DEFAULT_TAB },
+    timer: null, staleTimer: null, clockTimer: null, captchaTimer: null, lastStart: 0, observer: null
   };
   var ui = null;
   var client = null;
@@ -1014,9 +1325,13 @@ var KSBM_UI = (function () {
 
   function now() { return Date.now(); }
 
+  // Time on the server's clock: the local clock plus the difference measured when the last answer came (C5).
+  function serverNow() { return KSBM_CORE.serverNowS(state.clockOffsetS, now()); }
+
   function view() {
     var elapsed = state.env ? (now() - state.fetchedAt) / 1000 : 0;
-    return KSBM_CORE.buildView(state.env, { method: state.settings.method, seats: state.settings.seats, group: state.settings.group, elapsedS: elapsed });
+    return KSBM_CORE.buildView(state.env, { method: state.settings.method, seats: state.settings.seats, group: state.settings.group,
+      tab: state.settings.tab, elapsedS: elapsed, nowS: serverNow() });
   }
 
   // ---- RENDER
@@ -1030,6 +1345,22 @@ var KSBM_UI = (function () {
       canRetry: !!(state.message && state.message.retry)
     });
     scheduleStale(v);
+    scheduleTicks(v);
+  }
+
+  // One timer for the labels, started when the lists are on screen and stopped when the panel closes or the page goes
+  // away. Never two at once.
+  function scheduleTicks(v) {
+    if (!state.open || v.state !== 'OK') { stopTicks(); return; }
+    if (state.clockTimer) return;
+    // eslint-disable-next-line no-restricted-syntax -- only redraws the labels of the open panel from numbers it already has; no request
+    state.clockTimer = setInterval(function () {
+      if (state.disposed || !state.open || !ui) { stopTicks(); return; }
+      ui.tickMarks(serverNow());
+    }, TICK_MS);
+  }
+  function stopTicks() {
+    if (state.clockTimer) { clearInterval(state.clockTimer); state.clockTimer = null; }
   }
 
   // One timer, only while the panel is open: re-render at the moment the data turns STALE.
@@ -1055,6 +1386,7 @@ var KSBM_UI = (function () {
     if (result.ok) {
       state.env = result.env;
       state.fetchedAt = now();
+      state.clockOffsetS = KSBM_CORE.clockOffsetS(result.env, state.fetchedAt);
       state.message = null;
       state.retryAt = 0;
     } else {
@@ -1101,6 +1433,7 @@ var KSBM_UI = (function () {
       tick(true);
     } else {
       stopTimer();
+      stopTicks();
     }
   }
 
@@ -1161,6 +1494,7 @@ var KSBM_UI = (function () {
     state.disposed = true;
     state.epoch++;
     stopTimer();
+    stopTicks();
     if (state.captchaTimer) { clearTimeout(state.captchaTimer); state.captchaTimer = null; }
     if (state.observer) { state.observer.disconnect(); state.observer = null; }
     document.removeEventListener('visibilitychange', onVisibility);
@@ -1209,6 +1543,7 @@ var KSBM_UI = (function () {
       onMethod: function (m) { state.settings.method = KSBM_CORE.validMethod(m); KSBM_IO.save('method', state.settings.method); render(); },
       onSeats: function (n) { state.settings.seats = KSBM_CORE.clampSeats(n); KSBM_IO.save('seats', state.settings.seats); render(); },
       onGroup: function (g) { state.settings.group = KSBM_CORE.validGroup(g); KSBM_IO.save('group', state.settings.group); render(); },
+      onTab: function (t) { state.settings.tab = KSBM_CORE.validTab(t); KSBM_IO.save('tab', state.settings.tab); render(); },
       onRetry: function () { client.reset(); state.retryAt = 0; tick(true); }
     });
     ui.mount();
