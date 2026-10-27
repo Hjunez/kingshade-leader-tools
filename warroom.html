@@ -31,23 +31,10 @@
     --body: 'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
     --mono: 'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
   }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
-      --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
-      --line: #26313b; --line-strong: #35434f;
-      --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
-      --good: #46a583; --good-soft: #172a24;
-      --warn: #cc9f3f; --warn-soft: #2a2417;
-      --bad: #dd6a61; --bad-soft: #2c1b1a;
-      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
-      /* Dark theme carries light --ink, so the same ramp has to sit dark
-         instead of pale. Same hues, same order, readable text. */
-      --ff-sat: 55%; --ff-light: 26%;
-      --ff-sat-old: 26%; --ff-light-old: 19%;
-    }
-  }
-  :root[data-theme="dark"] {
+  /* R23. Dark is the page's own look, for everyone: it holds unless the member has chosen light
+     with the Dark/Light button (data-theme="light", set before anything is drawn). It no longer
+     depends on the browser's or Windows' colour setting, and it needs no script to be dark. */
+  :root:not([data-theme="light"]) {
     --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
     --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
     --line: #26313b; --line-strong: #35434f;
@@ -56,6 +43,8 @@
     --warn: #cc9f3f; --warn-soft: #2a2417;
     --bad: #dd6a61; --bad-soft: #2c1b1a;
     --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+    /* Dark theme carries light --ink, so the same ramp has to sit dark
+       instead of pale. Same hues, same order, readable text. */
     --ff-sat: 55%; --ff-light: 26%;
     --ff-sat-old: 26%; --ff-light-old: 19%;
   }
@@ -90,6 +79,10 @@
     letter-spacing: .13em; text-transform: uppercase; color: var(--accent);
     border: 1px solid var(--accent); border-radius: 2px; padding: 5px 10px; white-space: nowrap;
   }
+  /* R23. The stamp and the Dark/Light button side by side at the right of the masthead; on a
+     phone the pair wraps inside its own box and never pushes the page wider. */
+  .mastside { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; max-width: 100%; }
+  #themeBtn { min-width: 64px; }
 
   .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; box-shadow: var(--shadow); }
   .panel-head {
@@ -356,8 +349,7 @@
      The colour still says only how hard a target is, never whether it may be
      called: that stays classifyLiveTargetState(). */
   :root { --row-fade: .22; --row-fade-old: .10; }
-  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --row-fade: .28; --row-fade-old: .12; } }
-  :root[data-theme="dark"] { --row-fade: .28; --row-fade-old: .12; }
+  :root:not([data-theme="light"]) { --row-fade: .28; --row-fade-old: .12; }
   #targetHost tbody tr.faded {
     background-image: linear-gradient(90deg, rgba(var(--row-rgb), 0) 0%, rgba(var(--row-rgb), var(--row-fade)) 50%, rgba(var(--row-rgb), 0) 100%);
   }
@@ -565,7 +557,10 @@
       <p>The other faction's roster during a Ranked War, and one shared board for who has called
         which target. It reads; it never attacks, opens or sends anything for you.</p>
     </div>
-    <span class="stamp">Ranked War &middot; shared DIBS</span>
+    <div class="mastside">
+      <span class="stamp">Ranked War &middot; shared DIBS</span>
+      <button type="button" class="btn small" id="themeBtn" aria-pressed="false" aria-label="Switch to light theme">Light</button>
+    </div>
   </header>
 
   <section class="panel">
@@ -721,7 +716,8 @@
             on this device, as plain text &mdash; this page does not encrypt them. They stay until
             you press Forget key or clear the browser's site data. The column you last sorted the
             list by is kept there too. Your choice for Honor bars is kept there as well, once you have
-            pressed that button. Nothing else &mdash; and not the sign-in slip. Each key has
+            pressed that button. Your choice between the dark and the light theme is kept there as
+            well, once you have pressed that button. Nothing else &mdash; and not the sign-in slip. Each key has
             its own Forget button above.</dd>
           <dt>Writes</dt>
           <dd>Nothing in Torn, ever. No attacks, no clicks, no navigation, no page scraping, no
@@ -845,6 +841,13 @@
 <script>
 (function () {
   'use strict';
+
+  // R23. The theme comes first of all, before anything is built or drawn: the page is dark unless
+  // this browser has been told 'light' (by the Dark/Light button), and then the attribute is set
+  // here, so a member who chose light never sees a dark page first. Nothing is written until the
+  // button is pressed.
+  var THEME_STORE = 'ks-war-room-theme';
+  if (read(THEME_STORE) === 'light') document.documentElement.setAttribute('data-theme', 'light');
 
   // The KS War Room server. The one address the claim board is read and
   // written at, and the same one KS Torn War Dibs PC and PDA use: the page and
@@ -1510,7 +1513,7 @@
    'ffKey','toggleFfKey','forgetFfKey','ffSaid','ffBar',
    'sessionSaid','sessionState','sessionRetry',
    'warPanel','warWho','warMeta','warScore',
-   'targetPanel','targetHint','staleBar','targetHost','callableBtn','honorBtn','advHonors',
+   'targetPanel','targetHint','staleBar','targetHost','callableBtn','honorBtn','advHonors','themeBtn',
    'simBanner','simRealWar','simWireWar','simResetBar','simResetBtn','simResetNote',
    'actionMessage','simResetButtonSize','simResetIdleSize','simResetArmedSize',
    'advServer','advWar','advMe','advClaims','advRoster','advFf','advError','advRaw']
@@ -3661,6 +3664,29 @@
   // R22. The Honor bars button: on or off, remembered on this device once it has been pressed.
   el.honorBtn.addEventListener('click', function () { Honors.setOn(!Honors.isOn()); });
   Honors.paint();
+
+  // R23. The Dark/Light button. The page is dark; the button says what a press turns it into:
+  // "Light" while the page is dark, "Dark" while it is light (aria-pressed: light is chosen).
+  // A press switches at once and keeps the choice on this device: 'light' is written, and
+  // going back to dark removes the key again.
+  function themeIsLight() { return document.documentElement.getAttribute('data-theme') === 'light'; }
+  function paintTheme() {
+    var light = themeIsLight();
+    el.themeBtn.textContent = light ? 'Dark' : 'Light';
+    el.themeBtn.setAttribute('aria-pressed', light ? 'true' : 'false');
+    el.themeBtn.setAttribute('aria-label', light ? 'Switch to dark theme' : 'Switch to light theme');
+  }
+  el.themeBtn.addEventListener('click', function () {
+    if (themeIsLight()) {
+      document.documentElement.removeAttribute('data-theme');
+      write(THEME_STORE, '');
+    } else {
+      document.documentElement.setAttribute('data-theme', 'light');
+      write(THEME_STORE, 'light');
+    }
+    paintTheme();
+  });
+  paintTheme();
 
   var pendingTarget = '';
 
