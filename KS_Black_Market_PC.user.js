@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         KS Black Market PC
 // @namespace    kingshade.ks-black-market
-// @version      0.1.4
-// @description  Best Black Market drug runs (export, import, round trip) for members of Politically Incorrect. Reads only from the KS Black Market server. Never clicks, navigates or contacts Torn.
+// @version      0.2.0
+// @description  Best runs abroad for every item sold abroad (export, import, round trip) for members of Politically Incorrect. Reads only from the KS Black Market server. Never clicks, navigates or contacts Torn.
 // @author       Kingshade
 // @match        https://www.torn.com/*
 // @noframes
@@ -15,11 +15,14 @@
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Black_Market_PC.user.js
 // ==/UserScript==
 /*
- * KS Black Market 0.1.4 (PC) — disclosure
- * What it does : shows the best Black Market drug runs abroad (export, import and round trip) for the travel method
- *                and the number of item slots you pick, with a profit range (q10 / q50 / q90) and the chance of a profit.
- *                The numbers are calculated by the KS server from public price data and sent to this script. For
- *                members of Politically Incorrect only. Measurement, not advice; there are no buy or travel buttons.
+ * KS Black Market 0.2.0 (PC) — disclosure
+ * What it does : shows the best runs abroad for every item sold abroad, not only drugs (export, import and round trip)
+ *                for the travel method and the number of item slots you pick. Black Market goods come with a profit
+ *                range (q10 / q50 / q90) and the chance of a profit; goods from an ordinary shop (which buys back at 75%
+ *                of its price, a fixed price) come with a certain profit. Four buttons filter the lists: All, Drugs,
+ *                Black Market, Shop items. Each row also shows the cash you need to buy it. The numbers are calculated
+ *                by the KS server from public price data and sent to this script. For members of Politically
+ *                Incorrect only. Measurement, not advice; there are no buy or travel buttons.
  * Requests     : only https://ks-blackmarket.hans-viklund.workers.dev — POST /login (your Torn key, once per sign-in) and
  *                POST /latest when you open the panel and then every 60 seconds, but only while the panel is open and
  *                the tab is visible. The server asks Torn once per sign-in whose key it is (/v2/key/info). This script
@@ -27,13 +30,19 @@
  * Clicks       : none. It never clicks, submits or navigates. The only thing it looks for on the page is whether a
  *                captcha is VISIBLE; then its own button hides until the captcha is gone. It never touches a captcha.
  *                It runs in the top page only, never inside iframes.
- * Storage      : script manager storage, keys starting with "ksBm.v1." (your Torn key, travel method, item slots). The
+ * Storage      : script manager storage, keys starting with "ksBm.v1." (your Torn key, travel method, item slots, list
+ *                filter). The
  *                sign-in token is kept in memory only. Nothing is written to Torn's page or to localStorage.
  * Sharing      : your Torn key is sent to the KS Black Market server (a Cloudflare Worker) when you sign in. The server
  *                checks it with Torn, does not store it and does not log it. Nothing else is sent anywhere.
  * API key      : your own Torn key at access level Public is enough (no selections needed). It is used only for the
  *                faction membership check. If Torn rejects the key, or it does not belong to the faction, the saved
  *                key is removed and not tried again.
+ *
+ * CHANGELOG 0.2.0
+ * ADDED        : every item sold abroad, not only drugs; filter buttons; cash needed.
+ * CHANGED      : reads the server's new file format (schema 3) and still reads the old one (schema 2). Nothing changes in
+ *                what the script requests, stores or shares, except that it also saves your list filter.
  *
  * CHANGELOG 0.1.4
  * CHANGED      : published on Kingshade Leader Tools with automatic updates.
@@ -65,12 +74,12 @@
  */
 (function () {
 'use strict';
-var KSBM_VERSION = '0.1.4';
+var KSBM_VERSION = '0.2.0';
 var KSBM_PLATFORM = 'PC';
 
 /* ================= KS Black Market — core (shared by PC and PDA) =================
  * Pure functions only: no DOM, no network, no storage, no clock (time is passed in).
- * The calculations are a port of ks_blackmarket/analysis.py and model.py (schema 2) and are tested against
+ * The calculations are a port of ks_blackmarket/analysis.py and model.py (schema 2 and 3) and are tested against
  * numbers produced by the Python code from the same latest.json (userscript/test/fixtures).
  * Everything that comes from the server is untrusted: sanitizeEnvelope() runs before anything is shown.
  */
@@ -85,7 +94,22 @@ var KSBM_CORE = (function () {
   var MAX_SEATS = 43;                // highest possible item slots: 15 base + suitcase 3 + Excursion 10 + job special 5 + book 10
   var DEFAULT_SEATS = 26;
   var DEFAULT_METHOD = 'standard';
-  var MAX_ROWS = 400;
+  var MAX_ROWS = 400;                // schema 2 (drugs only)
+  var MAX_ROWS_V3 = 2000;            // schema 3 (every item sold abroad)
+  var MAX_ITEMS_V3 = 2000;
+  var SCHEMAS = [2, 3];
+  var BM = 'BLACK_MARKET';
+  var STD = 'STANDARD';
+  var SHOP_TYPES = [BM, STD];
+  var SELL_RULE = { BLACK_MARKET: 'current', STANDARD: '75pct' };
+  var WINDOW_SOURCES = ['book', 'market_value'];
+  // An item name from the server: text only, 1-60 characters, no markup. (The same rule as ks_blackmarket/output.py.)
+  var NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 .'&(),\/-]{0,59}$/;
+  var GROUP_RE = /^[A-Za-z][A-Za-z0-9 _&\/'-]{0,39}$/;
+  // The filter buttons above the lists: the key is what is saved under ksBm.v1.group.
+  var GROUPS = ['all', 'drugs', 'bm', 'shop'];
+  var GROUP_LABEL = { all: 'All', drugs: 'Drugs', bm: 'Black Market', shop: 'Shop items' };
+  var DEFAULT_GROUP = 'all';
 
   var METHODS = ['standard', 'airstrip', 'wlt', 'business'];
   var DRUGS = ['Cannabis', 'Ecstasy', 'Ketamine', 'LSD', 'Opium', 'PCP', 'Shrooms', 'Speed', 'Vicodin', 'Xanax'];
@@ -144,12 +168,26 @@ var KSBM_CORE = (function () {
       im_age_s: d.im_age_s, market_price: d.market_price, buy_cost_cum: d.buy_cost_cum.slice() };
   }
 
-  function sanitizeRow(r) {
+  // ---- one row. schema 2: a drug, always Black Market (the old server knew nothing else). schema 3: any item.
+  function sanitizeRow(r, schema) {
     if (!isPlainObject(r)) return null;
-    if (!has(DRUGS, r.drug) || !COUNTRY_NAMES.hasOwnProperty(r.country)) return null;
+    var v3 = schema === 3;
+    if (v3 ? !(typeof r.drug === 'string' && NAME_RE.test(r.drug)) : !has(DRUGS, r.drug)) return null;
+    if (!COUNTRY_NAMES.hasOwnProperty(r.country)) return null;
     if (r.bm_status !== 'OK' && r.bm_status !== 'STALE') return null;
     if (!isNumOrNull(r.bm_price) || !isNumOrNull(r.bm_qty) || !isNumOrNull(r.bm_age_s)) return null;
     if (r.bm_status === 'OK' && !(isNum(r.bm_price) && r.bm_price > 0)) return null;
+    var shop = BM, group = 'Drug', stock = r.bm_qty;
+    if (v3) {
+      if (!has(SHOP_TYPES, r.shop_type) || r.sell_rule !== SELL_RULE[r.shop_type]) return null;
+      if (typeof r.group !== 'string' || !GROUP_RE.test(r.group)) return null;
+      if (!isNumOrNull(r.stock) || r.stock !== r.bm_qty) return null;
+      // A fixed-price shop is calculated with integers (floor of 75 %): a price with decimals is not a price we know.
+      if (r.shop_type === STD && r.bm_status === 'OK' && Math.floor(r.bm_price) !== r.bm_price) return null;
+      shop = r.shop_type;
+      group = r.group;
+      stock = r.stock;
+    }
     var pm = {};
     if (!isPlainObject(r.per_method)) return null;
     for (var i = 0; i < METHODS.length; i++) {
@@ -160,42 +198,64 @@ var KSBM_CORE = (function () {
       var ew = sanitizeWindow(v.export_r === undefined ? null : v.export_r);
       var iw = sanitizeWindow(v.import_r === undefined ? null : v.import_r);
       if (!ew.ok || !iw.ok) return null;
-      pm[m] = { flight_min: v.flight_min, export_r: ew.value, import_r: iw.value };
+      var source = null;
+      if (v3) {
+        source = v.im_window_source === undefined ? undefined : v.im_window_source;
+        if (source !== null && !has(WINDOW_SOURCES, source)) return null;
+        if ((source === null) !== (iw.value === null)) return null;
+        if (shop === STD && ew.value !== null) return null;           // a fixed price has no export window
+      } else if (iw.value !== null) {
+        source = 'book';                                              // the old server only knew the order book
+      }
+      pm[m] = { flight_min: v.flight_min, export_r: ew.value, import_r: iw.value, im_window_source: source };
     }
     return { drug: r.drug, country: r.country, bm_status: r.bm_status, bm_price: r.bm_price, bm_qty: r.bm_qty,
-      bm_age_s: r.bm_age_s, per_method: pm };
+      bm_age_s: r.bm_age_s, shop_type: shop, sell_rule: SELL_RULE[shop], stock: stock, group: group, per_method: pm };
   }
 
   /* The /latest answer {ok, receivedAt, serverAge, data}. Returns {ok:true, env} or {ok:false, reason}.
-   * A row that does not pass is dropped and counted; a structural problem rejects the whole answer (fail closed). */
+   * A row that does not pass is dropped and counted; a structural problem rejects the whole answer (fail closed).
+   * schema 2 (older server) and schema 3 are both read. */
   function sanitizeEnvelope(raw) {
     if (!isPlainObject(raw) || raw.ok !== true) return { ok: false, reason: 'not an ok answer' };
     if (!isNum(raw.receivedAt) || raw.receivedAt <= 0) return { ok: false, reason: 'receivedAt' };
     if (!isNum(raw.serverAge) || raw.serverAge < 0) return { ok: false, reason: 'serverAge' };
     var d = raw.data;
-    if (!isPlainObject(d) || d.schema !== 2) return { ok: false, reason: 'schema' };
+    if (!isPlainObject(d) || !has(SCHEMAS, d.schema)) return { ok: false, reason: 'schema' };
+    var schema = d.schema;
     if (!has(STATUSES, d.status)) return { ok: false, reason: 'status' };
     if (!isNum(d.generated_at) || d.generated_at <= 0 || Math.floor(d.generated_at) !== d.generated_at) return { ok: false, reason: 'generated_at' };
     if (!isPlainObject(d.drugs) || !Array.isArray(d.rows)) return { ok: false, reason: 'drugs/rows' };
-    var drugs = {};
-    for (var i = 0; i < DRUGS.length; i++) {
-      var src = d.drugs[DRUGS[i]];
-      if (src === undefined) continue;
-      var sd = sanitizeDrug(src);
-      if (sd === null) return { ok: false, reason: 'drug ' + DRUGS[i] };
-      drugs[DRUGS[i]] = sd;
+    // A map without a prototype: an item called "constructor" or "toString" must not find Object's own members.
+    var drugs = Object.create(null);
+    var names = [];
+    if (schema === 2) {
+      for (var i = 0; i < DRUGS.length; i++) if (d.drugs[DRUGS[i]] !== undefined) names.push(DRUGS[i]);
+    } else {
+      var keys = Object.keys(d.drugs);
+      if (keys.length > MAX_ITEMS_V3) return { ok: false, reason: 'too many items' };
+      for (var k = 0; k < keys.length; k++) {
+        if (!NAME_RE.test(keys[k])) return { ok: false, reason: 'item name' };
+        names.push(keys[k]);
+      }
+    }
+    for (var n = 0; n < names.length; n++) {
+      var sd = sanitizeDrug(d.drugs[names[n]]);
+      if (sd === null) return { ok: false, reason: 'item ' + names[n] };
+      drugs[names[n]] = sd;
     }
     var rows = [];
     var dropped = 0;
-    var limit = Math.min(d.rows.length, MAX_ROWS);
+    var cap = schema === 3 ? MAX_ROWS_V3 : MAX_ROWS;
+    var limit = Math.min(d.rows.length, cap);
     for (var j = 0; j < limit; j++) {
-      var row = sanitizeRow(d.rows[j]);
+      var row = sanitizeRow(d.rows[j], schema);
       if (row === null || !drugs[row.drug]) dropped++;
       else rows.push(row);
     }
     dropped += d.rows.length - limit;
     return { ok: true, env: { receivedAt: raw.receivedAt, serverAge: raw.serverAge,
-      latest: { status: d.status, generated_at: d.generated_at, drugs: drugs, rows: rows }, dropped: dropped } };
+      latest: { schema: schema, status: d.status, generated_at: d.generated_at, drugs: drugs, rows: rows }, dropped: dropped } };
   }
 
   /* ---------- age ---------- */
@@ -223,6 +283,17 @@ var KSBM_CORE = (function () {
   function rStarExport(bm, cost, n) { return cost / (bm * n) - 1; }
   function rStarImport(bm, lowest) { return (bm / (1.0 - SELL_FEE) + 1) / lowest - 1; }
 
+  // What the shop abroad pays for one item: BLACK_MARKET the current price, STANDARD floor(0,75 x its price).
+  // 3 * price is exact in a double and so is the division by 4, so the floor is exactly Python's (3 * price) // 4.
+  function shopSellUnit(price, shop) { return shop === STD ? Math.floor(3 * price / 4) : price; }
+
+  function rowPasses(row, flt) {
+    if (flt === 'drugs') return row.group === 'Drug';
+    if (flt === 'bm') return row.shop_type === BM;
+    if (flt === 'shop') return row.shop_type === STD;
+    return true;                                                     // 'all' and anything unknown
+  }
+
   function exportEval(latest, row, method, n) {
     var d = latest.drugs[row.drug];
     if (!d || row.bm_status !== 'OK' || d.im_status !== 'OK' || n < 1 || n > CUM_UNITS) return null;
@@ -231,7 +302,14 @@ var KSBM_CORE = (function () {
     var pm = row.per_method[method];
     if (!pm) return null;
     var bm = row.bm_price;
-    var point = bm * n - cost;
+    var sellUnit = shopSellUnit(bm, row.shop_type);
+    var point = sellUnit * n - cost;
+    if (row.shop_type === STD) {
+      // A fixed price: the range is the point value and the chance is 1 if it pays, otherwise 0.
+      return { kind: 'export', drug: row.drug, country: row.country, n: n, cost: cost, bm_price: bm, shop_type: row.shop_type,
+        sell_unit: sellUnit, fixed: true, point: point, q: null, window_n: null, flight_min: pm.flight_min, basis: point,
+        per_hour: point / (2 * pm.flight_min / 60.0), p_win: { p: point > 0 ? 1 : 0, bound: null }, cash_needed: cost };
+    }
     var w = pm.export_r;
     var q = null;
     if (w) {
@@ -239,9 +317,10 @@ var KSBM_CORE = (function () {
       ['q10', 'q50', 'q90'].forEach(function (k) { q[k] = pyRound(bm * (1 + w[k]) * n - cost); });
     }
     var basis = q ? q.q50 : point;
-    return { kind: 'export', drug: row.drug, country: row.country, n: n, cost: cost, bm_price: bm, point: point, q: q,
-      window_n: w ? w.n : null, flight_min: pm.flight_min, basis: basis, per_hour: basis / (2 * pm.flight_min / 60.0),
-      p_win: w ? pAboveGrid(w.grid, rStarExport(bm, cost, n)) : null };
+    return { kind: 'export', drug: row.drug, country: row.country, n: n, cost: cost, bm_price: bm, shop_type: row.shop_type,
+      sell_unit: sellUnit, fixed: false, point: point, q: q, window_n: w ? w.n : null, flight_min: pm.flight_min,
+      basis: basis, per_hour: basis / (2 * pm.flight_min / 60.0),
+      p_win: w ? pAboveGrid(w.grid, rStarExport(bm, cost, n)) : null, cash_needed: cost };
   }
 
   function importEval(latest, row, method, n) {
@@ -263,16 +342,18 @@ var KSBM_CORE = (function () {
       });
     }
     var basis = q ? q.q50 : point;
-    return { kind: 'import', drug: row.drug, country: row.country, n: n, n_eff: nEff, bm_price: bm, point: point, q: q,
-      window_n: w ? w.n : null, flight_min: pm.flight_min, basis: basis, per_hour: basis / (2 * pm.flight_min / 60.0),
-      p_win: w ? pAboveGrid(w.grid, rStarImport(bm, d.im_lowest)) : null };
+    return { kind: 'import', drug: row.drug, country: row.country, n: n, n_eff: nEff, bm_price: bm, shop_type: row.shop_type,
+      stock: row.stock, window_source: pm.im_window_source, fixed: false, point: point, q: q, window_n: w ? w.n : null,
+      flight_min: pm.flight_min, basis: basis, per_hour: basis / (2 * pm.flight_min / 60.0),
+      p_win: w ? pAboveGrid(w.grid, rStarImport(bm, d.im_lowest)) : null, cash_needed: bm * nEff };
   }
 
   // Same order as analysis.evaluate_all: by profit per hour, best first (ties keep the order of the rows).
-  function evaluateAll(latest, method, n) {
+  // flt: all | drugs | bm | shop (the filter buttons).
+  function evaluateAll(latest, method, n, flt) {
     var exp = [], imp = [];
     latest.rows.forEach(function (row) {
-      if (!row.per_method[method]) return;
+      if (!row.per_method[method] || !rowPasses(row, flt)) return;
       var e = exportEval(latest, row, method, n);
       if (e) exp.push(e);
       var i = importEval(latest, row, method, n);
@@ -285,9 +366,10 @@ var KSBM_CORE = (function () {
   }
 
   // Rows with a window first, rows without ("no window") after them; inside each group by profit per hour.
+  // A fixed shop price needs no window: its profit is certain, so it counts as having one.
   function windowedFirst(list) {
     return list.slice().sort(function (a, b) {
-      var wa = a.q ? 0 : 1, wb = b.q ? 0 : 1;
+      var wa = a.q || a.fixed ? 0 : 1, wb = b.q || b.fixed ? 0 : 1;
       if (wa !== wb) return wa - wb;
       return b.per_hour - a.per_hour;
     });
@@ -314,7 +396,8 @@ var KSBM_CORE = (function () {
       var e = best[country][0], i = best[country][1];
       var total = (e ? e.basis : 0) + (i ? i.basis : 0);
       var fm = (e || i).flight_min;
-      return { country: country, export: e, import: i, total: total, flight_min: fm, per_hour: total / (2 * fm / 60.0) };
+      return { country: country, export: e, import: i, total: total, flight_min: fm, per_hour: total / (2 * fm / 60.0),
+        cash_needed: (e ? e.cash_needed : 0) + (i ? i.cash_needed : 0) };
     });
     out.sort(function (a, b) { return b.per_hour - a.per_hour; });
     return out;
@@ -328,13 +411,15 @@ var KSBM_CORE = (function () {
     return Math.max(1, Math.min(MAX_SEATS, n));
   }
   function validMethod(m) { return has(METHODS, m) ? m : DEFAULT_METHOD; }
+  function validGroup(g) { return has(GROUPS, g) ? g : DEFAULT_GROUP; }
 
   // Everything the panel shows, decided here. state: NO_DATA | STALE | STATUS | OK.
   function buildView(env, opts) {
     var method = validMethod(opts && opts.method);
     var seats = clampSeats(opts && opts.seats);
+    var group = validGroup(opts && opts.group);
     var elapsed = opts && opts.elapsedS || 0;
-    var view = { method: method, seats: seats, state: 'NO_DATA', headline: HEADLINE.NO_DATA, detail: '', ageS: null,
+    var view = { method: method, seats: seats, group: group, state: 'NO_DATA', headline: HEADLINE.NO_DATA, detail: '', ageS: null,
       status: null, exp: [], imp: [], trips: [], dropped: 0 };
     if (!env) return view;
     var age = dataAgeS(env, elapsed);
@@ -353,7 +438,7 @@ var KSBM_CORE = (function () {
       view.detail = STATUS_TEXT[env.latest.status];
       return view;
     }
-    var all = evaluateAll(env.latest, method, seats);
+    var all = evaluateAll(env.latest, method, seats, group);
     view.state = 'OK';
     view.headline = HEADLINE.OK;
     view.exp = windowedFirst(all.exp).slice(0, 10);
@@ -410,6 +495,8 @@ var KSBM_CORE = (function () {
   return {
     STALE_S: STALE_S, METHODS: METHODS, DRUGS: DRUGS, STATUSES: STATUSES, DEFAULT_SEATS: DEFAULT_SEATS,
     DEFAULT_METHOD: DEFAULT_METHOD, MAX_SEATS: MAX_SEATS, COUNTRY_NAMES: COUNTRY_NAMES, GRID_PROBS: GRID_PROBS,
+    GROUPS: GROUPS, GROUP_LABEL: GROUP_LABEL, DEFAULT_GROUP: DEFAULT_GROUP, validGroup: validGroup, rowPasses: rowPasses,
+    shopSellUnit: shopSellUnit, MAX_ROWS: MAX_ROWS, MAX_ROWS_V3: MAX_ROWS_V3,
     pyRound: pyRound, sanitizeEnvelope: sanitizeEnvelope, dataAgeS: dataAgeS, sellNetPerUnit: sellNetPerUnit,
     pAboveGrid: pAboveGrid, rStarExport: rStarExport, rStarImport: rStarImport, exportEval: exportEval,
     importEval: importEval, evaluateAll: evaluateAll, windowedFirst: windowedFirst, roundTrips: roundTrips,
@@ -587,10 +674,12 @@ var KSBM_IO = (function () {
     var key = await load('key', '');
     var method = await load('method', KSBM_CORE.DEFAULT_METHOD);
     var seats = await load('seats', KSBM_CORE.DEFAULT_SEATS);
+    var group = await load('group', KSBM_CORE.DEFAULT_GROUP);
     return {
       key: KSBM_API.validKey(key) ? key : '',
       method: KSBM_CORE.validMethod(method),
-      seats: KSBM_CORE.clampSeats(seats)
+      seats: KSBM_CORE.clampSeats(seats),
+      group: KSBM_CORE.validGroup(group)
     };
   }
 
@@ -670,8 +759,12 @@ var KSBM_UI = (function () {
     '.r2{color:#b5b5b5;font-size:12px}',
     '.tag{display:inline-block;padding:0 5px;border-radius:3px;background:#4a3d1a;color:#f3dca3;font-size:10.5px;margin-left:4px}',
     '.empty{color:#999;padding:4px 0}',
+    '.filters{display:none;flex-wrap:wrap;gap:6px;margin:10px 0 0}.filters.show{display:flex}',
+    '.filters button{background:#2a2a2a;color:#ddd;border:1px solid #555;border-radius:15px;padding:5px 12px;font-size:12.5px;cursor:pointer}',
+    '.filters button.on{background:#3d6a2f;border-color:#8fd16f;color:#fff;font-weight:700}',
     '.foot{margin-top:8px;color:#aaa;font-size:11.5px;border-top:1px solid #333;padding-top:6px}',
-    '.pda .bm{width:44px;height:44px;border-radius:22px}.pda button.btn{padding:8px 12px}.pda .close{font-size:26px;padding:0 8px}'
+    '.pda .bm{width:44px;height:44px;border-radius:22px}.pda button.btn{padding:8px 12px}.pda .close{font-size:26px;padding:0 8px}',
+    '.pda .filters button{padding:10px 14px}'
   ].join('');
 
   function h(tag, cls, text) {
@@ -692,8 +785,11 @@ var KSBM_UI = (function () {
   var PRIVACY = 'Your key is sent only to the KS Black Market server, which checks with Torn that you are in Politically Incorrect. The server does not store it. A Public key is enough. This script never contacts Torn.';
   var EXPLAIN = 'Per trip = with your item slots, after the 5% Item Market fee. Usually = 8 of 10 past cases ended inside this range. Chance of profit = how often the same trip made money in the past. NEW PRICE = the price is too new to have a history yet.';
   var NOTE = 'Measurement, not advice. Prices abroad change about every 5 minutes.';
+  var FIXED_PROFIT = 'Fixed shop price, so this profit is certain if you buy at these prices.';
+  var FIXED_LOSS = 'Fixed shop price, so this trip loses money at these prices.';
+  var AVERAGE_PRICE = " · range based on Torn's average price";
 
-  /* cb: { onToggle(open), onSaveKey(text), onRemoveKey(), onMethod(m), onSeats(n), onRetry() } */
+  /* cb: { onToggle(open), onSaveKey(text), onRemoveKey(), onMethod(m), onSeats(n), onGroup(g), onRetry() } */
   function create(platform, cb) {
     var host = document.createElement('div');
     host.id = 'ks-bm-host';
@@ -751,10 +847,25 @@ var KSBM_UI = (function () {
     var discl = h('div', 'note', PRIVACY);
     add(settings, summary, f1, f1b, f2, f3, f3b, discl);
 
+    // ---- the filter above the lists: All / Drugs / Black Market / Shop items
+    var filters = h('div', 'filters');
+    filters.setAttribute('role', 'group');
+    filters.setAttribute('aria-label', 'Show');
+    var filterBtns = {};
+    C.GROUPS.forEach(function (g) {
+      var b = h('button', null, C.GROUP_LABEL[g]);
+      b.type = 'button';
+      b.setAttribute('data-group', g);
+      b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', function () { cb.onGroup(g); });
+      filterBtns[g] = b;
+      filters.appendChild(b);
+    });
+
     var lists = h('div', 'lists');
     var legend = h('div', 'note legend', EXPLAIN);
     var foot = h('div', 'foot', NOTE);
-    add(panel, head, meta, msg, settings, lists, legend, foot);
+    add(panel, head, meta, msg, settings, filters, lists, legend, foot);
     add(wrap, panel, btn);
     shadow.appendChild(wrap);
 
@@ -781,17 +892,25 @@ var KSBM_UI = (function () {
         : 'Not enough price history yet, so no range or chance.';
     }
 
+    function cashLine(e) { return 'Cash needed: ' + C.fmtCompact(e.cash_needed); }
+
     function renderEval(e) {
       var r = row(e.kind);
       var l1 = h('div', 'r1');
       var name = h('span', 'name', e.drug + (e.kind === 'export' ? ' → ' : ' ← ') + C.countryName(e.country));
-      if (!e.q) add(name, document.createTextNode(' '), newPrice());
+      if (!e.q && !e.fixed) add(name, document.createTextNode(' '), newPrice());
       add(l1, name, perTrip(e.basis));
       var c = C.countryName(e.country);
+      var shop = e.shop_type === 'STANDARD';
       var buy = e.kind === 'export'
-        ? 'Buy ' + e.n + ' in Torn at ' + C.fmtMoney(e.cost / e.n) + ' each · sell at ' + C.fmtMoney(e.bm_price) + ' each in ' + c
-        : 'Buy ' + e.n_eff + ' in ' + c + '\'s Black Market at ' + C.fmtMoney(e.bm_price) + ' each · sell on the Item Market at home' + (e.n_eff < e.n ? ' (only ' + e.n_eff + ' in stock)' : '');
-      return add(r, l1, h('div', 'r2', buy), h('div', 'r2', rangeLine(e)), h('div', 'r2', tail(e)));
+        ? 'Buy ' + e.n + ' in Torn at ' + C.fmtMoney(e.cost / e.n) + ' each · ' + (shop
+          ? 'the ' + c + ' shop pays ' + C.fmtMoney(e.sell_unit) + ' each (75% of its price)'
+          : 'sell at ' + C.fmtMoney(e.bm_price) + ' each in ' + c)
+        : 'Buy ' + e.n_eff + ' in ' + c + '\'s ' + (shop ? 'shop' : 'Black Market') + ' at ' + C.fmtMoney(e.bm_price)
+          + ' each · sell on the Item Market at home' + (e.q && e.window_source === 'market_value' ? AVERAGE_PRICE : '')
+          + (e.n_eff < e.n ? ' (only ' + e.n_eff + ' in stock)' : '');
+      var third = e.fixed ? (e.point > 0 ? FIXED_PROFIT : FIXED_LOSS) : rangeLine(e);
+      return add(r, l1, h('div', 'r2', buy), h('div', 'r2', third), h('div', 'r2', tail(e)), h('div', 'r2', cashLine(e)));
     }
 
     function renderTrip(t) {
@@ -800,8 +919,8 @@ var KSBM_UI = (function () {
       add(l1, h('span', 'name', C.countryName(t.country)), h('span', 'val ' + (t.total < 0 ? 'neg' : 'pos'), C.fmtSigned(t.total) + ' per round trip'));
       var out = t.export ? 'Out: ' + t.export.drug + ' (' + C.fmtSigned(t.export.basis) + ')' : 'Out: nothing';
       var back = t.import ? 'Home: ' + t.import.drug + ' (' + C.fmtSigned(t.import.basis) + ')' : 'Home: nothing';
-      var noWin = (t.export && !t.export.q) || (t.import && !t.import.q);
-      var l3 = h('div', 'r2', tail(t));
+      var noWin = (t.export && !t.export.q && !t.export.fixed) || (t.import && !t.import.q);
+      var l3 = h('div', 'r2', tail(t) + ' · cash needed ' + C.fmtCompact(t.cash_needed));
       if (noWin) add(l3, document.createTextNode(' '), newPrice());
       return add(r, l1, h('div', 'r2', out + ' · ' + back), l3);
     }
@@ -833,6 +952,13 @@ var KSBM_UI = (function () {
       methodSel.value = ctx.settings.method;
       if (document.activeElement !== seatsIn && shadow.activeElement !== seatsIn) seatsIn.value = String(ctx.settings.seats);
       if (!ctx.settings.key) settings.open = true;
+
+      filters.classList.toggle('show', view.state === 'OK');
+      C.GROUPS.forEach(function (g) {
+        var on = g === view.group;
+        filterBtns[g].classList.toggle('on', on);
+        filterBtns[g].setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
 
       lists.textContent = '';
       if (view.state === 'OK') {
@@ -876,7 +1002,8 @@ var KSBM_UI = (function () {
 
   var state = {
     open: false, disposed: false, env: null, fetchedAt: 0, message: null, seq: 0, appliedSeq: 0, epoch: 0, inflight: 0,
-    retryAt: 0, captcha: false, settings: { key: '', method: KSBM_CORE.DEFAULT_METHOD, seats: KSBM_CORE.DEFAULT_SEATS },
+    retryAt: 0, captcha: false,
+    settings: { key: '', method: KSBM_CORE.DEFAULT_METHOD, seats: KSBM_CORE.DEFAULT_SEATS, group: KSBM_CORE.DEFAULT_GROUP },
     timer: null, staleTimer: null, captchaTimer: null, lastStart: 0, observer: null
   };
   var ui = null;
@@ -889,7 +1016,7 @@ var KSBM_UI = (function () {
 
   function view() {
     var elapsed = state.env ? (now() - state.fetchedAt) / 1000 : 0;
-    return KSBM_CORE.buildView(state.env, { method: state.settings.method, seats: state.settings.seats, elapsedS: elapsed });
+    return KSBM_CORE.buildView(state.env, { method: state.settings.method, seats: state.settings.seats, group: state.settings.group, elapsedS: elapsed });
   }
 
   // ---- RENDER
@@ -1081,6 +1208,7 @@ var KSBM_UI = (function () {
       },
       onMethod: function (m) { state.settings.method = KSBM_CORE.validMethod(m); KSBM_IO.save('method', state.settings.method); render(); },
       onSeats: function (n) { state.settings.seats = KSBM_CORE.clampSeats(n); KSBM_IO.save('seats', state.settings.seats); render(); },
+      onGroup: function (g) { state.settings.group = KSBM_CORE.validGroup(g); KSBM_IO.save('group', state.settings.group); render(); },
       onRetry: function () { client.reset(); state.retryAt = 0; tick(true); }
     });
     ui.mount();
