@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Black Market PC
 // @namespace    kingshade.ks-black-market
-// @version      0.3.0
+// @version      0.3.1
 // @description  Travel advisor: the best runs abroad for every item sold abroad, and when to leave Torn to land right after a restock, for members of Politically Incorrect. Reads only from the KS Black Market server. Never clicks, navigates or contacts Torn.
 // @author       Kingshade
 // @match        https://www.torn.com/*
@@ -15,7 +15,7 @@
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Black_Market_PC.user.js
 // ==/UserScript==
 /*
- * KS Black Market 0.3.0 (PC) — disclosure
+ * KS Black Market 0.3.1 (PC) — disclosure
  * What it does : your travel advisor. It lists the best runs abroad for every item sold abroad, not only drugs (best
  *                trips, sell abroad, bring home) for the travel method and the number of item slots you pick, strictly
  *                ordered by the profit you can expect per hour of flying. For goods you bring home it also says WHEN to
@@ -41,6 +41,10 @@
  * API key      : your own Torn key at access level Public is enough (no selections needed). It is used only for the
  *                faction membership check. If Torn rejects the key, or it does not belong to the faction, the saved
  *                key is removed and not tried again.
+ *
+ * CHANGELOG 0.3.1
+ * ADDED        : items that rarely sell out now show a chance instead of 'stock timing unknown'.
+ *                Nothing changes in what the script requests, stores or shares.
  *
  * CHANGELOG 0.3.0
  * ADDED        : restock timer — when to leave Torn to land right after a restock, and the chance the stock is still there.
@@ -82,7 +86,7 @@
  */
 (function () {
 'use strict';
-var KSBM_VERSION = '0.3.0';
+var KSBM_VERSION = '0.3.1';
 var KSBM_PLATFORM = 'PC';
 
 /* ================= KS Black Market — core (shared by PC and PDA) =================
@@ -124,7 +128,7 @@ var KSBM_CORE = (function () {
   var DEFAULT_TAB = 'trips';
   var LIST_MAX = 10;                 // every tab shows its ten best
   var UNKNOWN_MAX = 5;               // and at most five more whose chance is not known yet
-  var RESTOCK_STATES = ['EMPTY', 'IN_STOCK', 'UNKNOWN'];
+  var RESTOCK_STATES = ['EMPTY', 'IN_STOCK', 'STEADY', 'UNKNOWN'];
   var RESTOCK_REASONS = ['few_events', 'late', 'no_events'];
   var GRID_N = 19;
   var LEAVE_NOW_S = 60;              // "LEAVE NOW" when the departure is at most this far away
@@ -135,6 +139,8 @@ var KSBM_CORE = (function () {
   var CURVE_LEN = 330;
   var LANDING_WINDOW_S = 360 * 60;   // the best landing is looked for in [now + F, now + F + 360 min]
   var SELLBACK_CAP = 100;            // a few units left by a sell-back still count as empty
+  var STEADY_MIN_QTY = 26;           // a STEADY row has at least this many in stock (the server's CANDIDATE_SLOTS)
+  var RATE_MAX = 1e9;
 
   var METHODS = ['standard', 'airstrip', 'wlt', 'business'];
   var DRUGS = ['Cannabis', 'Ecstasy', 'Ketamine', 'LSD', 'Opium', 'PCP', 'Shrooms', 'Speed', 'Vicodin', 'Xanax'];
@@ -193,7 +199,7 @@ var KSBM_CORE = (function () {
       im_age_s: d.im_age_s, market_price: d.market_price, buy_cost_cum: d.buy_cost_cum.slice() };
   }
 
-  /* The restock forecast of a row (server 0.4.0). A row without it, or with one that does not pass, is simply "Stock timing
+  /* The restock forecast of a row (server 0.4.0; STEADY since 0.4.1). A row without it, or with one that does not pass, is simply "Stock timing
    * unknown" - never a guess. Checked as strictly as ks_blackmarket/output.py checks it. Returns the clean copy or null. */
   function isInt(x) { return isNum(x) && Math.floor(x) === x; }
   function sanitizeGrid(g) {
@@ -220,7 +226,13 @@ var KSBM_CORE = (function () {
       for (var ci = 0; ci < CURVE_LEN; ci++) if (!isInt(rs.curve[ci]) || rs.curve[ci] < 0 || rs.curve[ci] > 1000) return null;
       curve = rs.curve.slice();
     }
-    if ((curve === null) !== (rs.state === 'UNKNOWN')) return null;           // EMPTY / IN_STOCK have a curve, UNKNOWN has none
+    if ((curve === null) !== (rs.state === 'UNKNOWN')) return null;           // EMPTY / IN_STOCK / STEADY have a curve, UNKNOWN has none
+    var rate = null;
+    if (rs.state === 'STEADY') {                                              // only STEADY has a rate, one decimal, and never a grid or a hit
+      if (!isNum(rs.rate_per_h) || rs.rate_per_h < 0 || rs.rate_per_h > RATE_MAX || Math.abs(rs.rate_per_h * 10 - Math.round(rs.rate_per_h * 10)) > 1e-9) return null;
+      if (a.value !== null || b.value !== null || rs.hit !== null) return null;
+      rate = rs.rate_per_h;
+    } else if (Object.prototype.hasOwnProperty.call(rs, 'rate_per_h')) return null;
     var hit = null;
     if (rs.hit !== null) {
       var h = rs.hit;
@@ -228,12 +240,15 @@ var KSBM_CORE = (function () {
       if (!(h.n > 0 && h.within_120 >= 0 && h.within_120 <= h.within_300 && h.within_300 <= h.n)) return null;
       hit = { n: h.n, within_120: h.within_120, within_300: h.within_300 };
     }
-    if (rs.state !== 'UNKNOWN') {
+    if (rs.state === 'EMPTY' || rs.state === 'IN_STOCK') {
       if (rs.since === null || a.value === null || b.value === null) return null;
       if (rs.state === 'EMPTY' && !(isNum(qty) && qty <= SELLBACK_CAP)) return null;      // what the row says must match
       if (rs.state === 'IN_STOCK' && !(isNum(qty) && qty > 0)) return null;
     }
-    return { state: rs.state, since: rs.since, a_grid: a.value, b_grid: b.value, n_a: rs.n_a, n_b: rs.n_b, hit: hit, reason: rs.reason, curve: curve };
+    if (rs.state === 'STEADY' && !(isNum(qty) && qty >= STEADY_MIN_QTY)) return null;
+    var out = { state: rs.state, since: rs.since, a_grid: a.value, b_grid: b.value, n_a: rs.n_a, n_b: rs.n_b, hit: hit, reason: rs.reason, curve: curve };
+    if (rate !== null) out.rate_per_h = rate;
+    return out;
   }
 
   // ---- one row. schema 2: a drug, always Black Market (the old server knew nothing else). schema 3: any item.
@@ -594,6 +609,8 @@ var KSBM_CORE = (function () {
       L.push('Leave at ' + fmtTct(adv.depart) + ' TCT to land at ' + fmtTct(adv.landing) + ' TCT');
     } else if (rs && rs.state === 'IN_STOCK') {
       L.push('In stock now: ' + i.stock + ' · usually lasts ' + fmtHM(Math.floor(rs.b_grid[9] / 60)) + ' after a restock');
+    } else if (rs && rs.state === 'STEADY') {
+      L.push('Plenty in stock: ' + i.stock + ' · sells about ' + fmtSellRate(rs.rate_per_h));
     }
     if (rs && rs.hit) L.push('Restock forecast hit: ' + rs.hit.within_300 + ' of the last ' + rs.hit.n + ' within 5 min');
     L.push('Chance the stock is there when you land: ' + (adv && adv.known ? fmtChance({ p: adv.p }) : 'unknown'));
@@ -746,6 +763,8 @@ var KSBM_CORE = (function () {
     return (Math.floor(c.p * 20 + 1e-9) * 5) + '%';
   }
   function fmtPerHour(x) { return fmtSignedCompact(x) + '/h'; }
+  // The sales rate of a STEADY row: "under 1/h" below one unit an hour, otherwise a whole number ("12/h").
+  function fmtSellRate(r) { return r < 1 ? 'under 1/h' : Math.round(r) + '/h'; }
   function countryName(code) { return COUNTRY_NAMES.hasOwnProperty(code) ? COUNTRY_NAMES[code] : '?'; }
 
   return {
@@ -758,7 +777,7 @@ var KSBM_CORE = (function () {
     importEval: importEval, evaluateAll: evaluateAll, roundTrips: roundTrips,
     TABS: TABS, TAB_LABEL: TAB_LABEL, DEFAULT_TAB: DEFAULT_TAB, validTab: validTab, advise: advise, stockAdvice: stockAdvice,
     timeMark: timeMark, chooseFromCurve: chooseFromCurve, chanceOf: chanceOf, sanitizeRestock: sanitizeRestock,
-    clockOffsetS: clockOffsetS, serverNowS: serverNowS, fmtTct: fmtTct, fmtChance: fmtChance, fmtPerHour: fmtPerHour,
+    clockOffsetS: clockOffsetS, serverNowS: serverNowS, fmtTct: fmtTct, fmtChance: fmtChance, fmtPerHour: fmtPerHour, fmtSellRate: fmtSellRate,
     LIST_MAX: LIST_MAX, UNKNOWN_MAX: UNKNOWN_MAX, HIDE_P: HIDE_P, SURE_P: SURE_P,
     rowView: rowView, detailLines: detailLines, LEGEND: LEGEND, UNKNOWN_GROUP_TITLE: UNKNOWN_GROUP_TITLE, FIXED_PROFIT: FIXED_PROFIT,
     FIXED_LOSS: FIXED_LOSS,
