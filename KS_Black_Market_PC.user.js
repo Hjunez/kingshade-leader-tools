@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         KS Black Market PC
 // @namespace    kingshade.ks-black-market
-// @version      0.3.1
-// @description  Travel advisor: the best runs abroad for every item sold abroad, and when to leave Torn to land right after a restock, for members of Politically Incorrect. Reads only from the KS Black Market server. Never clicks, navigates or contacts Torn.
+// @version      0.4.0
+// @description  Travel advisor: the best runs abroad for every item sold abroad, and when to leave Torn to land right after a restock, for members of Politically Incorrect. Reads from the KS Black Market server and, for your cash, travel method and item slots, from the Torn page you have open. Never clicks, navigates or contacts Torn.
 // @author       Kingshade
 // @match        https://www.torn.com/*
 // @noframes
@@ -15,32 +15,50 @@
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Black_Market_PC.user.js
 // ==/UserScript==
 /*
- * KS Black Market 0.3.1 (PC) — disclosure
+ * KS Black Market 0.4.0 (PC) — disclosure
  * What it does : your travel advisor. It lists the best runs abroad for every item sold abroad, not only drugs (best
  *                trips, sell abroad, bring home) for the travel method and the number of item slots you pick, strictly
  *                ordered by the profit you can expect per hour of flying. For goods you bring home it also says WHEN to
  *                leave Torn to land right after a restock, and how likely it is that the stock is still there when you
  *                land. Black Market goods come with a profit range (q10 / q50 / q90); goods from an ordinary shop (which
  *                buys back at 75% of its price, a fixed price) come with a certain profit. Four buttons filter the
- *                lists: All, Drugs, Black Market, Shop items. Tap a row for the details, including the cash you need.
+ *                lists: All, Drugs, Black Market, Shop items. Two more buttons order the lists: Most profit, or Leaving
+ *                soonest. Tap a row for the details, including the cash you need (and, when your cash is known, what is
+ *                missing); there you can also star a row (it goes first) or hide it. Goods you bring home that you would buy
+ *                in larger numbers than are listed near the price at home are shown apart, as "Thin market".
  *                The numbers (also the restock times) are calculated by the KS server from public price and stock data
  *                and sent to this script. For members of Politically Incorrect only. Measurement, not advice; there
  *                are no buy or travel buttons, and no sound or notification.
  * Requests     : only https://ks-blackmarket.hans-viklund.workers.dev — POST /login (your Torn key, once per sign-in) and
  *                POST /latest when you open the panel and then every 60 seconds, but only while the panel is open and
  *                the tab is visible. The server asks Torn once per sign-in whose key it is (/v2/key/info). This script
- *                itself makes no request to torn.com or api.torn.com and reads nothing from Torn's pages.
- * Clicks       : none. It never clicks, submits or navigates. The only thing it looks for on the page is whether a
- *                captcha is VISIBLE; then its own button hides until the captcha is gone. It never touches a captcha.
+ *                itself makes no request to torn.com or api.torn.com.
+ * Reads        : from the Torn page you have open and are looking at, only while the tab is visible, nothing else and never
+ *                a captcha: (1) your cash, the data-money number of the sidebar (kept in memory, never saved or sent);
+ *                (2) on the Travel Agency page (page.php?sid=travel): the travel method that is picked, which methods can
+ *                be picked, the flight times to the destination that is picked, the number of inventory slots and how many
+ *                are in use. This is saved on your device (ksBm.v1.travel) and used for your travel method, your item
+ *                slots (slots minus what is in use) and, when Torn's flight times differ from the table (an event), for
+ *                the flight times. It is never sent anywhere. Torn PDA: the Travel Agency reading is verified on PC only.
+ * Clicks       : none. It never clicks, submits or navigates. Besides what is listed under "Reads", the only thing it looks
+ *                for on the page is whether a captcha is VISIBLE; then its own button hides (and nothing is read) until the
+ *                captcha is gone. It never touches a captcha.
  *                It runs in the top page only, never inside iframes.
  * Storage      : script manager storage, keys starting with "ksBm.v1." (your Torn key, travel method, item slots, list
- *                filter, selected tab). The
- *                sign-in token is kept in memory only. Nothing is written to Torn's page or to localStorage.
+ *                filter, selected tab, sort order, whether Torn's values or your own are used, the last reading of the
+ *                Travel Agency page, your starred and hidden rows (at most 200 each)). The sign-in token and your cash
+ *                are kept in memory only. Nothing is written to Torn's page or to localStorage.
  * Sharing      : your Torn key is sent to the KS Black Market server (a Cloudflare Worker) when you sign in. The server
  *                checks it with Torn, does not store it and does not log it. Nothing else is sent anywhere.
  * API key      : your own Torn key at access level Public is enough (no selections needed). It is used only for the
  *                faction membership check. If Torn rejects the key, or it does not belong to the faction, the saved
  *                key is removed and not tried again.
+ *
+ * CHANGELOG 0.4.0
+ * ADDED        : version number, sort by most profit or leaving soonest, cash check from Torn's sidebar, travel method and
+ *                item slots read from the Travel Agency page, star and hide, thin market group.
+ *                The script now reads two things from the page you have open (see "Reads"); what it requests from the server,
+ *                and what is shared, is unchanged.
  *
  * CHANGELOG 0.3.1
  * ADDED        : items that rarely sell out now show a chance instead of 'stock timing unknown'.
@@ -86,7 +104,7 @@
  */
 (function () {
 'use strict';
-var KSBM_VERSION = '0.3.1';
+var KSBM_VERSION = '0.4.0';
 var KSBM_PLATFORM = 'PC';
 
 /* ================= KS Black Market — core (shared by PC and PDA) =================
@@ -141,8 +159,24 @@ var KSBM_CORE = (function () {
   var SELLBACK_CAP = 100;            // a few units left by a sell-back still count as empty
   var STEADY_MIN_QTY = 26;           // a STEADY row has at least this many in stock (the server's CANDIDATE_SLOTS)
   var RATE_MAX = 1e9;
+  // 0.4.0 (stage 5)
+  var SORTS = ['profit', 'soon'];                                  // the two buttons: the key is what is saved under ksBm.v1.sort
+  var SORT_LABEL = { profit: 'Most profit', soon: 'Leaving soonest' };
+  var DEFAULT_SORT = 'profit';
+  var THIN_MAX = 5;                  // the group "Thin market" shows at most this many rows (like the group of unknown chances)
+  var KEYS_MAX = 200;                // starred and hidden rows: at most this many of each (the oldest one is dropped)
+  var MODES = ['torn', 'manual'];    // item slots and travel method: read from Torn's Travel Agency page, or the user's own values
+  var DEFAULT_MODE = 'torn';
+  var TRAVEL_MAX_AGE_S = 7 * 86400;  // an older reading of the Travel Agency page is not used
+  var TRAVEL_V = 1;
+  var CAPACITY_MAX = 200;
+  var FACTOR_MIN = 0.2;              // flight times read from Torn: the factor against the table must lie in this range, otherwise ignored
+  var FACTOR_MAX = 1.2;
+  var FACTOR_TOLERANCE_MIN = 1;      // a difference of at most this many minutes in the standard time is no event
+  var MAX_MONEY = 1e15;
 
   var METHODS = ['standard', 'airstrip', 'wlt', 'business'];
+  var METHOD_LABEL = { standard: 'Standard', airstrip: 'Airstrip', wlt: 'WLT', business: 'Business' };
   var DRUGS = ['Cannabis', 'Ecstasy', 'Ketamine', 'LSD', 'Opium', 'PCP', 'Shrooms', 'Speed', 'Vicodin', 'Xanax'];
   var COUNTRY_NAMES = {
     mex: 'Mexico', cay: 'Cayman Islands', can: 'Canada', haw: 'Hawaii', uni: 'United Kingdom', arg: 'Argentina',
@@ -195,8 +229,11 @@ var KSBM_CORE = (function () {
     if (!isNumOrNull(d.im_lowest) || !isNumOrNull(d.sell_net_per_unit) || !isNumOrNull(d.im_age_s) || !isNumOrNull(d.market_price)) return null;
     if (!Array.isArray(d.buy_cost_cum) || d.buy_cost_cum.length !== CUM_UNITS) return null;
     for (var i = 0; i < CUM_UNITS; i++) if (!isNumOrNull(d.buy_cost_cum[i])) return null;
+    // im_depth10 (server 0.4.2): units listed at most 10 % above the lowest price. A server before 0.4.2 does not send it: unknown (null).
+    var depth = d.im_depth10 === undefined ? null : d.im_depth10;
+    if (!(depth === null || (isInt(depth) && depth >= 0))) return null;
     return { im_status: d.im_status, im_lowest: d.im_lowest, sell_net_per_unit: d.sell_net_per_unit,
-      im_age_s: d.im_age_s, market_price: d.market_price, buy_cost_cum: d.buy_cost_cum.slice() };
+      im_age_s: d.im_age_s, market_price: d.market_price, buy_cost_cum: d.buy_cost_cum.slice(), im_depth10: depth };
   }
 
   /* The restock forecast of a row (server 0.4.0; STEADY since 0.4.1). A row without it, or with one that does not pass, is simply "Stock timing
@@ -378,6 +415,34 @@ var KSBM_CORE = (function () {
     return true;                                                     // 'all' and anything unknown
   }
 
+  /* ---------- starred and hidden rows: "<item>|<country code>" ---------- */
+  var KEY_RE = /^[A-Za-z0-9][A-Za-z0-9 .'&(),\/-]{0,59}\|[a-z]{3}$/;
+  function itemKey(drug, country) { return drug + '|' + country; }
+  function validKey(k) { return typeof k === 'string' && KEY_RE.test(k) && COUNTRY_NAMES.hasOwnProperty(k.slice(k.lastIndexOf('|') + 1)); }
+  // A saved list: only valid keys, each once (the last place wins), at most KEYS_MAX (the newest are kept).
+  function cleanKeys(list) {
+    if (!Array.isArray(list)) return [];
+    var seen = Object.create(null), out = [];
+    for (var i = list.length - 1; i >= 0; i--) {
+      var k = list[i];
+      if (validKey(k) && !seen[k]) { seen[k] = true; out.push(k); }
+    }
+    out.reverse();
+    return out.length > KEYS_MAX ? out.slice(out.length - KEYS_MAX) : out;
+  }
+  function hasKey(list, k) { return list.indexOf(k) >= 0; }
+  // Adds a key (it becomes the newest; at 200 the oldest one goes) or takes it away. Returns a new list.
+  function addKey(list, k) {
+    if (!validKey(k)) return cleanKeys(list);
+    return cleanKeys(list.filter(function (x) { return x !== k; }).concat([k]));
+  }
+  function removeKey(list, k) { return cleanKeys(list.filter(function (x) { return x !== k; })); }
+  function keySet(list) {
+    var set = Object.create(null);
+    if (Array.isArray(list)) for (var i = 0; i < list.length; i++) if (typeof list[i] === 'string') set[list[i]] = true;
+    return set;
+  }
+
   function exportEval(latest, row, method, n) {
     var d = latest.drugs[row.drug];
     if (!d || row.bm_status !== 'OK' || d.im_status !== 'OK' || n < 1 || n > CUM_UNITS) return null;
@@ -428,7 +493,9 @@ var KSBM_CORE = (function () {
       });
     }
     var basis = q ? q.q50 : point;
+    var depth = d.im_depth10 === undefined ? null : d.im_depth10;
     return { kind: 'import', drug: row.drug, country: row.country, n: n, n_eff: nEff, bm_price: bm, shop_type: row.shop_type,
+      depth10: depth, thin: depth !== null && nEff > depth,
       stock: row.stock, window_source: pm.im_window_source, fixed: false, point: point, q: q, window_n: w ? w.n : null,
       flight_min: pm.flight_min, basis: basis, per_hour: basis / (2 * pm.flight_min / 60.0),
       p_win: w ? pAboveGrid(w.grid, rStarImport(bm, d.im_lowest)) : null, cash_needed: bm * nEff, restock: row.restock || null };
@@ -436,10 +503,12 @@ var KSBM_CORE = (function () {
 
   // Same order as analysis.evaluate_all: by profit per hour, best first (ties keep the order of the rows).
   // flt: all | drugs | bm | shop (the filter buttons).
-  function evaluateAll(latest, method, n, flt) {
+  // hidden: a set of "<item>|<country>" the user hid (they are not evaluated at all, so the next best row takes their place).
+  function evaluateAll(latest, method, n, flt, hidden) {
     var exp = [], imp = [];
     latest.rows.forEach(function (row) {
       if (!row.per_method[method] || !rowPasses(row, flt)) return;
+      if (hidden && hidden[itemKey(row.drug, row.country)] === true) return;
       var e = exportEval(latest, row, method, n);
       if (e) exp.push(e);
       var i = importEval(latest, row, method, n);
@@ -519,8 +588,10 @@ var KSBM_CORE = (function () {
 
   function nameOfCountry(code) { return COUNTRY_NAMES.hasOwnProperty(code) ? COUNTRY_NAMES[code] : '?'; }
 
-  // One list entry. kind: export | import | trip.
-  function entryOf(kind, e, t, adv) {
+  // One list entry. kind: export | import | trip. starred: the set of "<item>|<country>" the user starred (a trip is starred when
+  // one of its legs is).
+  function legStarred(leg, starred) { return !!leg && !!starred && starred[itemKey(leg.drug, leg.country)] === true; }
+  function entryOf(kind, e, t, adv, starred) {
     var isTrip = kind === 'trip';
     var flight = (isTrip ? t : e).flight_min;
     var basis = isTrip ? t.total : e.basis;
@@ -532,7 +603,13 @@ var KSBM_CORE = (function () {
       kind: kind, key: kind + '|' + (isTrip ? t.country : e.drug + '|' + e.country),
       name: isTrip ? nameOfCountry(t.country) : e.drug, country: isTrip ? t.country : e.country,
       e: e, t: t, basis: basis, flight_min: flight, advice: adv, chance: chance,
-      perHour: expectedPerHour(basis, chance, flight)
+      perHour: expectedPerHour(basis, chance, flight),
+      itemKey: isTrip ? null : itemKey(e.drug, e.country),
+      starred: isTrip ? (legStarred(t.export, starred) || legStarred(t.import, starred)) : legStarred(e, starred),
+      // thin market: you buy more than is listed near this price at home (an import, or the home leg of a trip)
+      thin: isTrip ? !!(t.import && t.import.thin) : (kind === 'import' && e.thin === true),
+      depth: isTrip ? (t.import ? t.import.depth10 : null) : (kind === 'import' ? e.depth10 : null),
+      cashNeeded: isTrip ? (t.import ? t.import.cash_needed : (t.export ? t.export.cash_needed : 0)) : e.cash_needed
     };
   }
 
@@ -542,24 +619,56 @@ var KSBM_CORE = (function () {
   }
   function byPerHour(a, b) { return b.perHour !== a.perHour ? b.perHour - a.perHour : tieBreak(a, b); }
   function byBasis(a, b) { return b.basis !== a.basis ? b.basis - a.basis : tieBreak(a, b); }
+  // Minutes until you must leave Torn, as the row shows them: a row without a time label (an export, a chance of stock that is not known,
+  // "Sells out first") and a row that says LEAVE NOW leave now = 0.
+  function waitMin(x, nowS) {
+    if (!(x.needsStock && x.stockKnown)) return 0;
+    var m = timeMark(x.advice, nowS);
+    return m.kind === 'soon' || m.kind === 'later' ? Math.ceil((x.advice.depart - nowS) / 60) : 0;
+  }
+  // Starred rows first (all of them, even outside the limit), each in the order of the list; then the best of the others, as many as are
+  // left of the limit (more stars than the limit: none). The others are PICKED with selectCmp and then put in the order of orderCmp.
+  function pick(list, selectCmp, orderCmp, max) {
+    var st = list.filter(function (x) { return x.starred; }).sort(orderCmp);
+    var rest = list.filter(function (x) { return !x.starred; }).sort(selectCmp).slice(0, Math.max(0, max - st.length)).sort(orderCmp);
+    return st.concat(rest);
+  }
   // Only runs that would pay (profit per trip above zero) are listed - a list of losses is no advice.
-  // ranked: entries whose chance is known, strictly by expected profit per hour, the ten best.
+  // ranked: entries whose chance is known. sort 'profit': strictly by expected profit per hour, the ten best. sort 'soon': the same ten
+  //   best, but the one that leaves soonest first (equal: the most per hour).
   // unknown: entries whose chance is not known yet (no window, or no restock forecast) that would pay, by profit per trip.
-  function split(entries) {
-    var ranked = entries.filter(function (x) { return x.basis > 0 && x.perHour !== null; }).sort(byPerHour).slice(0, LIST_MAX);
-    var unknown = entries.filter(function (x) { return x.perHour === null && x.basis > 0; }).sort(byBasis).slice(0, UNKNOWN_MAX);
-    return { ranked: ranked, unknown: unknown };
+  // thin: imports (and the home leg of trips) where you buy more than is listed near the price at home, by profit per trip.
+  // o: { sort, nowS }
+  function split(entries, o) {
+    var soon = !!o && o.sort === 'soon';
+    var nowS = o && isNum(o.nowS) ? o.nowS : 0;
+    var thin = entries.filter(function (x) { return x.thin; });
+    var rest = entries.filter(function (x) { return !x.thin; });
+    var paying = function (x) { return x.basis > 0; };
+    var rankedAll = rest.filter(function (x) { return paying(x) && x.perHour !== null; });
+    if (soon) rankedAll.forEach(function (x) { x.waitMin = waitMin(x, nowS); });
+    var bySoon = function (a, b) { return a.waitMin !== b.waitMin ? a.waitMin - b.waitMin : byPerHour(a, b); };
+    return {
+      ranked: pick(rankedAll, byPerHour, soon ? bySoon : byPerHour, LIST_MAX),
+      unknown: pick(rest.filter(function (x) { return paying(x) && x.perHour === null; }), byBasis, byBasis, UNKNOWN_MAX),
+      thin: pick(thin.filter(paying), byBasis, byBasis, THIN_MAX)
+    };
   }
 
   // The three lists of the panel for a latest.json, a method, a number of item slots and a filter. nowS = server time now.
-  function advise(latest, method, n, flt, nowS) {
-    var all = evaluateAll(latest, method, n, flt);
+  // prefs (optional): { sort: 'profit' | 'soon', starred: [keys], hidden: [keys] }
+  function advise(latest, method, n, flt, nowS, prefs) {
+    var sort = prefs && prefs.sort === 'soon' ? 'soon' : 'profit';
+    var starred = keySet(prefs && prefs.starred);
+    var hidden = keySet(prefs && prefs.hidden);
+    var all = evaluateAll(latest, method, n, flt, hidden);
     var advOf = function (i) { return stockAdvice(i.restock, nowS, i.flight_min * 60, latest.generated_at); };
-    var impEntries = all.imp.map(function (i) { return entryOf('import', i, null, advOf(i)); });
-    var expEntries = all.exp.map(function (e) { return entryOf('export', e, null, null); });
-    var trips = roundTrips(all.exp, all.imp).map(function (t) { return entryOf('trip', null, t, t.import ? advOf(t.import) : null); });
+    var impEntries = all.imp.map(function (i) { return entryOf('import', i, null, advOf(i), starred); });
+    var expEntries = all.exp.map(function (e) { return entryOf('export', e, null, null, starred); });
+    var trips = roundTrips(all.exp, all.imp).map(function (t) { return entryOf('trip', null, t, t.import ? advOf(t.import) : null, starred); });
     var shown = function (x) { return !x.hidden; };                                // chance below 0.20: no advice
-    return { trips: split(trips.filter(shown)), export: split(expEntries), import: split(impEntries.filter(shown)) };
+    var o = { sort: sort, nowS: nowS };
+    return { trips: split(trips.filter(shown), o), export: split(expEntries, o), import: split(impEntries.filter(shown), o) };
   }
 
   /* ---------- what a row says (pure text, tested against the Python numbers) ---------- */
@@ -571,9 +680,10 @@ var KSBM_CORE = (function () {
   var UNKNOWN_GROUP_TITLE = 'Not enough history yet';
   var LEGEND = 'Per hour = expected profit per hour of flying, after the 5% Item Market fee. Tap a row for details.';
 
-  // The two lines of a compact row. group: 'ranked' (the big number is expected profit per hour) or 'unknown' (the chance
-  // is not known yet; the big number is the profit per trip, which is what that group is sorted by).
-  function rowView(en, nowS, group) {
+  // The two lines of a compact row. group: 'ranked' (the big number is expected profit per hour), 'unknown' (the chance is not known
+  // yet; the big number is the profit per trip, which is what that group is sorted by) or 'thin' (you buy more than is listed near the
+  // price at home; the big number is the profit per trip). cash: what you have, from Torn's sidebar, or null when it is not known.
+  function rowView(en, nowS, group, cash) {
     var left = en.kind === 'trip' ? en.name : en.name + (en.kind === 'export' ? ' → ' : ' ← ') + countryName(en.country);
     var big = group === 'ranked' ? fmtPerHour(en.perHour) : fmtSignedCompact(en.basis) + '/trip';
     var mark = en.needsStock && en.stockKnown ? timeMark(en.advice, nowS) : null;       // only when the chance of stock is known
@@ -582,13 +692,22 @@ var KSBM_CORE = (function () {
     if (group === 'ranked') {
       parts.push(fmtSignedCompact(en.basis) + ' per trip');
       parts.push(fmtChance(en.chance) + ' chance');
+    } else if (group === 'thin') {
+      parts.push('only ' + en.depth + ' listed near this price at home');
     } else {
       parts.push(en.stockKnown ? 'price history too short' : 'stock timing unknown');
     }
-    return { left: left, big: big, mark: mark, line2: parts.join(' · '), positive: group === 'ranked' ? en.perHour >= 0 : en.basis >= 0 };
+    if (isNum(cash) && isNum(en.cashNeeded) && en.cashNeeded > cash) parts.push('needs ' + fmtCompact(en.cashNeeded - cash) + ' more');
+    return { left: left, big: big, mark: mark, line2: parts.join(' · '), positive: group === 'ranked' ? en.perHour >= 0 : en.basis >= 0,
+      starred: !!en.starred };
   }
 
-  function exportLines(L, e) {
+  // "Cash needed: $1.2M" and, when Torn's sidebar gave the cash, "(you have $3.4M)".
+  function cashLine(needed, cash) {
+    return 'Cash needed: ' + fmtCompact(needed) + (isNum(cash) ? ' (you have ' + fmtCompact(cash) + ')' : '');
+  }
+
+  function exportLines(L, e, cash) {
     var c = countryName(e.country);
     var shop = e.shop_type === STD;
     L.push('Buy ' + e.n + ' in Torn at ' + fmtMoney(e.cost / e.n) + ' each · ' + (shop
@@ -596,10 +715,10 @@ var KSBM_CORE = (function () {
       : 'sell at ' + fmtMoney(e.bm_price) + ' each in ' + c));
     L.push(e.fixed ? (e.point > 0 ? FIXED_PROFIT : FIXED_LOSS)
       : (e.q ? 'Usually ' + fmtSigned(e.q.q10) + ' to ' + fmtSigned(e.q.q90) + ' · chance of profit: ' + fmtChance({ p: e.p_win.p }) : NO_RANGE_EXPORT));
-    L.push('Cash needed: ' + fmtCompact(e.cash_needed));
+    L.push(cashLine(e.cash_needed, cash));
   }
 
-  function importLines(L, i, adv) {
+  function importLines(L, i, adv, cash) {
     var rs = i.restock;
     L.push('Buy ' + i.n_eff + ' in ' + countryName(i.country) + ' at ' + fmtMoney(i.bm_price) + ' each · sell on the Item Market at home'
       + (i.n_eff < i.n ? ' (only ' + i.n_eff + ' in stock)' : ''));
@@ -614,20 +733,21 @@ var KSBM_CORE = (function () {
     }
     if (rs && rs.hit) L.push('Restock forecast hit: ' + rs.hit.within_300 + ' of the last ' + rs.hit.n + ' within 5 min');
     L.push('Chance the stock is there when you land: ' + (adv && adv.known ? fmtChance({ p: adv.p }) : 'unknown'));
-    L.push('Cash needed: ' + fmtCompact(i.cash_needed));
+    if (i.thin) L.push('Thin market: you buy ' + i.n_eff + ' but only ' + i.depth10 + ' are listed within 10% of the lowest price at home.');
+    L.push(cashLine(i.cash_needed, cash));
   }
 
   // The lines that fold out under a row, one sentence each. Every row ends with the flight time.
-  function detailLines(en, nowS) {
+  function detailLines(en, nowS, cash) {
     var L = [];
-    if (en.kind === 'export') exportLines(L, en.e);
-    else if (en.kind === 'import') importLines(L, en.e, en.advice);
+    if (en.kind === 'export') exportLines(L, en.e, cash);
+    else if (en.kind === 'import') importLines(L, en.e, en.advice, cash);
     else {
       var t = en.t;
       L.push((t.export ? 'Out: ' + t.export.drug + ' (' + fmtSigned(t.export.basis) + ')' : 'Out: nothing') + ' · '
         + (t.import ? 'Home: ' + t.import.drug + ' (' + fmtSigned(t.import.basis) + ')' : 'Home: nothing'));
-      if (t.import) importLines(L, t.import, en.advice);
-      else if (t.export) exportLines(L, t.export);
+      if (t.import) importLines(L, t.import, en.advice, cash);
+      else if (t.export) exportLines(L, t.export, cash);
     }
     L.push('Flight ' + fmtHM(en.flight_min) + ' each way');
     return L;
@@ -672,6 +792,115 @@ var KSBM_CORE = (function () {
   function validGroup(g) { return has(GROUPS, g) ? g : DEFAULT_GROUP; }
 
   function validTab(t) { return has(TABS, t) ? t : DEFAULT_TAB; }
+  function validSort(v) { return has(SORTS, v) ? v : DEFAULT_SORT; }
+  function validMode(v) { return has(MODES, v) ? v : DEFAULT_MODE; }
+  // The cash from Torn's sidebar (the data-money attribute): a whole number of at least 0, otherwise not known.
+  function cleanCash(v) { return isInt(v) && v >= 0 && v <= MAX_MONEY ? v : null; }
+
+  /* ---------- the reading of Torn's Travel Agency page (kept in ksBm.v1.travel) ----------
+   * {v:1, read_at (seconds), method, available:[methods that can be picked], capacity, used, minutes:{method: minutes to the chosen
+   * destination}, dest:"<country name>"}. Whatever does not pass is not used: null. */
+  function codeOfCountry(name) {
+    for (var code in COUNTRY_NAMES) if (COUNTRY_NAMES.hasOwnProperty(code) && COUNTRY_NAMES[code] === name) return code;
+    return null;
+  }
+  function sanitizeTravel(t) {
+    if (!isPlainObject(t) || t.v !== TRAVEL_V) return null;
+    if (!isInt(t.read_at) || t.read_at <= 0 || !has(METHODS, t.method)) return null;
+    if (!Array.isArray(t.available) || t.available.length < 1 || t.available.length > METHODS.length) return null;
+    var avail = [];
+    for (var i = 0; i < t.available.length; i++) {
+      if (!has(METHODS, t.available[i]) || has(avail, t.available[i])) return null;
+      avail.push(t.available[i]);
+    }
+    if (!has(avail, t.method)) return null;
+    if (!isInt(t.capacity) || t.capacity < 1 || t.capacity > CAPACITY_MAX || !isInt(t.used) || t.used < 0 || t.used > t.capacity) return null;
+    if (!isPlainObject(t.minutes)) return null;
+    var minutes = {};
+    for (var m = 0; m < METHODS.length; m++) {
+      var v = t.minutes[METHODS[m]];
+      if (v === undefined) continue;
+      if (!isInt(v) || v < 1 || v > 2000) return null;
+      minutes[METHODS[m]] = v;
+    }
+    if (minutes[t.method] === undefined) return null;
+    if (typeof t.dest !== 'string' || codeOfCountry(t.dest) === null) return null;
+    return { v: TRAVEL_V, read_at: t.read_at, method: t.method, available: avail, capacity: t.capacity, used: t.used, minutes: minutes, dest: t.dest };
+  }
+
+  // The standard flight time (minutes) to a country in the server's table: any row of that country has it.
+  function tableStandardMin(latest, code) {
+    for (var i = 0; i < latest.rows.length; i++) {
+      var r = latest.rows[i];
+      if (r.country === code && r.per_method.standard) return r.per_method.standard.flight_min;
+    }
+    return null;
+  }
+  // Flight times read from Torn: when the standard time to the chosen destination differs by more than a minute from the table (an event
+  // shortens or lengthens flights), the factor is minutes / table time, used for every country (ASSUMPTION: an event hits all alike).
+  // 1 = no change: the times agree, the destination or its table time is not known, or the factor is outside 0.2 - 1.2.
+  function flightFactor(travel, latest) {
+    if (!travel || !latest) return 1;
+    var code = codeOfCountry(travel.dest);
+    var table = code === null ? null : tableStandardMin(latest, code);
+    var read = travel.minutes.standard;
+    if (table === null || !isNum(table) || table <= 0 || read === undefined) return 1;
+    if (Math.abs(read - table) <= FACTOR_TOLERANCE_MIN) return 1;
+    var f = read / table;
+    return f >= FACTOR_MIN && f <= FACTOR_MAX ? f : 1;
+  }
+  // A copy of the data with every flight time times the factor (whole minutes, at least 1). The original is never changed.
+  function scaleFlights(latest, f) {
+    if (f === 1) return latest;
+    var rows = latest.rows.map(function (r) {
+      var pm = {};
+      METHODS.forEach(function (m) {
+        var v = r.per_method[m];
+        if (v) pm[m] = { flight_min: Math.max(1, Math.round(v.flight_min * f)), export_r: v.export_r, import_r: v.import_r, im_window_source: v.im_window_source };
+      });
+      var c = {};
+      for (var k in r) if (Object.prototype.hasOwnProperty.call(r, k)) c[k] = r[k];
+      c.per_method = pm;
+      return c;
+    });
+    return { schema: latest.schema, status: latest.status, generated_at: latest.generated_at, drugs: latest.drugs, rows: rows };
+  }
+
+  // Which travel method and how many item slots the panel calculates with. opts: { mode, method, seats, travel, localS }; latest may be null.
+  //   source 'torn'   : mode "torn" and a reading that is not older than 7 days: the method that is picked on the page, item slots = the
+  //                     capacity minus what is in use (at least 1, at most 43), and the flight factor.
+  //   source 'manual' : the user's own values. travelState says why Torn's are not used: 'manual' (the user's choice), 'none' (no reading yet)
+  //                     or 'old' (older than 7 days).
+  function resolveTravel(opts, latest) {
+    var mode = validMode(opts && opts.mode);
+    var out = { source: 'manual', method: validMethod(opts && opts.method), seats: clampSeats(opts && opts.seats), factor: 1,
+      travelState: mode === 'manual' ? 'manual' : 'none', reading: null, ageS: null, free: null };
+    var t = opts && opts.travel ? sanitizeTravel(opts.travel) : null;
+    if (t === null) return out;
+    var age = Math.max(0, (isNum(opts.localS) ? opts.localS : t.read_at) - t.read_at);
+    out.ageS = age;
+    out.reading = t;
+    out.free = t.capacity - t.used;
+    if (mode === 'manual') return out;
+    if (age > TRAVEL_MAX_AGE_S) { out.travelState = 'old'; return out; }
+    out.source = 'torn';
+    out.travelState = 'ok';
+    out.method = t.method;
+    out.seats = Math.max(1, Math.min(MAX_SEATS, out.free));
+    out.factor = flightFactor(t, latest);
+    return out;
+  }
+
+  // The line in Settings about the reading. view.travel is what resolveTravel gave.
+  function travelText(rt) {
+    if (rt.reading === null) return 'Nothing read from Torn yet. Open the Travel Agency page and the panel reads your travel method and item slots there.';
+    var r = rt.reading;
+    var line = 'Read from Torn ' + fmtAge(rt.ageS) + ' ago: ' + METHOD_LABEL[r.method] + ' · ' + r.capacity + ' slots, ' + r.used + ' in use → '
+      + rt.free + ' for goods' + (rt.free < 1 ? ' (calculated with 1)' : '');
+    if (rt.travelState === 'old') return line + '. Older than 7 days, so not used: read again on the Travel Agency page.';
+    if (rt.travelState === 'manual') return line + '. Not used: you chose your own values.';
+    return line + (rt.factor !== 1 ? ' · Flight times read from Torn' : '');
+  }
 
   // The clock. The panel counts time on the SERVER's clock, so a wrong clock on the phone or PC does not move a departure.
   // offset = (receivedAt / 1000 + serverAge) - the local time when the answer came; server time = local time + offset.
@@ -686,8 +915,14 @@ var KSBM_CORE = (function () {
     var group = validGroup(opts && opts.group);
     var tab = validTab(opts && opts.tab);
     var elapsed = opts && opts.elapsedS || 0;
-    var view = { method: method, seats: seats, group: group, tab: tab, state: 'NO_DATA', headline: HEADLINE.NO_DATA, detail: '',
-      ageS: null, status: null, lists: null, nowS: null, dropped: 0 };
+    var sort = validSort(opts && opts.sort);
+    var cash = cleanCash(opts && opts.cash);
+    var rt = resolveTravel({ mode: opts && opts.mode, method: method, seats: seats, travel: opts && opts.travel, localS: opts && opts.localS },
+      env ? env.latest : null);
+    method = rt.method;
+    seats = rt.seats;
+    var view = { method: method, seats: seats, group: group, tab: tab, sort: sort, cash: cash, source: rt.source, travel: rt, state: 'NO_DATA',
+      headline: HEADLINE.NO_DATA, detail: '', ageS: null, status: null, lists: null, nowS: null, dropped: 0 };
     if (!env) return view;
     var age = dataAgeS(env, elapsed);
     view.ageS = age;
@@ -709,7 +944,8 @@ var KSBM_CORE = (function () {
     view.nowS = nowS;
     view.state = 'OK';
     view.headline = HEADLINE.OK;
-    view.lists = advise(env.latest, method, seats, group, nowS);
+    view.lists = advise(scaleFlights(env.latest, rt.factor), method, seats, group, nowS,
+      { sort: sort, starred: cleanKeys(opts && opts.starred), hidden: cleanKeys(opts && opts.hidden) });
     return view;
   }
 
@@ -768,6 +1004,11 @@ var KSBM_CORE = (function () {
   function countryName(code) { return COUNTRY_NAMES.hasOwnProperty(code) ? COUNTRY_NAMES[code] : '?'; }
 
   return {
+    SORTS: SORTS, SORT_LABEL: SORT_LABEL, DEFAULT_SORT: DEFAULT_SORT, validSort: validSort, MODES: MODES, DEFAULT_MODE: DEFAULT_MODE, validMode: validMode,
+    THIN_MAX: THIN_MAX, KEYS_MAX: KEYS_MAX, TRAVEL_MAX_AGE_S: TRAVEL_MAX_AGE_S, METHOD_LABEL: METHOD_LABEL, cleanCash: cleanCash,
+    itemKey: itemKey, validKey: validKey, cleanKeys: cleanKeys, addKey: addKey, removeKey: removeKey, hasKey: hasKey,
+    sanitizeTravel: sanitizeTravel, codeOfCountry: codeOfCountry, flightFactor: flightFactor, scaleFlights: scaleFlights,
+    resolveTravel: resolveTravel, travelText: travelText, cashLine: cashLine,
     STALE_S: STALE_S, METHODS: METHODS, DRUGS: DRUGS, STATUSES: STATUSES, DEFAULT_SEATS: DEFAULT_SEATS,
     DEFAULT_METHOD: DEFAULT_METHOD, MAX_SEATS: MAX_SEATS, COUNTRY_NAMES: COUNTRY_NAMES, GRID_PROBS: GRID_PROBS,
     GROUPS: GROUPS, GROUP_LABEL: GROUP_LABEL, DEFAULT_GROUP: DEFAULT_GROUP, validGroup: validGroup, rowPasses: rowPasses,
@@ -951,18 +1192,35 @@ var KSBM_IO = (function () {
     try { if (typeof GM_setValue === 'function') GM_setValue(NS + name, value); } catch (e) { /* kept in memory only */ }
   }
 
+  // Lists and the Travel Agency reading are kept as JSON text (a script manager may store only simple values); an object is read too.
+  function parseStored(v) {
+    if (typeof v === 'string') { try { return JSON.parse(v); } catch (e) { return null; } }
+    return v;
+  }
+  function saveJson(name, value) { save(name, JSON.stringify(value)); }
+
   async function loadSettings() {
     var key = await load('key', '');
     var method = await load('method', KSBM_CORE.DEFAULT_METHOD);
     var seats = await load('seats', KSBM_CORE.DEFAULT_SEATS);
     var group = await load('group', KSBM_CORE.DEFAULT_GROUP);
     var tab = await load('tab', KSBM_CORE.DEFAULT_TAB);
+    var sort = await load('sort', KSBM_CORE.DEFAULT_SORT);
+    var mode = await load('mode', KSBM_CORE.DEFAULT_MODE);
+    var travel = parseStored(await load('travel', null));
+    var starred = parseStored(await load('starred', null));
+    var hidden = parseStored(await load('hidden', null));
     return {
       key: KSBM_API.validKey(key) ? key : '',
       method: KSBM_CORE.validMethod(method),
       seats: KSBM_CORE.clampSeats(seats),
       group: KSBM_CORE.validGroup(group),
-      tab: KSBM_CORE.validTab(tab)
+      tab: KSBM_CORE.validTab(tab),
+      sort: KSBM_CORE.validSort(sort),
+      mode: KSBM_CORE.validMode(mode),
+      travel: KSBM_CORE.sanitizeTravel(travel),
+      starred: KSBM_CORE.cleanKeys(starred),
+      hidden: KSBM_CORE.cleanKeys(hidden)
     };
   }
 
@@ -998,12 +1256,205 @@ var KSBM_IO = (function () {
     });
   }
 
-  return { persistent: persistent, loadSettings: loadSettings, save: save, post: post };
+  return { persistent: persistent, loadSettings: loadSettings, save: save, saveJson: saveJson, post: post };
+})();
+
+/* ================= KS Black Market — what is read from Torn's page (shared by PC and PDA) =================
+ * Two things, and only these two, are READ from the page the user has opened and is looking at:
+ *   - the cash in Torn's sidebar: the data-money attribute of #user-money, a whole number;
+ *   - on the Travel Agency page (page.php?sid=travel): the travel method that is picked, which methods can be picked, the flight times to
+ *     the destination that is picked, and how many inventory slots there are and how many are in use.
+ * Nothing is clicked, scrolled or opened, nothing is requested, nothing is sent anywhere: the values are only kept in this script's own
+ * storage (ksBm.v1.travel) and in memory (the cash). Every read happens only while the tab is VISIBLE; an observer watches one element
+ * (the cash) or the travel container, never the whole page, and is disconnected when the script goes away.
+ * Class names of Torn's page end in a random suffix (name___xxxxx) that changes when Torn rebuilds the page: only the start of a class
+ * name, ids that start with "option-", roles and aria attributes are used. Anything that does not look as expected reads as nothing.
+ */
+var KSBM_PAGE = (function () {
+  'use strict';
+
+  var DEBOUNCE_MS = 500;
+  var WAIT_MAX_MS = 60000;           // how long the script waits for the Travel Agency container to be drawn
+  var METHOD_OF_LABEL = { Standard: 'standard', Airstrip: 'airstrip', Private: 'wlt', Business: 'business' };   // Torn's "Private" is our "wlt"
+  var COUNTRIES = ['Mexico', 'Cayman Islands', 'Canada', 'Hawaii', 'United Kingdom', 'Argentina', 'Switzerland', 'Japan', 'China', 'UAE', 'South Africa'];
+
+  function isTravelPage(loc) {
+    try {
+      return !!loc && loc.pathname === '/page.php' && new URLSearchParams(loc.search || '').get('sid') === 'travel';
+    } catch (e) { return false; }
+  }
+
+  // "2h 46m" -> 166, "50m" -> 50, "1h" -> 60. Anything else: null.
+  function parseDuration(text) {
+    var m = /^\s*(?:(\d{1,2})\s*h)?\s*(?:(\d{1,2})\s*m)?\s*$/.exec(String(text || ''));
+    if (!m || (m[1] === undefined && m[2] === undefined)) return null;
+    var minutes = (m[1] ? parseInt(m[1], 10) * 60 : 0) + (m[2] ? parseInt(m[2], 10) : 0);
+    return minutes >= 1 && minutes <= 2000 ? minutes : null;
+  }
+
+  // The cash in the sidebar: the data-money attribute, a whole number of at least 0. Anything else: null (not known).
+  function readMoney(doc) {
+    try {
+      var el = doc.getElementById('user-money');
+      var v = el ? el.getAttribute('data-money') : null;
+      return v !== null && /^\d{1,15}$/.test(v) ? parseInt(v, 10) : null;
+    } catch (e) { return null; }
+  }
+
+  function textOf(el, sel) {
+    var n = el.querySelector(sel);
+    return n ? String(n.textContent || '').trim() : '';
+  }
+
+  function flightTypeList(doc) { return doc.querySelector('ul[class*="flightTypeList___"]'); }
+  function inventoryList(doc) { return doc.querySelector('ul[class*="inventoryPanel___"]'); }
+
+  // The part of the page that holds the flight types and the inventory: the nearest element that holds both. null while either is missing.
+  function findRoot(doc) {
+    var ft = flightTypeList(doc), inv = inventoryList(doc);
+    if (!ft || !inv) return null;
+    var n = ft.parentElement;
+    while (n && !n.contains(inv)) n = n.parentElement;
+    return n || null;
+  }
+
+  // The reading of the Travel Agency page as {v, read_at, method, available, capacity, used, minutes, dest}, or null when the page does not
+  // show all of it in a form that can be trusted. nowS = the time in whole seconds.
+  function readTravel(doc, nowS) {
+    try {
+      var ft = flightTypeList(doc), inv = inventoryList(doc);
+      if (!ft || !inv) return null;
+      var minutes = {}, available = [], selected = [];
+      var seenLabels = {};
+      var items = ft.querySelectorAll('li[role="option"]');
+      for (var i = 0; i < items.length; i++) {
+        var li = items[i];
+        var idm = /^option-(Standard|Airstrip|Private|Business)-\d{1,2}$/.exec(li.id || '');
+        if (!idm) return null;
+        var method = METHOD_OF_LABEL[idm[1]];
+        if (seenLabels[method]) return null;
+        seenLabels[method] = true;
+        var label = textOf(li, '[class*="label___"]');
+        if (label !== '' && label !== idm[1]) return null;                       // the id and the words must agree
+        var mins = parseDuration(textOf(li, '[class*="duration___"]'));
+        if (mins === null) return null;
+        minutes[method] = mins;
+        var disabled = li.getAttribute('aria-disabled') === 'true';
+        if (!disabled) available.push(method);
+        if (li.getAttribute('aria-selected') === 'true') selected.push(method);
+      }
+      if (selected.length !== 1 || available.indexOf(selected[0]) < 0) return null;
+
+      var slots = inv.querySelectorAll('li[class*="inventorySlot___"]');
+      var capacity = slots.length, used = 0;
+      for (var s = 0; s < slots.length; s++) if (slots[s].querySelector('button')) used++;
+      if (capacity < 1) return null;
+      var lm = /^Inventory (\d{1,3}) items?$/.exec(String(inv.getAttribute('aria-label') || ''));
+      if (lm && parseInt(lm[1], 10) !== used) return null;                       // Torn's own count must agree with the slots counted here
+
+      // the destination: the picked entry of the destination list (the list that is not the flight types)
+      var dest = null;
+      var root = findRoot(doc);
+      if (!root) return null;
+      var picked = root.querySelectorAll('li[role="option"][aria-selected="true"][id^="option-"]');
+      for (var d = 0; d < picked.length; d++) {
+        if (ft.contains(picked[d])) continue;
+        var name = textOf(picked[d], '[class*="fromToValue___"]');
+        if (COUNTRIES.indexOf(name) < 0) return null;
+        if (dest !== null) return null;                                           // two picked destinations: not to be trusted
+        dest = name;
+      }
+      if (dest === null) return null;
+
+      return { v: 1, read_at: Math.floor(nowS), method: selected[0], available: available, capacity: capacity, used: used, minutes: minutes, dest: dest };
+    } catch (e) { return null; }
+  }
+
+  /* ---- watching. deps: { doc, win, now() -> ms, visible() -> bool, onRead(reading) }
+   * Reads once when it starts, and again (after 500 ms of quiet) whenever the container changes. Stops by itself when the page is not the
+   * Travel Agency page any more, and when stop() is called. */
+  function watchTravel(deps) {
+    var stopped = false, readTimer = null, waitTimer = null, obs = null, waitObs = null, rootEl = null;
+
+    function read() {
+      readTimer = null;
+      if (stopped || !deps.visible()) return;
+      if (!isTravelPage(deps.win.location)) { stop(); return; }                   // left the Travel Agency page: no more reading
+      var r = readTravel(deps.doc, deps.now() / 1000);
+      if (r) deps.onRead(r);
+    }
+    function schedule() {
+      if (stopped || readTimer) return;
+      readTimer = setTimeout(read, DEBOUNCE_MS);
+    }
+    function attach() {
+      var root = findRoot(deps.doc);
+      if (!root) return false;
+      if (root === rootEl && obs) return true;
+      if (obs) obs.disconnect();
+      obs = new MutationObserver(schedule);
+      obs.observe(root, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['aria-selected', 'aria-disabled', 'aria-label'] });
+      rootEl = root;
+      return true;
+    }
+    function stopWaiting() {
+      if (waitObs) { waitObs.disconnect(); waitObs = null; }
+      if (waitTimer) { clearTimeout(waitTimer); waitTimer = null; }
+    }
+    function stop() {
+      stopped = true;
+      if (readTimer) { clearTimeout(readTimer); readTimer = null; }
+      stopWaiting();
+      if (obs) { obs.disconnect(); obs = null; }
+      rootEl = null;
+    }
+    function start() {
+      if (!isTravelPage(deps.win.location)) { stopped = true; return; }
+      if (attach()) { schedule(); return; }
+      // The container is drawn a moment after the page loads: wait for it (child list only), then watch the container alone.
+      try {
+        waitObs = new MutationObserver(function () { if (attach()) { stopWaiting(); schedule(); } });
+        waitObs.observe(deps.doc.body || deps.doc.documentElement, { childList: true, subtree: true });
+        waitTimer = setTimeout(stopWaiting, WAIT_MAX_MS);
+      } catch (e) { waitObs = null; }
+    }
+    start();
+    return {
+      stop: stop,
+      refresh: function () { if (!stopped) { attach(); schedule(); } },       // the tab became visible again
+      active: function () { return !stopped; },
+      watching: function () { return !!obs || !!waitObs; }
+    };
+  }
+
+  /* ---- the cash. deps: { doc, visible(), onChange(value|null) }. refresh() looks again and (re)attaches to the element; value() is
+   * the cash right now (null when not known or when the tab is not visible). */
+  function watchMoney(deps) {
+    var el = null, obs = null, stopped = false;
+    function value() { return deps.visible() ? readMoney(deps.doc) : null; }
+    function changed() { if (!stopped && deps.visible()) deps.onChange(readMoney(deps.doc)); }
+    function attach() {
+      if (stopped) return;
+      var e = deps.doc.getElementById('user-money');
+      if (!e) { if (obs) { obs.disconnect(); obs = null; } el = null; return; }
+      if (e === el && obs) return;
+      if (obs) obs.disconnect();
+      el = e;
+      obs = new MutationObserver(changed);
+      obs.observe(el, { attributes: true, attributeFilter: ['data-money'], childList: true, characterData: true, subtree: true });
+    }
+    function stop() { stopped = true; if (obs) { obs.disconnect(); obs = null; } el = null; }
+    attach();
+    return { refresh: function () { attach(); }, value: value, stop: stop, watching: function () { return !!obs; } };
+  }
+
+  return { isTravelPage: isTravelPage, parseDuration: parseDuration, readMoney: readMoney, readTravel: readTravel, findRoot: findRoot,
+    watchTravel: watchTravel, watchMoney: watchMoney, DEBOUNCE_MS: DEBOUNCE_MS };
 })();
 
 /* ================= KS Black Market — panel (Shadow DOM) =================
  * One small "BM" button and one panel, both inside their own shadow root on a host element that is a direct child of
- * <html>. Nothing of Torn's page is read, moved, hidden or styled. Every piece of text is set with textContent from
+ * <html>. Nothing of Torn's page is moved, hidden or styled (what is read from it is in 35-page.js). Every piece of text is set with textContent from
  * our own formatting of numbers; nothing from the server is ever put in as HTML.
  * The text of every row comes from KSBM_CORE.rowView / detailLines (pure functions, tested against the Python numbers);
  * this file only puts it on the screen.
@@ -1044,7 +1495,12 @@ var KSBM_UI = (function () {
     '.tabs{display:none;gap:4px;margin:8px 0 2px;border-bottom:1px solid #333}.tabs.show{display:flex}',
     '.tabs button{flex:1;background:none;color:#aaa;border:0;border-bottom:3px solid transparent;padding:7px 4px;font-size:13px;cursor:pointer}',
     '.tabs button.on{color:#fff;font-weight:700;border-bottom-color:#8fd16f}',
+    '.sorts{display:none;gap:6px;margin:6px 0 0;align-items:center}.sorts.show{display:flex}',
+    '.sorts button{background:#2a2a2a;color:#ccc;border:1px solid #555;border-radius:13px;padding:3px 10px;font-size:12px;cursor:pointer}',
+    '.sorts button.on{background:#2f3f2b;border-color:#8fd16f;color:#fff;font-weight:700}',
     '.row{padding:7px 2px;border-top:1px solid #2c2c2c;cursor:pointer}.row:first-child{border-top:0}',
+    '.starbadge{display:inline-block;margin-left:6px;padding:0 5px;border-radius:3px;font-size:10.5px;font-weight:700;background:#5a4514;color:#f3dca3;vertical-align:1px}',
+    '.acts{display:flex;gap:6px;margin:6px 0 2px}.acts button{background:#2a2a2a;color:#ddd;border:1px solid #555;border-radius:4px;padding:3px 10px;font-size:12px;cursor:pointer}',
     '.row:focus-visible{outline:2px solid #8fd16f;outline-offset:-2px}',
     '.r1{display:flex;justify-content:space-between;align-items:baseline;gap:8px}',
     '.name{font-weight:700;min-width:0;overflow-wrap:anywhere}',
@@ -1058,7 +1514,8 @@ var KSBM_UI = (function () {
     '.foot{margin-top:8px;color:#aaa;font-size:11.5px;border-top:1px solid #333;padding-top:6px}',
     '.legend{margin-top:8px}',
     '.pda .bm{width:44px;height:44px;border-radius:22px}.pda button.btn{padding:8px 12px}.pda .close{font-size:26px;padding:0 8px}',
-    '.pda .filters button{padding:10px 14px}.pda .tabs button{padding:11px 2px}.pda .row{padding:10px 2px}'
+    '.pda .filters button{padding:10px 14px}.pda .tabs button{padding:11px 2px}.pda .row{padding:10px 2px}',
+    '.pda .sorts button{padding:8px 12px}.pda .acts button{padding:8px 12px}'
   ].join('');
 
   function h(tag, cls, text) {
@@ -1073,14 +1530,17 @@ var KSBM_UI = (function () {
   }
 
   // Short names for the meta line, long names for the list in Settings.
-  var METHOD_LABEL = { standard: 'Standard', airstrip: 'Airstrip', wlt: 'WLT', business: 'Business' };
+  var METHOD_LABEL = C.METHOD_LABEL;
   var METHOD_LONG = { standard: 'Standard', airstrip: 'Airstrip (Private Island)', wlt: 'WLT (Wind Lines shares)', business: 'Business Class ticket' };
   var SLOTS_HELP = 'How many items you can carry when you travel. Airstrip, WLT and Business give 15; suitcase, the Excursion faction perk, job specials and the Smuggling For Beginners book add more. Highest possible: ' + KSBM_CORE.MAX_SEATS + '.';
   var PRIVACY = 'Your key is sent only to the KS Black Market server, which checks with Torn that you are in Politically Incorrect. The server does not store it. A Public key is enough. This script never contacts Torn.';
   var NOTE = 'Measurement, not advice. Prices abroad change about every 5 minutes.';
   var EMPTY_TEXT = 'Nothing pays right now.';
+  var PDA_PAGE_NOTE = 'Reading the Travel Agency page is verified on PC only.';
+  var THIN_TITLE = 'Thin market';
 
-  /* cb: { onToggle(open), onSaveKey(text), onRemoveKey(), onMethod(m), onSeats(n), onGroup(g), onTab(t), onRetry() } */
+  /* cb: { onToggle(open), onSaveKey(text), onRemoveKey(), onMethod(m), onSeats(n), onGroup(g), onTab(t), onSort(s), onUseTorn(),
+   *       onStar(key), onHide(key), onShowAll(), onRetry() } */
   function create(platform, cb) {
     var host = document.createElement('div');
     host.id = 'ks-bm-host';
@@ -1102,7 +1562,7 @@ var KSBM_UI = (function () {
     var closeBtn = h('button', 'close', '×');
     closeBtn.type = 'button';
     closeBtn.setAttribute('aria-label', 'Close');
-    add(head, h('span', 'title', 'KS Black Market ' + platform), chip, closeBtn);
+    add(head, h('span', 'title', 'KS Black Market ' + platform + ' ' + KSBM_VERSION), chip, closeBtn);
 
     var meta = h('div', 'meta');
     var msg = h('div', 'msg');
@@ -1136,7 +1596,17 @@ var KSBM_UI = (function () {
     var f3 = add(h('div', 'field'), h('label', null, 'Item slots'), seatsIn);
     var f3b = h('div', 'note', SLOTS_HELP);
     var discl = h('div', 'note', PRIVACY);
-    add(settings, summary, f1, f1b, f2, f3, f3b, discl);
+    var versionNote = h('div', 'note', 'Version ' + KSBM_VERSION);
+    var travelNote = h('div', 'note');
+    var useTorn = h('button', 'btn sec', 'Use Torn\'s values');
+    useTorn.type = 'button';
+    var travelField = add(h('div', 'field'), travelNote, useTorn);
+    var pdaNote = platform === 'PDA' ? h('div', 'note', PDA_PAGE_NOTE) : null;
+    var hiddenNote = h('span', 'note');
+    var showAll = h('button', 'btn sec', 'Show all');
+    showAll.type = 'button';
+    var hiddenField = add(h('div', 'field'), hiddenNote, showAll);
+    add(settings, summary, versionNote, f1, f1b, travelField, pdaNote, f2, f3, f3b, hiddenField, discl);
 
     // ---- the filter above the tabs: All / Drugs / Black Market / Shop items
     var filters = h('div', 'filters');
@@ -1168,10 +1638,25 @@ var KSBM_UI = (function () {
       tabs.appendChild(b);
     });
 
+    // ---- how the lists are ordered: Most profit / Leaving soonest (all three tabs)
+    var sorts = h('div', 'sorts');
+    sorts.setAttribute('role', 'group');
+    sorts.setAttribute('aria-label', 'Sort');
+    var sortBtns = {};
+    C.SORTS.forEach(function (k) {
+      var b = h('button', null, C.SORT_LABEL[k]);
+      b.type = 'button';
+      b.setAttribute('data-sort', k);
+      b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', function () { cb.onSort(k); });
+      sortBtns[k] = b;
+      sorts.appendChild(b);
+    });
+
     var lists = h('div', 'lists');
     var legend = h('div', 'note legend', C.LEGEND);
     var foot = h('div', 'foot', NOTE);
-    add(panel, head, meta, msg, settings, filters, tabs, lists, legend, foot);
+    add(panel, head, meta, msg, settings, filters, tabs, sorts, lists, legend, foot);
     add(wrap, panel, btn);
     shadow.appendChild(wrap);
 
@@ -1182,6 +1667,8 @@ var KSBM_UI = (function () {
     removeKey.addEventListener('click', function () { cb.onRemoveKey(); });
     methodSel.addEventListener('change', function () { cb.onMethod(methodSel.value); });
     seatsIn.addEventListener('change', function () { seatsIn.value = String(C.clampSeats(seatsIn.value)); cb.onSeats(seatsIn.value); });
+    useTorn.addEventListener('click', function () { cb.onUseTorn(); });
+    showAll.addEventListener('click', function () { cb.onShowAll(); });
 
     // ---- the rows. Whole row = one button: it folds its details out and in; only one row is open at a time.
     var openKey = null;                 // the row that is folded out (survives a new fetch while the row is still in the list)
@@ -1202,15 +1689,17 @@ var KSBM_UI = (function () {
       m.span.textContent = mark.text;
     }
 
-    function renderRow(en, group, nowS) {
-      var rv = C.rowView(en, nowS, group);
+    function renderRow(en, group, nowS, cash) {
+      var rv = C.rowView(en, nowS, group, cash);
       var r = h('div', 'row');
       r.setAttribute('role', 'button');
       r.setAttribute('tabindex', '0');
       r.setAttribute('data-kind', en.kind);
       r.setAttribute('data-group', group);
       r.setAttribute('aria-expanded', 'false');
-      var l1 = add(h('div', 'r1'), h('span', 'name', rv.left), h('span', 'big ' + (rv.positive ? 'pos' : 'neg'), rv.big));
+      var nameEl = h('span', 'name', rv.left);
+      if (rv.starred) nameEl.appendChild(h('span', 'starbadge', 'starred'));
+      var l1 = add(h('div', 'r1'), nameEl, h('span', 'big ' + (rv.positive ? 'pos' : 'neg'), rv.big));
       var l2 = h('div', 'r2');
       if (rv.mark) {
         var span = h('span', 'mark ' + rv.mark.tone, rv.mark.text);
@@ -1221,31 +1710,50 @@ var KSBM_UI = (function () {
         l2.textContent = rv.line2;
       }
       var det = h('div', 'details');
-      C.detailLines(en, nowS).forEach(function (line) { det.appendChild(h('div', 'd', line)); });
+      C.detailLines(en, nowS, cash).forEach(function (line) { det.appendChild(h('div', 'd', line)); });
+      if (en.itemKey) {                                                              // an item row (not a round trip) can be starred or hidden
+        var starBtn = h('button', null, en.starred ? 'Unstar' : 'Star');
+        starBtn.type = 'button';
+        starBtn.setAttribute('data-act', 'star');
+        starBtn.addEventListener('click', function (ev) { ev.stopPropagation(); cb.onStar(en.itemKey); });
+        var hideBtn = h('button', null, 'Hide');
+        hideBtn.type = 'button';
+        hideBtn.setAttribute('data-act', 'hide');
+        hideBtn.addEventListener('click', function (ev) { ev.stopPropagation(); cb.onHide(en.itemKey); });
+        det.appendChild(add(h('div', 'acts'), starBtn, hideBtn));
+      }
       add(r, l1, l2, det);
       var toggle = function () { setOpenRow(openKey === en.key ? null : en.key); };
       r.addEventListener('click', toggle);
       r.addEventListener('keydown', function (ev) {
+        if (ev.target !== r) return;                                                 // a key on a button inside the row is the button's
         if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(); }
       });
       rowEls.push({ el: r, key: en.key });
       return r;
     }
 
-    function renderList(list, nowS) {
+    function renderList(list, nowS, cash) {
       var s = h('div', 'list');
-      if (!list.ranked.length && !list.unknown.length) s.appendChild(h('div', 'empty', EMPTY_TEXT));
-      list.ranked.forEach(function (en) { s.appendChild(renderRow(en, 'ranked', nowS)); });
+      if (!list.ranked.length && !list.unknown.length && !list.thin.length) s.appendChild(h('div', 'empty', EMPTY_TEXT));
+      list.ranked.forEach(function (en) { s.appendChild(renderRow(en, 'ranked', nowS, cash)); });
       if (list.unknown.length) {
         var g = h('div', 'unknown-group');
         g.appendChild(h('h3', null, C.UNKNOWN_GROUP_TITLE));
-        list.unknown.forEach(function (en) { g.appendChild(renderRow(en, 'unknown', nowS)); });
+        list.unknown.forEach(function (en) { g.appendChild(renderRow(en, 'unknown', nowS, cash)); });
         s.appendChild(g);
+      }
+      if (list.thin.length) {
+        var t = h('div', 'thin-group');
+        t.appendChild(h('h3', null, THIN_TITLE));
+        list.thin.forEach(function (en) { t.appendChild(renderRow(en, 'thin', nowS, cash)); });
+        s.appendChild(t);
       }
       return s;
     }
 
-    /* ctx: { settings:{key, method, seats}, persistent, message:{text, tone}|null, canRetry } */
+    /* ctx: { settings:{key, mode, hidden:[keys]}, persistent, message:{text, tone}|null, canRetry }. The method and the item slots on the
+     * screen are the ones the panel calculates with (view.method, view.seats): Torn's or the user's own. */
     function render(view, ctx) {
       var tone = view.state === 'OK' ? '' : (view.state === 'NO_DATA' ? 'warn' : 'bad');
       chip.className = 'chip' + (tone ? ' ' + tone : '');
@@ -1253,7 +1761,8 @@ var KSBM_UI = (function () {
       btn.className = 'bm' + (tone ? ' ' + tone : '');
       meta.textContent = view.ageS === null
         ? 'No prices received yet.'
-        : METHOD_LABEL[view.method] + ' · ' + view.seats + ' item slots · prices ' + C.fmtAge(view.ageS) + ' old' + (view.dropped ? ' · ' + view.dropped + ' unreadable row(s) skipped' : '');
+        : METHOD_LABEL[view.method] + ' · ' + view.seats + ' item slots' + (view.source === 'torn' ? ' (from Torn)' : '') + ' · prices ' + C.fmtAge(view.ageS) + ' old'
+          + (view.travel.factor !== 1 ? ' · flight times read from Torn' : '') + (view.dropped ? ' · ' + view.dropped + ' unreadable row(s) skipped' : '');
       var text = ctx.message ? ctx.message.text : (view.state === 'STALE' || view.state === 'STATUS' ? view.detail : '');
       msg.textContent = text;
       msg.className = 'msg' + (text ? ' show' : '') + (ctx.message && ctx.message.tone === 'bad' ? ' bad' : '');
@@ -1261,13 +1770,24 @@ var KSBM_UI = (function () {
       keyState.textContent = ctx.settings.key
         ? 'A key is saved' + (ctx.persistent ? '.' : ' for this page only (your script manager gives no storage).')
         : 'No key saved.';
-      methodSel.value = ctx.settings.method;
-      if (document.activeElement !== seatsIn && shadow.activeElement !== seatsIn) seatsIn.value = String(ctx.settings.seats);
+      methodSel.value = view.method;
+      if (document.activeElement !== seatsIn && shadow.activeElement !== seatsIn) seatsIn.value = String(view.seats);
+      travelNote.textContent = C.travelText(view.travel);
+      useTorn.style.display = ctx.settings.mode === 'manual' && view.travel.reading ? '' : 'none';
+      var nHidden = ctx.settings.hidden.length;
+      hiddenNote.textContent = 'Hidden: ' + nHidden + ' ·';
+      showAll.disabled = nHidden === 0;
       if (!ctx.settings.key) settings.open = true;
 
       var ok = view.state === 'OK';
       filters.classList.toggle('show', ok);
       tabs.classList.toggle('show', ok);
+      sorts.classList.toggle('show', ok);
+      C.SORTS.forEach(function (k) {
+        var on = k === view.sort;
+        sortBtns[k].classList.toggle('on', on);
+        sortBtns[k].setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
       C.GROUPS.forEach(function (g) {
         var on = g === view.group;
         filterBtns[g].classList.toggle('on', on);
@@ -1283,7 +1803,7 @@ var KSBM_UI = (function () {
       rowEls = [];
       markEls = [];
       if (ok) {
-        lists.appendChild(renderList(view.lists[view.tab], view.nowS));
+        lists.appendChild(renderList(view.lists[view.tab], view.nowS, view.cash));
         setOpenRow(rowEls.some(function (r) { return r.key === openKey; }) ? openKey : null);
       } else {
         openKey = null;
@@ -1315,6 +1835,8 @@ var KSBM_UI = (function () {
 /* ================= KS Black Market — lifecycle =================
  * BOOT -> DETECT -> INITIALIZE -> RENDER -> OBSERVE -> UPDATE -> DISPOSE
  * The script only reads from the KS Black Market worker. No clicks, no navigation, no requests to Torn.
+ * It also READS two things from the page the user has open and is looking at (35-page.js): the cash in the sidebar, and on the Travel
+ * Agency page the travel method, flight times and item slots. Only while the tab is visible; kept in memory / ksBm.v1.travel; never sent.
  */
 (function () {
   'use strict';
@@ -1332,8 +1854,9 @@ var KSBM_UI = (function () {
 
   var state = {
     open: false, disposed: false, env: null, fetchedAt: 0, message: null, seq: 0, appliedSeq: 0, epoch: 0, inflight: 0,
-    retryAt: 0, captcha: false, clockOffsetS: 0,
-    settings: { key: '', method: KSBM_CORE.DEFAULT_METHOD, seats: KSBM_CORE.DEFAULT_SEATS, group: KSBM_CORE.DEFAULT_GROUP, tab: KSBM_CORE.DEFAULT_TAB },
+    retryAt: 0, captcha: false, clockOffsetS: 0, cash: null, travelWatch: null, moneyWatch: null,
+    settings: { key: '', method: KSBM_CORE.DEFAULT_METHOD, seats: KSBM_CORE.DEFAULT_SEATS, group: KSBM_CORE.DEFAULT_GROUP, tab: KSBM_CORE.DEFAULT_TAB,
+      sort: KSBM_CORE.DEFAULT_SORT, mode: KSBM_CORE.DEFAULT_MODE, travel: null, starred: [], hidden: [] },
     timer: null, staleTimer: null, clockTimer: null, captchaTimer: null, lastStart: 0, observer: null
   };
   var ui = null;
@@ -1349,13 +1872,44 @@ var KSBM_UI = (function () {
 
   function view() {
     var elapsed = state.env ? (now() - state.fetchedAt) / 1000 : 0;
-    return KSBM_CORE.buildView(state.env, { method: state.settings.method, seats: state.settings.seats, group: state.settings.group,
-      tab: state.settings.tab, elapsedS: elapsed, nowS: serverNow() });
+    var st = state.settings;
+    return KSBM_CORE.buildView(state.env, { method: st.method, seats: st.seats, group: st.group, tab: st.tab, sort: st.sort, mode: st.mode,
+      travel: st.travel, starred: st.starred, hidden: st.hidden, cash: state.cash, localS: now() / 1000, elapsedS: elapsed, nowS: serverNow() });
+  }
+
+  // What is read from Torn's page counts only while the tab is visible and no captcha is shown.
+  function pageReadable() { return document.visibilityState === 'visible' && !state.captcha; }
+
+  // The cash is read when the panel is drawn (and when the number changes: see onMoney). Not visible: the last value stays.
+  function syncCash() {
+    if (!state.moneyWatch || !pageReadable()) return;
+    state.moneyWatch.refresh();
+    state.cash = state.moneyWatch.value();
+  }
+  function onMoney(v) {
+    state.cash = v;
+    if (state.open && !state.disposed) render();
+  }
+  function onTravelRead(r) {
+    if (state.disposed) return;
+    state.settings.travel = r;
+    KSBM_IO.saveJson('travel', r);
+    if (state.open) render();
+  }
+  // Starts the reading of the Travel Agency page when this is that page. It stops by itself when the page is something else.
+  function startTravelWatch() {
+    if (state.travelWatch || state.disposed || !KSBM_PAGE.isTravelPage(window.location)) return;
+    state.travelWatch = KSBM_PAGE.watchTravel({ doc: document, win: window, now: now, visible: pageReadable, onRead: onTravelRead });
+  }
+  function stopPageWatchers() {
+    if (state.travelWatch) { state.travelWatch.stop(); state.travelWatch = null; }
+    if (state.moneyWatch) { state.moneyWatch.stop(); state.moneyWatch = null; }
   }
 
   // ---- RENDER
   function render() {
     if (state.disposed || !ui) return;
+    syncCash();
     var v = view();
     var message = state.message;
     if (!canFetch && !message) message = { text: 'This script manager does not provide GM_xmlhttpRequest, so nothing can be fetched.', tone: 'bad' };
@@ -1483,7 +2037,9 @@ var KSBM_UI = (function () {
     state.captchaTimer = setTimeout(function () { state.captchaTimer = null; checkCaptcha(); }, CAPTCHA_CHECK_DEBOUNCE_MS);
   }
   function onVisibility() {
-    if (state.disposed || !state.open) return;
+    if (state.disposed) return;
+    if (document.visibilityState === 'visible' && state.travelWatch) state.travelWatch.refresh();
+    if (!state.open) return;
     checkCaptcha();
     if (document.visibilityState === 'visible') {
       render();
@@ -1507,6 +2063,7 @@ var KSBM_UI = (function () {
   function onPageShow(e) {
     if (state.disposed || !(e && e.persisted)) return;
     checkCaptcha();
+    if (state.travelWatch) state.travelWatch.refresh();
   }
   function dispose() {
     if (state.disposed) return;
@@ -1516,11 +2073,27 @@ var KSBM_UI = (function () {
     stopTicks();
     if (state.captchaTimer) { clearTimeout(state.captchaTimer); state.captchaTimer = null; }
     if (state.observer) { state.observer.disconnect(); state.observer = null; }
+    stopPageWatchers();
     document.removeEventListener('visibilitychange', onVisibility);
     window.removeEventListener('pagehide', onPageHide);
     window.removeEventListener('pageshow', onPageShow);
     if (ui) ui.unmount();
     root.removeAttribute('data-ks-bm');
+  }
+
+  // The method and item slots the panel calculates with right now (Torn's reading or the saved values).
+  function currentTravel() {
+    var st = state.settings;
+    return KSBM_CORE.resolveTravel({ mode: st.mode, method: st.method, seats: st.seats, travel: st.travel, localS: now() / 1000 }, null);
+  }
+  function goManual(method, seats) {
+    var st = state.settings;
+    st.method = KSBM_CORE.validMethod(method);
+    st.seats = KSBM_CORE.clampSeats(seats);
+    st.mode = 'manual';
+    KSBM_IO.save('method', st.method);
+    KSBM_IO.save('seats', st.seats);
+    KSBM_IO.save('mode', 'manual');
   }
 
   // ---- INITIALIZE
@@ -1559,14 +2132,27 @@ var KSBM_UI = (function () {
         state.message = { text: 'The saved key was removed.', tone: 'warn' };
         render();
       },
-      onMethod: function (m) { state.settings.method = KSBM_CORE.validMethod(m); KSBM_IO.save('method', state.settings.method); render(); },
-      onSeats: function (n) { state.settings.seats = KSBM_CORE.clampSeats(n); KSBM_IO.save('seats', state.settings.seats); render(); },
+      // Picking a travel method or item slots yourself means "Manual": the values the panel used a moment ago (Torn's or yours) become yours.
+      onMethod: function (m) { var cur = currentTravel(); goManual(m, cur.seats); render(); },
+      onSeats: function (n) { var cur = currentTravel(); goManual(cur.method, n); render(); },
+      onSort: function (k) { state.settings.sort = KSBM_CORE.validSort(k); KSBM_IO.save('sort', state.settings.sort); render(); },
+      onUseTorn: function () { state.settings.mode = 'torn'; KSBM_IO.save('mode', 'torn'); render(); },
+      onStar: function (key) {
+        var st = state.settings;
+        st.starred = KSBM_CORE.hasKey(st.starred, key) ? KSBM_CORE.removeKey(st.starred, key) : KSBM_CORE.addKey(st.starred, key);
+        KSBM_IO.saveJson('starred', st.starred);
+        render();
+      },
+      onHide: function (key) { state.settings.hidden = KSBM_CORE.addKey(state.settings.hidden, key); KSBM_IO.saveJson('hidden', state.settings.hidden); render(); },
+      onShowAll: function () { state.settings.hidden = []; KSBM_IO.saveJson('hidden', []); render(); },
       onGroup: function (g) { state.settings.group = KSBM_CORE.validGroup(g); KSBM_IO.save('group', state.settings.group); render(); },
       onTab: function (t) { state.settings.tab = KSBM_CORE.validTab(t); KSBM_IO.save('tab', state.settings.tab); render(); },
       onRetry: function () { client.reset(); state.retryAt = 0; tick(true); }
     });
     ui.mount();
+    state.moneyWatch = KSBM_PAGE.watchMoney({ doc: document, visible: pageReadable, onChange: onMoney });
     render();
+    startTravelWatch();
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('pagehide', onPageHide);
     window.addEventListener('pageshow', onPageShow);
