@@ -1,0 +1,1885 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recruit Finder — PoIitically Incorrect</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground: #eaedf1; --surface: #ffffff; --surface-2: #f4f6f9;
+    --ink: #14202b; --muted: #5c6d7e; --faint: #8b9aa8;
+    --line: #d3dae1; --line-strong: #b8c3cd;
+    --accent: #a3512a; --accent-ink: #ffffff; --accent-soft: #f2ded4;
+    --good: #1c7355; --good-soft: #dfeee8;
+    --stop: #b3453e; --warn: #8a6410;
+    --shadow: 0 1px 2px rgba(20,32,43,.06), 0 8px 24px rgba(20,32,43,.06);
+    --shadow-lift: 0 2px 4px rgba(20,32,43,.08), 0 14px 34px rgba(20,32,43,.12);
+    --display: 'Saira Condensed','Arial Narrow',Helvetica,sans-serif;
+    --body: 'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
+    --mono: 'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+      --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+      --line: #26313b; --line-strong: #35434f;
+      --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+      --good: #46a583; --good-soft: #172a24;
+      --stop: #e0796f; --warn: #d0a545;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+      --shadow-lift: 0 2px 4px rgba(0,0,0,.5), 0 14px 34px rgba(0,0,0,.45);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+    --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
+    --line: #26313b; --line-strong: #35434f;
+    --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+    --good: #46a583; --good-soft: #172a24;
+    --stop: #e0796f; --warn: #d0a545;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+    --shadow-lift: 0 2px 4px rgba(0,0,0,.5), 0 14px 34px rgba(0,0,0,.45);
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 44px 20px 72px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+  .wrap > * { min-width: 0; }
+
+  /* ---- back to Leader Tools ---- */
+
+  .backbar { margin: -6px 0 -8px; }
+  .backbar a {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-decoration: none;
+    border: 1px solid var(--line-strong);
+    border-radius: 3px;
+    padding: 7px 12px;
+    display: inline-block;
+  }
+  .backbar a:hover { color: var(--accent); border-color: var(--accent); }
+  .backbar a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .masthead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px 24px;
+    padding-bottom: 20px;
+    border-bottom: 2px solid var(--line-strong);
+  }
+
+  .eyebrow {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 4px;
+  }
+
+  h1 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(34px, 6vw, 52px);
+    line-height: 1;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .masthead p.sub { margin: 10px 0 0; color: var(--muted); max-width: 62ch; }
+
+  .stamp {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: .04em;
+    color: var(--faint);
+    border: 1px solid var(--line-strong);
+    border-radius: 2px;
+    padding: 5px 9px;
+    white-space: nowrap;
+  }
+
+  h2 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 14px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    box-shadow: var(--shadow);
+    padding: 22px 22px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+  }
+
+  .tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 2px;
+    background: transparent;
+    color: var(--warn);
+    border: 1px solid currentColor;
+    white-space: nowrap;
+  }
+
+  .mini {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    background: var(--surface-2);
+    color: var(--ink);
+    border: 1px solid var(--line-strong);
+    border-radius: 3px;
+    padding: 8px 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    text-decoration: none;
+    display: inline-block;
+    line-height: 1.4;
+  }
+  .mini:hover { border-color: var(--accent); color: var(--accent); }
+  .mini.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .mini.primary:hover { color: var(--accent-ink); filter: brightness(1.06); }
+  .mini.big { font-size: 14px; padding: 10px 18px; }
+  .mini.link { background: none; border-color: transparent; color: var(--faint); padding: 8px 4px; }
+  .mini.link:hover { color: var(--accent); }
+  .mini[disabled] { opacity: .55; cursor: default; filter: none; }
+  .mini:focus-visible, input:focus-visible, summary:focus-visible, th button:focus-visible,
+  td.name a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .note { font-size: 13px; color: var(--faint); margin: 0; overflow-wrap: anywhere; }
+
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; min-width: 0; }
+  .grow { flex: 1 1 200px; min-width: 0; }
+
+  .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .lbl {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  input[type="password"], input[type="text"] {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 14px;
+    color: var(--ink);
+    background: var(--surface-2);
+    border: 1px solid var(--line-strong);
+    border-radius: 3px;
+    padding: 8px 10px;
+    width: 100%;
+    min-width: 0;
+  }
+  input[disabled] { opacity: .6; }
+  .row input[type="password"] { flex: 1 1 200px; width: auto; }
+
+  .field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 14px 16px; }
+  .check { display: flex; align-items: center; gap: 8px; font-size: 14px; padding-top: 4px; }
+  .check input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+
+  .split { border-top: 1px solid var(--line); padding-top: 14px; }
+
+  .msg { font-size: 14px; border-radius: 3px; padding: 10px 12px; margin: 0; overflow-wrap: anywhere; border: 1px solid var(--line); background: var(--surface-2); }
+  .msg.err { color: var(--stop); border-color: var(--stop); }
+  .msg.warn { color: var(--warn); border-color: var(--warn); }
+  .msg.ok { color: var(--good); border-color: var(--good); background: var(--good-soft); }
+  .msg.work { color: var(--muted); }
+  .msg .mini { margin-left: 6px; margin-top: 6px; }
+
+  .asof { font-family: var(--mono); font-size: 13px; color: var(--muted); margin: 0; overflow-wrap: anywhere; }
+  .asof .tag { margin-right: 6px; }
+
+  .funnel { font-family: var(--mono); font-size: 13px; color: var(--ink); margin: 0; overflow-wrap: anywhere; line-height: 1.6; }
+
+  /* ---- results ---- */
+
+  .table-scroll { overflow-x: auto; max-width: 100%; border: 1px solid var(--line); border-radius: 3px; }
+  /* Fixed layout: the widths come from the heading row alone, so a long list is laid out in one pass
+     instead of measuring every cell again whenever anything on the page changes. */
+  table { border-collapse: collapse; width: 100%; min-width: 1090px; table-layout: fixed; }
+  th {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--line-strong);
+    padding: 0;
+    width: 82px;
+    vertical-align: bottom;
+  }
+  th.name { width: 190px; position: sticky; left: 0; z-index: 1; }
+  th button {
+    font: inherit; color: inherit; background: none; border: 0;
+    padding: 8px 10px; width: 100%; text-align: right; cursor: pointer; line-height: 1.25;
+  }
+  th.name button { text-align: left; }
+  th button:hover { color: var(--accent); }
+  th[aria-sort="ascending"] button::after { content: ' \25B2'; font-size: 10px; }
+  th[aria-sort="descending"] button::after { content: ' \25BC'; font-size: 10px; }
+
+  td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: baseline; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+  td.num.none { color: var(--faint); }
+  td.name { font-weight: 500; position: sticky; left: 0; background: var(--surface); max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+  td.name a { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--faint); }
+  td.name a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .empty { padding: 26px 12px; text-align: center; color: var(--faint); margin: 0; }
+
+  details { border-top: 1px solid var(--line); padding-top: 4px; }
+  summary {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 8px 0;
+    cursor: pointer;
+  }
+  summary:hover { color: var(--accent); }
+  details dl { margin: 6px 0 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; font-size: 14px; }
+  details dt { font-weight: 600; color: var(--muted); }
+  details dd { margin: 0; overflow-wrap: anywhere; }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding-top: 18px;
+    color: var(--faint);
+    font-size: 13px;
+  }
+  footer p { margin: 0 0 6px; max-width: 74ch; }
+
+  .sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+  @media (max-width: 620px) {
+    .wrap { padding: 24px 14px 56px; gap: 22px; }
+    .card { padding: 16px 14px; }
+    details dl { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="backbar"><a href="leader.html">&larr; Leader Tools</a></nav>
+
+  <header class="masthead">
+    <div>
+      <p class="eyebrow">Faction 48039</p>
+      <h1>Recruit Finder</h1>
+      <p class="sub">Active players without a faction who meet our bar, found in Torn's own daily player
+        snapshot. One click, a list with profile links.</p>
+    </div>
+    <span class="stamp">Leader &amp; Co-Leader</span>
+  </header>
+
+  <section class="card" id="keyCard">
+    <h2>Your key</h2>
+
+    <div class="field">
+      <label class="lbl" for="leaderKey">Leader Tools key</label>
+      <div class="row" id="leaderKeyIn">
+        <input type="password" id="leaderKey" autocomplete="off" spellcheck="false" placeholder="Paste your Torn key to sign in">
+        <button type="button" class="mini" id="toggleLeaderKey" aria-pressed="false">Show</button>
+        <button type="button" class="mini primary" id="signIn">Sign in</button>
+      </div>
+      <div class="row" id="leaderKeySaved" hidden>
+        <p class="note grow" id="leaderKeyText">Saved in this browser and shared with the other Leader Tools pages.</p>
+        <button type="button" class="mini link" id="forgetLeaderKey">Forget key</button>
+      </div>
+    </div>
+
+    <div class="field split">
+      <label class="lbl" for="rfKey">Recruit Finder key (optional)</label>
+      <div class="row" id="rfKeyIn">
+        <input type="password" id="rfKey" autocomplete="off" spellcheck="false" placeholder="Paste a separate key">
+        <button type="button" class="mini" id="saveRfKey">Save key</button>
+      </div>
+      <div class="row" id="rfKeySaved" hidden>
+        <p class="note grow">Saved. This page uses it instead of the Leader Tools key.</p>
+        <button type="button" class="mini link" id="removeRfKey">Remove key</button>
+      </div>
+      <p class="note" id="rfKeyHelp">A separate Custom Key with only user &rarr; snapshot and personalstats.
+        The button opens Torn's key form with those boxes ticked.</p>
+      <div class="row" id="rfKeyLinkRow">
+        <a class="mini" id="rfKeyLink" target="_blank" rel="noopener noreferrer"
+           href="https://www.torn.com/preferences.php#tab=api?step=addNewKey&amp;title=KSRecruitFinder&amp;user=snapshot,personalstats">Create a key for Recruit Finder</a>
+      </div>
+    </div>
+
+    <p class="msg work" id="keyWork" role="status" hidden></p>
+    <p class="msg err" id="keyMsg" role="alert" hidden></p>
+    <div class="msg err" id="accessMsg" role="alert" hidden>
+      <span id="accessText"></span>
+      <a class="mini" id="accessLink" target="_blank" rel="noopener noreferrer"
+         href="https://www.torn.com/preferences.php#tab=api?step=addNewKey&amp;title=KSRecruitFinder&amp;user=snapshot,personalstats">Create a key for Recruit Finder</a>
+    </div>
+
+    <details id="disclosure">
+      <summary>How this page uses your key</summary>
+      <dl>
+        <dt>Purpose</dt>
+        <dd>Find active players without a faction for recruitment. It reads only when you press Sign in,
+          Save key or Find recruits. Nothing runs in the background.</dd>
+        <dt>Calls</dt>
+        <dd>api.torn.com only: key/info, user/snapshot twice (today and 7 days ago), and
+          user/{id}/personalstats for up to the number of players you choose to check in detail.
+          At most 50 calls a minute, one at a time. Every call is tagged <code>KSRecruitFinder</code> in
+          your own API log. The key goes in a request header, never in a web address.</dd>
+        <dt>Storage</dt>
+        <dd>Your browser only. The key stays until you remove it (under <code>ks-leader-board-key</code>,
+          shared with the other Leader Tools pages, or <code>ks-recruit-finder-key</code>). The result list
+          and your filters are kept under <code>ks-recruit-finder-v1</code> until the next search. Torn's
+          player snapshot itself is never saved.</dd>
+        <dt>Sharing</dt>
+        <dd>Nobody. There is no server and no account. The key is not in the saved list or the copied text.</dd>
+        <dt>Key access</dt>
+        <dd>Custom: user &rarr; <strong>snapshot</strong>, <strong>personalstats</strong>. The key must
+          belong to a current member of faction 48039.</dd>
+        <dt>Writes</dt>
+        <dd>None. This page only reads. It never opens a Torn page, clicks or sends anything in Torn;
+          profile links open only when you click them.</dd>
+      </dl>
+    </details>
+  </section>
+
+  <section class="card" id="searchCard">
+    <h2>Search</h2>
+    <div class="field-grid">
+      <div class="field">
+        <label class="lbl" for="levelMin">Level min</label>
+        <input type="text" id="levelMin" inputmode="numeric" autocomplete="off">
+      </div>
+      <div class="field">
+        <label class="lbl" for="levelMax">Level max</label>
+        <input type="text" id="levelMax" inputmode="numeric" autocomplete="off">
+      </div>
+      <div class="field">
+        <label class="lbl" for="minHours">Min hours per day</label>
+        <input type="text" id="minHours" inputmode="decimal" autocomplete="off">
+      </div>
+      <div class="field">
+        <label class="lbl" for="minStreak">Min current streak</label>
+        <input type="text" id="minStreak" inputmode="numeric" autocomplete="off">
+        <span class="note">0 = off. Applies to players checked in detail.</span>
+      </div>
+      <div class="field">
+        <label class="lbl" for="detailCount">How many to check in detail</label>
+        <input type="text" id="detailCount" inputmode="numeric" autocomplete="off">
+        <span class="note">10 to 100. One call each.</span>
+      </div>
+      <div class="field">
+        <span class="lbl">Donator</span>
+        <label class="check" title="As reported in Torn's daily player snapshot"><input type="checkbox" id="donatorOnly"> Donator only</label>
+      </div>
+    </div>
+    <p class="msg err" id="settingsMsg" role="alert" hidden></p>
+
+    <div class="row">
+      <button type="button" class="mini primary big" id="findBtn">Find recruits</button>
+      <span class="asof" id="asOf" role="status"></span>
+    </div>
+
+    <p class="msg work" id="progress" role="status" hidden></p>
+    <p class="msg err" id="runMsg" role="alert" hidden></p>
+    <p class="msg ok" id="doneMsg" role="status" hidden></p>
+    <p class="funnel" id="funnel" hidden></p>
+    <div id="notes" class="field"></div>
+  </section>
+
+  <section class="card" id="resultsCard">
+    <div class="row">
+      <h2 class="grow">Players</h2>
+      <button type="button" class="mini" id="copyBtn">Copy list</button>
+      <span class="note" id="toast" role="status" hidden></span>
+    </div>
+    <div class="table-scroll" id="tableScroll">
+      <table id="results">
+        <thead><tr id="headRow"></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="row" id="moreRow" hidden>
+      <span class="note grow" id="moreText"></span>
+      <button type="button" class="mini" id="moreBtn">Show more</button>
+    </div>
+    <p class="empty" id="tableEmpty">Sign in and press Find recruits.</p>
+    <details>
+      <summary>How to read this list</summary>
+      <dl>
+        <dt>Who is listed</dt>
+        <dd>Players in Torn's daily snapshot of active players with no faction, not in federal jail, and
+          inside the filters above. Click a heading to sort.</dd>
+        <dt>Hours/day (7 d)</dt>
+        <dd>Time played in today's snapshot minus time played in the snapshot from 7 days ago, divided
+          by 7. A player missing from the older snapshot shows a dash and sorts last.</dd>
+        <dt>Donator</dt>
+        <dd>As reported in Torn's daily player snapshot.</dd>
+        <dt>Account age</dt>
+        <dd>Whole days since the player signed up.</dd>
+        <dt>Streak to RW wins</dt>
+        <dd>From Torn's personal stats, read only for the players with the most hours per day, up to the
+          number you choose to check in detail. The rest show a dash.</dd>
+        <dt>Dash</dt>
+        <dd>Torn did not give the number, or it was not read. A dash is never a zero; hover it for the
+          reason.</dd>
+      </dl>
+    </details>
+  </section>
+
+  <footer>
+    <p><strong>Manual only, by design.</strong> The page reads from Torn's API when you press a button
+      and never polls in the background. It never acts inside Torn.</p>
+    <p><strong>A list, not a verdict.</strong> No score and no hidden ranking: the order is the column you
+      sort by. TornStats membership and Discord are checked after someone joins, not here.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // One instance per page, whatever loads this script twice.
+  if (window.__ksRecruitFinder) return;
+  window.__ksRecruitFinder = true;
+
+  /* ================================================================
+     Constants
+     ================================================================ */
+
+  var FACTION_ID = 48039;
+  var KEY_STORE = 'ks-leader-board-key';
+  var RF_KEY_STORE = 'ks-recruit-finder-key';
+  var NS = 'ks-recruit-finder-v1';
+  var SETTINGS_STORE = NS + ':settings';
+  var COMMENT = 'KSRecruitFinder';
+  var API = 'https://api.torn.com/v2';
+
+  // Torn allows 100 calls a minute over all of a player's keys and may change that without notice.
+  var TORN_CALLS_PER_MINUTE = 100;
+  // This page's own budget: half of Torn's, so War Dibs and the other tools keep room on the same account.
+  var PAGE_CALLS_PER_MINUTE = TORN_CALLS_PER_MINUTE / 2;
+  var MIN_GAP_MS = Math.ceil(60000 / PAGE_CALLS_PER_MINUTE);
+  // The request leaves a few ms after its slot is taken, so the pace keeps a small margin on top.
+  var PACE_MARGIN_MS = 25;
+  // The longest stretch the snapshot reading runs before it lets the page draw and respond.
+  var SLICE_MS = 30;
+  var STALE_AFTER_SECONDS = 86400;
+  // Rows drawn at a time. Laying out a table costs about 0.3 ms a row (measured: 1,400 rows 443 ms,
+  // 4,400 rows 2 s), so a long list is shown a page at a time and the page never stalls.
+  var TABLE_PAGE_ROWS = 250;
+  var WEEK_SECONDS = 7 * 86400;
+
+  var TERMINAL_CODES = { 2: 1, 10: 1, 13: 1, 18: 1 };
+  var RETRY_CODES = { 5: 1, 8: 1, 9: 1, 14: 1, 15: 1, 17: 1, 24: 1 };
+
+  var DENIED_TEXT = 'This key does not belong to a current member of faction 48039.';
+  var SNAPSHOT_BLOCKED_TEXT = 'Your browser could not read Torn\'s player snapshot (blocked or unreachable).';
+  var REMOVED_TEXT = ' The key has been removed from this browser.';
+
+  /* ================================================================
+     Pure part: no page, no storage, no network. The tests run this block on its own.
+     ================================================================ */
+
+  // ---- pure: begin ----
+  var DEFAULT_SETTINGS = { levelMin: 15, levelMax: 50, donatorOnly: true, minHours: 1, minStreak: 0, detailCount: 40 };
+  var TODAY_COLUMNS = ['id', 'name', 'signed_up', 'level', 'donator', 'faction', 'fed', 'time_played'];
+  var PREV_COLUMNS = ['id', 'time_played'];
+  // A quoted field may run over a line break; a record is never allowed to swallow more lines than this.
+  var MAX_JOINED_LINES = 3;
+  var DAYS_BETWEEN_SNAPSHOTS = 7;
+  var STAT_PATHS = {
+    streakNow: ['other', 'activity', 'streak', 'current'],
+    streakBest: ['other', 'activity', 'streak', 'best'],
+    xanax: ['drugs', 'xanax'],
+    refills: ['other', 'refills', 'energy'],
+    attacksWon: ['attacking', 'attacks', 'won'],
+    donatorDays: ['other', 'donator_days'],
+    rwWins: ['other', 'ranked_war_wins']
+  };
+  var STAT_KEYS = Object.keys(STAT_PATHS);
+
+  function CsvCursor(text) {
+    this.text = text;
+    this.pos = text.length > 0 && text.charCodeAt(0) === 0xFEFF ? 1 : 0;
+  }
+
+  // The next physical line without its line break (LF or CRLF), or null at the end.
+  CsvCursor.prototype.nextLine = function () {
+    var t = this.text;
+    var p = this.pos;
+    if (p >= t.length) return null;
+    var nl = t.indexOf('\n', p);
+    var end = nl === -1 ? t.length : nl;
+    this.pos = nl === -1 ? t.length : nl + 1;
+    if (end > p && t.charCodeAt(end - 1) === 13) end -= 1;
+    return t.slice(p, end);
+  };
+
+  // Splits one line into fields: "" inside quotes is one quote, commas inside quotes stay.
+  // open: a quoted field is still open at the end of the text. bad: the line is not valid CSV.
+  function splitCsvLine(line) {
+    if (line.indexOf('"') === -1) return { fields: line.split(','), open: false, bad: false };
+    var fields = [];
+    var n = line.length;
+    var i = 0;
+    for (;;) {
+      if (i < n && line.charCodeAt(i) === 34) {
+        var value = '';
+        var j = i + 1;
+        for (;;) {
+          var q = line.indexOf('"', j);
+          if (q === -1) return { fields: fields, open: true, bad: false };
+          value += line.slice(j, q);
+          if (q + 1 < n && line.charCodeAt(q + 1) === 34) { value += '"'; j = q + 2; continue; }
+          i = q + 1;
+          break;
+        }
+        fields.push(value);
+        if (i === n) return { fields: fields, open: false, bad: false };
+        if (line.charCodeAt(i) !== 44) return { fields: fields, open: false, bad: true };
+        i += 1;
+        if (i === n) { fields.push(''); return { fields: fields, open: false, bad: false }; }
+      } else {
+        var c = line.indexOf(',', i);
+        var stop = c === -1 ? n : c;
+        var raw = line.slice(i, stop);
+        if (raw.indexOf('"') !== -1) return { fields: fields, open: false, bad: true };
+        fields.push(raw);
+        if (c === -1) return { fields: fields, open: false, bad: false };
+        i = c + 1;
+        if (i === n) { fields.push(''); return { fields: fields, open: false, bad: false }; }
+      }
+    }
+  }
+
+  // One CSV record: null at the end, { blank: true } for an empty line, { bad: true } for a record
+  // that cannot be read, otherwise { fields }. width -1 accepts any number of fields (the header).
+  // A record that fails after joining lines loses only its first line; reading resumes on the next.
+  function readRecord(cur, width) {
+    var line = cur.nextLine();
+    if (line === null) return null;
+    if (line === '') return { blank: true };
+    var afterFirst = cur.pos;
+    var text = line;
+    var res = splitCsvLine(text);
+    var joins = 0;
+    while (res.open && joins < MAX_JOINED_LINES) {
+      var more = cur.nextLine();
+      if (more === null) break;
+      text += '\n' + more;
+      joins += 1;
+      res = splitCsvLine(text);
+    }
+    if (res.open || res.bad || (width !== -1 && res.fields.length !== width)) {
+      cur.pos = afterFirst;
+      return { bad: true };
+    }
+    return { fields: res.fields };
+  }
+
+  function readHeader(cur, needed) {
+    for (;;) {
+      var rec = readRecord(cur, -1);
+      if (rec === null) return { ok: false, missing: needed.slice(), empty: true };
+      if (rec.blank) continue;
+      if (rec.bad) return { ok: false, missing: needed.slice(), empty: false };
+      var idx = {};
+      rec.fields.forEach(function (name, i) { if (!Object.prototype.hasOwnProperty.call(idx, name)) idx[name] = i; });
+      var missing = needed.filter(function (name) { return !Object.prototype.hasOwnProperty.call(idx, name); });
+      return { ok: missing.length === 0, missing: missing, idx: idx, width: rec.fields.length, empty: false };
+    }
+  }
+
+  function wholeNumber(text) {
+    return typeof text === 'string' && /^(0|[1-9][0-9]{0,14})$/.test(text) ? Number(text) : null;
+  }
+
+  // A row of today's snapshot, or null if a field this page uses cannot be read.
+  // faction: empty or 0 means no faction. fed: Torn writes the days of federal jail (0 = not jailed).
+  function todayRow(f, idx) {
+    var id = wholeNumber(f[idx.id]);
+    if (id === null || id === 0) return null;
+    var level = wholeNumber(f[idx.level]);
+    if (level === null || level < 1 || level > 100) return null;
+    var signedUp = wholeNumber(f[idx.signed_up]);
+    if (signedUp === null) return null;
+    var don = f[idx.donator];
+    if (don !== '0' && don !== '1') return null;
+    var facText = f[idx.faction];
+    var faction = facText === '' ? 0 : wholeNumber(facText);
+    if (faction === null) return null;
+    var fedText = f[idx.fed];
+    var fed = fedText === '' ? 0 : wholeNumber(fedText);
+    if (fed === null) return null;
+    var tpText = f[idx.time_played];
+    var tp = tpText === '' ? null : wholeNumber(tpText);
+    if (tpText !== '' && tp === null) return null;
+    var name = f[idx.name];
+    return {
+      id: id, name: name === '' ? String(id) : name, level: level, signedUp: signedUp,
+      donator: don === '1', faction: faction, fed: fed, tp: tp
+    };
+  }
+
+  function prevRow(f, idx) {
+    var id = wholeNumber(f[idx.id]);
+    if (id === null || id === 0) return null;
+    var tpText = f[idx.time_played];
+    var tp = tpText === '' ? null : wholeNumber(tpText);
+    if (tpText !== '' && tp === null) return null;
+    return { id: id, tp: tp };
+  }
+
+  // prev is undefined when the player is not in the older snapshot at all.
+  function hoursPerDay(now, prev) {
+    if (prev === undefined) return { value: null, why: 'missing' };
+    if (now === null || prev === null) return { value: null, why: 'nodata' };
+    var delta = now - prev;
+    if (delta < 0) return { value: null, why: 'negative' };
+    return { value: delta / DAYS_BETWEEN_SNAPSHOTS / 3600, why: '' };
+  }
+
+  // Players without a faction, each with hours per day. prevMap: Map id -> time_played (or null).
+  function buildPool(todayRows, prevMap) {
+    var pool = [];
+    for (var i = 0; i < todayRows.length; i += 1) {
+      var r = todayRows[i];
+      if (r.faction !== 0) continue;
+      var h = hoursPerDay(r.tp, prevMap.has(r.id) ? prevMap.get(r.id) : undefined);
+      pool.push({
+        id: r.id, name: r.name, level: r.level, signedUp: r.signedUp, donator: r.donator,
+        fed: r.fed, hours: h.value, hoursWhy: h.why
+      });
+    }
+    return pool;
+  }
+
+  // The filters in the order the funnel shows them. Federal jail always counts, whatever the filters.
+  function applyFilters(pool, s) {
+    var f = { withoutFaction: pool.length, donators: 0, inLevel: 0, notFed: 0, hours: 0 };
+    var rows = [];
+    for (var i = 0; i < pool.length; i += 1) {
+      var p = pool[i];
+      if (s.donatorOnly && !p.donator) continue;
+      f.donators += 1;
+      if (p.level < s.levelMin || p.level > s.levelMax) continue;
+      f.inLevel += 1;
+      if (p.fed !== 0) continue;
+      f.notFed += 1;
+      if (s.minHours > 0 && (p.hours === null || p.hours < s.minHours)) continue;
+      f.hours += 1;
+      rows.push(p);
+    }
+    return { rows: rows, funnel: f };
+  }
+
+  // Most hours per day first; a dash sorts last; equal hours by ID so the choice never wobbles.
+  function topRows(rows, n) {
+    return rows.slice().sort(function (a, b) {
+      if (a.hours === null && b.hours === null) return a.id - b.id;
+      if (a.hours === null) return 1;
+      if (b.hours === null) return -1;
+      return (b.hours - a.hours) || (a.id - b.id);
+    }).slice(0, n);
+  }
+
+  // The streak filter only judges players whose current streak was read.
+  function applyStreak(rows, statsById, minStreak) {
+    if (!(minStreak > 0)) return rows.slice();
+    return rows.filter(function (r) {
+      var e = statsById.get(r.id);
+      if (!e || e.stats.streakNow === null) return true;
+      return e.stats.streakNow >= minStreak;
+    });
+  }
+
+  function statAt(obj, path) {
+    var v = obj;
+    for (var i = 0; i < path.length; i += 1) {
+      if (v === null || typeof v !== 'object') return null;
+      v = v[path[i]];
+    }
+    return Number.isSafeInteger(v) && v >= 0 ? v : null;
+  }
+
+  function parseStats(payload) {
+    var ps = payload && typeof payload === 'object' ? payload.personalstats : null;
+    var out = {};
+    STAT_KEYS.forEach(function (k) { out[k] = statAt(ps, STAT_PATHS[k]); });
+    return out;
+  }
+
+  function ageDays(signedUp, nowS) {
+    return signedUp > 0 && nowS >= signedUp ? Math.floor((nowS - signedUp) / 86400) : null;
+  }
+
+  function cellValue(row, key, entry, nowS) {
+    if (key === 'name') return row.name;
+    if (key === 'level') return row.level;
+    if (key === 'donator') return row.donator ? 1 : 0;
+    if (key === 'age') return ageDays(row.signedUp, nowS);
+    if (key === 'hours') return row.hours;
+    return entry ? entry.stats[key] : null;
+  }
+
+  // One collator for every comparison; localeCompare with options builds a new one each call.
+  var NAME_COLLATOR = new Intl.Collator('en', { sensitivity: 'base' });
+
+  function nameCompare(a, b) {
+    return NAME_COLLATOR.compare(a.name, b.name) || (a.id - b.id);
+  }
+
+  // A dash sorts last in both directions.
+  function sortRows(rows, key, dir, statsById, nowS) {
+    return rows.slice().sort(function (a, b) {
+      if (key === 'name') return nameCompare(a, b) * dir;
+      var av = cellValue(a, key, statsById.get(a.id), nowS);
+      var bv = cellValue(b, key, statsById.get(b.id), nowS);
+      if (av === null && bv === null) return nameCompare(a, b);
+      if (av === null) return 1;
+      if (bv === null) return -1;
+      if (av !== bv) return (av - bv) * dir;
+      return nameCompare(a, b);
+    });
+  }
+
+  function profileUrl(id) { return 'https://www.torn.com/profiles.php?XID=' + id; }
+
+  function copyText(rows) {
+    return rows.map(function (r) { return r.name + ' [' + r.id + '] ' + profileUrl(r.id); }).join('\n');
+  }
+
+  function fmtInt(n) { return Math.round(n).toLocaleString('en-US'); }
+  function fmtHours(v) { return (Math.round(v * 10) / 10).toFixed(1); }
+
+  function funnelText(c, s) {
+    var parts = [fmtInt(c.active) + ' active players', fmtInt(c.withoutFaction) + ' without a faction'];
+    if (s.donatorOnly) parts.push(fmtInt(c.donators) + (c.donators === 1 ? ' donator' : ' donators'));
+    parts.push(fmtInt(c.inLevel) + ' in level range');
+    if (c.notFed !== c.inLevel) parts.push(fmtInt(c.notFed) + ' not in federal jail');
+    if (s.minHours > 0) parts.push(fmtInt(c.hours) + ' at ' + String(s.minHours) + ' h/day or more');
+    if (s.minStreak > 0) parts.push(fmtInt(c.afterStreak) + ' left after the streak filter');
+    return parts.join(' · ');
+  }
+
+  // Each setting: its rule, and the text shown when a typed value breaks it.
+  var SETTING_RULES = {
+    levelMin: { re: /^[0-9]{1,3}$/, min: 1, max: 100, text: 'Level min must be a whole number from 1 to 100.' },
+    levelMax: { re: /^[0-9]{1,3}$/, min: 1, max: 100, text: 'Level max must be a whole number from 1 to 100.' },
+    minHours: { re: /^[0-9]{1,2}(\.[0-9]{1,2})?$/, min: 0, max: 24, text: 'Min hours per day must be a number from 0 to 24, like 1.5.' },
+    minStreak: { re: /^[0-9]{1,6}$/, min: 0, max: 100000, text: 'Min current streak must be a whole number, 0 for off.' },
+    detailCount: { re: /^[0-9]{1,3}$/, min: 10, max: 100, text: 'How many to check in detail must be a whole number from 10 to 100.' }
+  };
+
+  function readSetting(name, text) {
+    var rule = SETTING_RULES[name];
+    var t = String(text).trim();
+    if (!rule.re.test(t)) return { ok: false, error: rule.text };
+    var v = Number(t);
+    if (!(v >= rule.min && v <= rule.max)) return { ok: false, error: rule.text };
+    return { ok: true, value: v };
+  }
+
+  function cleanSettings(raw) {
+    var s = {};
+    Object.keys(DEFAULT_SETTINGS).forEach(function (k) { s[k] = DEFAULT_SETTINGS[k]; });
+    if (!raw || typeof raw !== 'object') return s;
+    Object.keys(SETTING_RULES).forEach(function (k) {
+      var rule = SETTING_RULES[k];
+      var v = raw[k];
+      if (typeof v === 'number' && isFinite(v) && v >= rule.min && v <= rule.max &&
+          (k === 'minHours' ? Math.abs(Math.round(v * 100) - v * 100) < 1e-6 : Number.isInteger(v))) s[k] = v;
+    });
+    if (typeof raw.donatorOnly === 'boolean') s.donatorOnly = raw.donatorOnly;
+    if (s.levelMax < s.levelMin) { s.levelMin = DEFAULT_SETTINGS.levelMin; s.levelMax = DEFAULT_SETTINGS.levelMax; }
+    return s;
+  }
+  // ---- pure: end ----
+
+  /* ================================================================
+     Small helpers
+     ================================================================ */
+
+  function $(id) { return document.getElementById(id); }
+  function nowSec() { return Math.floor(Date.now() / 1000); }
+  function perfNow() { return performance.now(); }
+  function pad2(n) { return n < 10 ? '0' + n : String(n); }
+  function plural(n, one, many) { return n === 1 ? one : many; }
+
+  function tctMinutes(sec) {
+    var d = new Date(sec * 1000);
+    return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate()) +
+      ' ' + pad2(d.getUTCHours()) + ':' + pad2(d.getUTCMinutes());
+  }
+
+  function lsGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+  function lsSet(key, text) { try { localStorage.setItem(key, text); return true; } catch (e) { return false; } }
+  function lsDel(key) { try { localStorage.removeItem(key); } catch (e) { /* storage blocked */ } }
+
+  function readJson(key) {
+    var raw = lsGet(key);
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch (e) { return null; }
+  }
+
+  function abortError() {
+    var e = new Error('Aborted');
+    e.name = 'AbortError';
+    return e;
+  }
+  function isAbort(e) { return !!e && e.name === 'AbortError'; }
+
+  function TornError(code, part, text) {
+    this.name = 'TornError';
+    this.code = code;
+    this.part = part;
+    this.text = text || '';
+    this.message = 'Torn error ' + code;
+  }
+  TornError.prototype = Object.create(Error.prototype);
+
+  function Denied() { this.name = 'Denied'; this.message = 'Access denied'; }
+  Denied.prototype = Object.create(Error.prototype);
+
+  // The key works and is ours, but lacks a selection: the page says which and stops.
+  function MissingSelections(list) { this.name = 'MissingSelections'; this.list = list; this.message = 'Missing selections'; }
+  MissingSelections.prototype = Object.create(Error.prototype);
+
+  /* ================================================================
+     State
+     ================================================================ */
+
+  var state = {
+    settings: cleanSettings(null),
+    pool: null,             // players without a faction from the last search; memory only
+    savedRows: [],          // the list from the saved search, when there is no pool
+    searchSettings: null,   // the filters the shown list was searched with
+    counts: null,           // { active, unreadToday, prevRows, unreadPrev } or the saved funnel
+    statsById: new Map(),   // id -> { stats, at }
+    checkedIds: null,       // ids this search set out to check in detail, in order
+    fetchedAt: null,
+    snapshotTs: null,
+    prevTs: null,
+    complete: false,
+    stoppedAt: null,        // { done, total } when a search stopped while checking players
+    unsaved: false,
+    sortKey: 'hours',
+    sortDir: -1,
+    visibleRows: TABLE_PAGE_ROWS,
+    busy: false,
+    runSeq: 0,
+    ctrl: null,
+    gateTail: Promise.resolve(),
+    callTimes: [],
+    keyWork: '',
+    keyMsg: '',
+    accessMissing: null,
+    progress: '',
+    runMsg: '',
+    doneMsg: '',
+    settingsMsg: '',
+    runFailed: false,
+    liveRun: null,          // { done, total } while a search checks players into a list on screen
+    toastTimer: null
+  };
+
+  /* ================================================================
+     Keys
+     ================================================================ */
+
+  function storeFor(source) { return source === 'recruit' ? RF_KEY_STORE : KEY_STORE; }
+
+  // The separate Recruit Finder key wins when there is one.
+  function activeKey() {
+    var rf = lsGet(RF_KEY_STORE);
+    if (rf) return { value: rf, source: 'recruit' };
+    var leader = lsGet(KEY_STORE);
+    if (leader) return { value: leader, source: 'leader' };
+    return { value: '', source: '' };
+  }
+
+  /* ================================================================
+     Persistence
+     ================================================================ */
+
+  function isCount(v) { return Number.isSafeInteger(v) && v >= 0; }
+
+  function cleanStats(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    var out = {};
+    for (var i = 0; i < STAT_KEYS.length; i += 1) {
+      var v = raw[STAT_KEYS[i]];
+      if (v !== null && !isCount(v)) return null;
+      out[STAT_KEYS[i]] = v;
+    }
+    return out;
+  }
+
+  function cleanSavedRow(r) {
+    if (!r || typeof r !== 'object' || !isCount(r.id) || r.id === 0 || typeof r.name !== 'string' ||
+        !isCount(r.level) || !isCount(r.signed_up) || typeof r.donator !== 'boolean' ||
+        !(r.hoursPerDay === null || (typeof r.hoursPerDay === 'number' && isFinite(r.hoursPerDay) && r.hoursPerDay >= 0)) ||
+        !(r.hoursWhy === '' || r.hoursWhy === 'missing' || r.hoursWhy === 'nodata' || r.hoursWhy === 'negative')) return null;
+    var stats = r.stats === null ? null : cleanStats(r.stats);
+    if (r.stats !== null && stats === null) return null;
+    if (!(r.statsFetchedAt === null || isCount(r.statsFetchedAt))) return null;
+    return {
+      row: { id: r.id, name: r.name, level: r.level, signedUp: r.signed_up, donator: r.donator, fed: 0, hours: r.hoursPerDay, hoursWhy: r.hoursWhy },
+      stats: stats, at: r.statsFetchedAt
+    };
+  }
+
+  function cleanFunnel(f) {
+    var keys = ['active', 'withoutFaction', 'donators', 'inLevel', 'notFed', 'hours', 'afterStreak', 'unreadToday', 'unreadPrev', 'prevRows'];
+    if (!f || typeof f !== 'object') return null;
+    var out = {};
+    for (var i = 0; i < keys.length; i += 1) { if (!isCount(f[keys[i]])) return null; out[keys[i]] = f[keys[i]]; }
+    return out;
+  }
+
+  function loadCache() {
+    var c = readJson(NS);
+    if (!c || typeof c !== 'object' || c.schema !== 1 || c.factionId !== FACTION_ID || !isCount(c.fetchedAt) ||
+        !Array.isArray(c.rows) || !Array.isArray(c.checked)) return null;
+    var funnel = cleanFunnel(c.funnel);
+    if (!funnel) return null;
+    var rows = [];
+    var stats = new Map();
+    for (var i = 0; i < c.rows.length; i += 1) {
+      var clean = cleanSavedRow(c.rows[i]);
+      if (!clean) return null;
+      rows.push(clean.row);
+      if (clean.stats) stats.set(clean.row.id, { stats: clean.stats, at: clean.at });
+    }
+    var checked = c.checked.filter(isCount);
+    return {
+      fetchedAt: c.fetchedAt, snapshotTs: isCount(c.snapshotTs) ? c.snapshotTs : c.fetchedAt,
+      prevTs: isCount(c.prevTs) ? c.prevTs : null, settings: cleanSettings(c.settings), funnel: funnel,
+      rows: rows, stats: stats, checked: checked
+    };
+  }
+
+  // Only a finished search is saved. Raw snapshot text is never saved anywhere.
+  function saveCache(view) {
+    var data = {
+      schema: 1, factionId: FACTION_ID, fetchedAt: state.fetchedAt, snapshotTs: state.snapshotTs, prevTs: state.prevTs,
+      settings: state.searchSettings, funnel: view.funnelSaved,
+      checked: state.checkedIds ? state.checkedIds.slice() : [],
+      rows: view.baseRows.map(function (r) {
+        var e = state.statsById.get(r.id);
+        return {
+          id: r.id, name: r.name, level: r.level, signed_up: r.signedUp, donator: r.donator,
+          hoursPerDay: r.hours, hoursWhy: r.hoursWhy, stats: e ? e.stats : null, statsFetchedAt: e ? e.at : null
+        };
+      })
+    };
+    state.unsaved = !lsSet(NS, JSON.stringify(data));
+    // An older list must not come back on the next visit in place of this one.
+    if (state.unsaved) lsDel(NS);
+  }
+
+  function saveSettings() { lsSet(SETTINGS_STORE, JSON.stringify(state.settings)); }
+
+  /* ================================================================
+     Torn: one queue, one pace
+     ================================================================ */
+
+  function sleep(ms, signal) {
+    return new Promise(function (resolve, reject) {
+      if (signal.aborted) { reject(abortError()); return; }
+      var timer = setTimeout(function () {
+        signal.removeEventListener('abort', onAbort);
+        resolve();
+      }, ms);
+      function onAbort() {
+        clearTimeout(timer);
+        reject(abortError());
+      }
+      signal.addEventListener('abort', onAbort, { once: true });
+    });
+  }
+
+  // Every Torn call from this page passes through here, in order. No two calls start less than
+  // MIN_GAP_MS apart and no more than PAGE_CALLS_PER_MINUTE start within any minute.
+  async function takeSlot(signal) {
+    for (;;) {
+      if (signal.aborted) throw abortError();
+      var t = perfNow();
+      while (state.callTimes.length && t - state.callTimes[0] >= 60000 + PACE_MARGIN_MS) state.callTimes.shift();
+      var wait = 0;
+      if (state.callTimes.length) {
+        wait = Math.max(wait, MIN_GAP_MS + PACE_MARGIN_MS - (t - state.callTimes[state.callTimes.length - 1]));
+      }
+      if (state.callTimes.length >= PAGE_CALLS_PER_MINUTE) {
+        wait = Math.max(wait, 60000 + PACE_MARGIN_MS - (t - state.callTimes[0]));
+      }
+      if (wait <= 0) break;
+      await sleep(Math.ceil(wait), signal);
+    }
+    state.callTimes.push(perfNow());
+  }
+
+  function waitTurn(signal) {
+    var turn = state.gateTail.then(function () { return takeSlot(signal); });
+    state.gateTail = turn.catch(function () { /* the next caller still gets its turn */ });
+    return turn;
+  }
+
+  function apiUrl(path) {
+    return API + path + (path.indexOf('?') === -1 ? '?' : '&') + 'comment=' + COMMENT;
+  }
+
+  // A JSON call. Any Torn error, a dropped connection or an answer that is not JSON throws.
+  async function tornJson(path, part, op) {
+    await waitTurn(op.signal);
+    var payload;
+    try {
+      var response = await fetch(apiUrl(path), { headers: { Authorization: 'ApiKey ' + op.key }, signal: op.signal });
+      payload = await response.json();
+    } catch (err) {
+      if (op.signal.aborted || isAbort(err)) throw abortError();
+      throw new TornError(0, part);
+    }
+    if (!isCurrent(op)) throw abortError();
+    if (payload && typeof payload === 'object' && payload.error) {
+      throw new TornError(typeof payload.error.code === 'number' ? payload.error.code : -1, part);
+    }
+    return payload;
+  }
+
+  // The snapshot is CSV. Torn answers an error as JSON instead.
+  async function tornSnapshot(timestamp, op) {
+    await waitTurn(op.signal);
+    var text;
+    var httpOk = false;
+    try {
+      var response = await fetch(apiUrl('/user/snapshot' + (timestamp === null ? '' : '?timestamp=' + timestamp)),
+        { headers: { Authorization: 'ApiKey ' + op.key }, signal: op.signal });
+      httpOk = response.ok;
+      text = await response.text();
+    } catch (err) {
+      if (op.signal.aborted || isAbort(err)) throw abortError();
+      throw new TornError(0, 'snapshot');
+    }
+    if (!isCurrent(op)) throw abortError();
+    var start = text.charCodeAt(0) === 0xFEFF ? 1 : 0;
+    var head = text.slice(start, start + 200).replace(/^\s+/, '');
+    if (head.charAt(0) === '{') {
+      var payload = null;
+      try { payload = JSON.parse(text); } catch (e) { payload = null; }
+      if (payload && payload.error) {
+        throw new TornError(typeof payload.error.code === 'number' ? payload.error.code : -1, 'snapshot');
+      }
+      throw new TornError(-2, 'snapshot', 'Torn answered, but not with the player snapshot.');
+    }
+    // A failed answer that is not Torn's own error (a gateway page, for one) is not read as CSV.
+    if (!httpOk) throw new TornError(0, 'snapshot');
+    return text;
+  }
+
+  /* ================================================================
+     Reading the snapshots without freezing the page
+     ================================================================ */
+
+  // A message-channel turn lets the page draw and handle clicks. Unlike a timer, it is not slowed
+  // to once a second in a background tab.
+  var yieldChannel = new MessageChannel();
+  var yieldQueue = [];
+  yieldChannel.port1.onmessage = function () {
+    var resume = yieldQueue.shift();
+    if (resume) resume();
+  };
+  function breathe(signal) {
+    return new Promise(function (resolve, reject) {
+      if (signal.aborted) { reject(abortError()); return; }
+      function onAbort() { reject(abortError()); }
+      signal.addEventListener('abort', onAbort, { once: true });
+      yieldQueue.push(function () {
+        signal.removeEventListener('abort', onAbort);
+        if (signal.aborted) reject(abortError()); else resolve();
+      });
+      yieldChannel.port2.postMessage(0);
+    });
+  }
+
+  // Reads every record through `take`, in slices of at most SLICE_MS.
+  async function readSnapshot(text, needed, op, take) {
+    var cur = new CsvCursor(text);
+    var head = readHeader(cur, needed);
+    if (!head.ok) {
+      throw new TornError(-2, 'snapshot', head.empty ? 'Torn\'s player snapshot was empty.'
+        : 'Torn\'s player snapshot did not have the columns this page needs (missing: ' + head.missing.join(', ') + ').');
+    }
+    var counts = { rows: 0, bad: 0 };
+    for (;;) {
+      var until = perfNow() + SLICE_MS;
+      var done = false;
+      while (!done) {
+        for (var k = 0; k < 256; k += 1) {
+          var rec = readRecord(cur, head.width);
+          if (rec === null) { done = true; break; }
+          if (rec.blank) continue;
+          if (rec.bad || !take(rec.fields, head.idx)) counts.bad += 1;
+          else counts.rows += 1;
+        }
+        if (perfNow() >= until) break;
+      }
+      if (done) break;
+      await breathe(op.signal);
+      if (!isCurrent(op)) throw abortError();
+    }
+    if (counts.rows === 0) throw new TornError(-2, 'snapshot', 'Torn\'s player snapshot had no rows this page could read.');
+    return counts;
+  }
+
+  async function readToday(text, op) {
+    var rows = [];
+    var counts = await readSnapshot(text, TODAY_COLUMNS, op, function (f, idx) {
+      var r = todayRow(f, idx);
+      if (!r) return false;
+      rows.push(r);
+      return true;
+    });
+    return { rows: rows, count: counts.rows, bad: counts.bad };
+  }
+
+  async function readPrev(text, op) {
+    var map = new Map();
+    var counts = await readSnapshot(text, PREV_COLUMNS, op, function (f, idx) {
+      var r = prevRow(f, idx);
+      if (!r) return false;
+      map.set(r.id, r.tp);
+      return true;
+    });
+    return { map: map, count: counts.rows, bad: counts.bad };
+  }
+
+  /* ================================================================
+     Operations: one at a time, cancellable, never overwrites a newer one
+     ================================================================ */
+
+  function startOp(key) {
+    if (state.busy) return null;
+    state.busy = true;
+    state.runSeq += 1;
+    state.ctrl = new AbortController();
+    return { seq: state.runSeq, signal: state.ctrl.signal, key: key.value, source: key.source };
+  }
+
+  function isCurrent(op) { return op.seq === state.runSeq && !op.signal.aborted; }
+
+  function endOp(op) {
+    if (op.seq === state.runSeq) {
+      state.busy = false;
+      state.ctrl = null;
+      state.progress = '';
+      state.keyWork = '';
+      state.liveRun = null;
+    }
+  }
+
+  function stopNote(done, total) {
+    return 'The search stopped after checking ' + done + ' of ' + total + ' players in detail, so this list is not saved.';
+  }
+
+  // Cancelling a search whose list is already on screen says so, here and not in the aborted run,
+  // so an old run never writes to the page.
+  function cancelOp(reason) {
+    if (state.ctrl) state.ctrl.abort();
+    var live = state.liveRun;
+    state.ctrl = null;
+    state.busy = false;
+    state.runSeq += 1;
+    state.progress = '';
+    state.keyWork = '';
+    state.liveRun = null;
+    if (live) {
+      state.stoppedAt = { done: live.done, total: live.total };
+      state.runMsg = (reason ? reason + ' ' : '') + stopNote(live.done, live.total);
+    } else if (reason) {
+      state.runMsg = reason;
+    }
+  }
+
+  function setProgress(op, text) {
+    if (!isCurrent(op)) return;
+    state.progress = text;
+    renderStatus();
+  }
+
+  function describeError(e) {
+    var code = e.code;
+    if (code === 2) return 'Torn rejected that key. Check it was copied whole.';
+    if (code === 13) return 'That key is disabled after seven days of account inactivity.';
+    if (code === 10) return 'The key owner is in federal jail, so the key cannot be used.';
+    if (code === 18) return 'That key has been paused by its owner.';
+    if (RETRY_CODES[code]) return 'Torn says try again later (error ' + code + ').';
+    if (code === 16) {
+      if (e.part === 'snapshot') return 'Your key is missing user → snapshot.';
+      if (e.part === 'stats') return 'Your key is missing user → personalstats.';
+      return 'Your key is missing a selection Torn needs for this call (error 16).';
+    }
+    if (code === 0) return e.part === 'snapshot' ? SNAPSHOT_BLOCKED_TEXT : 'Could not reach Torn.';
+    if (code === -2) return e.text;
+    if (code === -1) return 'Torn returned an error without a code.';
+    return 'Torn returned error ' + code + '.';
+  }
+
+  function missingText(list) {
+    return 'Your key is missing ' + list.map(function (n) { return 'user → ' + n; }).join(' and ') + '.';
+  }
+
+  // key/info: the key must belong to faction 48039 and hold both selections.
+  async function checkKey(op) {
+    var payload = await tornJson('/key/info', 'key', op);
+    var info = payload && typeof payload === 'object' ? payload.info : null;
+    var user = info && typeof info === 'object' ? info.user : null;
+    // Only a clear answer about the faction denies (and removes) a key; any other shape is an error.
+    if (!user || typeof user !== 'object' || !(user.faction_id === null || typeof user.faction_id === 'number')) {
+      throw new TornError(-2, 'key', 'Torn answered the key check, but not as expected. Nothing was changed; try again later.');
+    }
+    if (user.faction_id !== FACTION_ID) throw new Denied();
+    var sel = info.selections && Array.isArray(info.selections.user) ? info.selections.user : [];
+    return ['snapshot', 'personalstats'].filter(function (n) { return sel.indexOf(n) === -1; });
+  }
+
+  // Stops the operation for good. Returns the text for the message box.
+  function failureText(e, op) {
+    if (e instanceof Denied) {
+      lsDel(storeFor(op.source));
+      return DENIED_TEXT + REMOVED_TEXT;
+    }
+    if (e instanceof TornError) {
+      if (TERMINAL_CODES[e.code]) {
+        lsDel(storeFor(op.source));
+        return describeError(e) + REMOVED_TEXT;
+      }
+      return describeError(e);
+    }
+    return 'Unexpected problem: ' + (e && e.message ? e.message : String(e));
+  }
+
+  /* ================================================================
+     Sign in / save a key
+     ================================================================ */
+
+  async function saveKey(source) {
+    var input = source === 'recruit' ? $('rfKey') : $('leaderKey');
+    var candidate = input.value.trim();
+    if (state.busy) return;
+    if (!candidate) { state.keyMsg = 'Paste your key first.'; render(); return; }
+    input.value = '';
+    var op = startOp({ value: candidate, source: source });
+    if (!op) return;
+    state.keyMsg = '';
+    state.accessMissing = null;
+    state.keyWork = 'Checking your key…';
+    render();
+    try {
+      var missing = await checkKey(op);
+      if (!isCurrent(op)) return;
+      lsSet(storeFor(source), candidate);
+      state.accessMissing = missing.length ? missing : null;
+    } catch (e) {
+      if (isAbort(e)) return;
+      var keep = e instanceof TornError && !TERMINAL_CODES[e.code];
+      // The key was never saved, so nothing is removed; a busy Torn says nothing about the key.
+      state.keyMsg = e instanceof Denied ? DENIED_TEXT
+        : e instanceof TornError ? describeError(e) : 'Unexpected problem: ' + (e && e.message ? e.message : String(e));
+      if (keep) input.value = candidate;
+    } finally {
+      endOp(op);
+      render();
+    }
+  }
+
+  function forget(source) {
+    cancelOp();
+    lsDel(storeFor(source));
+    state.keyMsg = '';
+    state.accessMissing = null;
+    render();
+  }
+
+  /* ================================================================
+     The search
+     ================================================================ */
+
+  function copySettings(s) {
+    var out = {};
+    Object.keys(s).forEach(function (k) { out[k] = s[k]; });
+    return out;
+  }
+
+  async function findRecruits() {
+    if (state.busy) return;
+    var key = activeKey();
+    if (!key.value) { state.runMsg = 'Sign in or save a Recruit Finder key first.'; render(); return; }
+    var op = startOp(key);
+    if (!op) return;
+    state.runMsg = '';
+    state.doneMsg = '';
+    state.keyMsg = '';
+    state.accessMissing = null;
+    state.runFailed = false;
+    var checked = 0;
+    var total = 0;
+    var committed = false;
+    render();
+    try {
+      setProgress(op, 'Checking your key…');
+      var missing = await checkKey(op);
+      if (missing.length) throw new MissingSelections(missing);
+
+      setProgress(op, 'Reading today\'s player snapshot…');
+      var startedAt = nowSec();
+      var todayText = await tornSnapshot(null, op);
+      var today = await readToday(todayText, op);
+      todayText = null;
+
+      setProgress(op, 'Reading the snapshot from 7 days ago…');
+      var prevTs = nowSec() - WEEK_SECONDS;
+      var prevText = await tornSnapshot(prevTs, op);
+      var prev = await readPrev(prevText, op);
+      prevText = null;
+
+      // If no player at all gained play time between the two snapshots, Torn did not give the older one
+      // (the same file twice, say). Every hour would read 0, so the search stops instead of showing none.
+      var grew = false;
+      for (var g = 0; g < today.rows.length && !grew; g += 1) {
+        var was = prev.map.get(today.rows[g].id);
+        if (typeof was === 'number' && today.rows[g].tp !== null && today.rows[g].tp > was) grew = true;
+      }
+      if (!grew) {
+        throw new TornError(-2, 'snapshot', 'Torn\'s two snapshots show no play time between them, so hours per day cannot be measured. Try again later.');
+      }
+
+      var pool = buildPool(today.rows, prev.map);
+      if (!isCurrent(op)) throw abortError();
+
+      // From here the new list is on screen; the players are checked one by one into it. The list
+      // saved by the previous search goes now: what is kept is only ever the latest finished search.
+      lsDel(NS);
+      state.pool = pool;
+      state.savedRows = [];
+      state.searchSettings = copySettings(state.settings);
+      state.counts = { active: today.count, unreadToday: today.bad, prevRows: prev.count, unreadPrev: prev.bad };
+      state.statsById = new Map();
+      state.fetchedAt = startedAt;
+      state.snapshotTs = startedAt;
+      state.prevTs = prevTs;
+      state.complete = false;
+      state.stoppedAt = null;
+      state.unsaved = false;
+      state.visibleRows = TABLE_PAGE_ROWS;
+      committed = true;
+      var targets = computeView().topIds;
+      state.checkedIds = targets.slice();
+      total = targets.length;
+      state.liveRun = { done: 0, total: total };
+      render();
+
+      for (var i = 0; i < targets.length; i += 1) {
+        setProgress(op, 'Checking players… ' + (i + 1) + ' of ' + total);
+        var payload = await tornJson('/user/' + targets[i] + '/personalstats?cat=popular', 'stats', op);
+        state.statsById.set(targets[i], { stats: parseStats(payload), at: nowSec() });
+        checked = i + 1;
+        state.liveRun.done = checked;
+        updateRow(targets[i]);
+      }
+
+      state.complete = true;
+      var view = computeView();
+      saveCache(view);
+      state.doneMsg = 'Done. Your browser read Torn\'s player snapshot for today (' + fmtInt(today.count + today.bad) +
+        ' rows) and from 7 days ago (' + fmtInt(prev.count + prev.bad) + ' rows), and checked ' + total + ' ' +
+        plural(total, 'player', 'players') + ' in detail.';
+    } catch (e) {
+      if (isAbort(e) || !isCurrent(op)) return;
+      state.runFailed = true;
+      if (e instanceof MissingSelections) {
+        state.accessMissing = e.list;
+      } else if (e instanceof TornError && e.code === 16 && (e.part === 'snapshot' || e.part === 'stats')) {
+        state.accessMissing = [e.part === 'snapshot' ? 'snapshot' : 'personalstats'];
+      } else {
+        state.runMsg = failureText(e, op);
+      }
+      if (committed) {
+        state.stoppedAt = { done: checked, total: total };
+        state.runMsg = state.runMsg ? state.runMsg + ' ' + stopNote(checked, total) : stopNote(checked, total);
+      }
+    } finally {
+      endOp(op);
+      render();
+    }
+  }
+
+  /* ================================================================
+     What is on screen
+     ================================================================ */
+
+  function computeView() {
+    var s = state.settings;
+    var base = state.pool !== null ? state.pool : state.savedRows;
+    var filtered = applyFilters(base, s);
+    var top = topRows(filtered.rows, s.detailCount).map(function (r) { return r.id; });
+    var shown = applyStreak(filtered.rows, state.statsById, s.minStreak);
+    var funnel = null;
+    var funnelSaved = null;
+    if (state.pool !== null && state.counts) {
+      funnel = {
+        active: state.counts.active, withoutFaction: filtered.funnel.withoutFaction, donators: filtered.funnel.donators,
+        inLevel: filtered.funnel.inLevel, notFed: filtered.funnel.notFed, hours: filtered.funnel.hours, afterStreak: shown.length
+      };
+      funnelSaved = {
+        active: funnel.active, withoutFaction: funnel.withoutFaction, donators: funnel.donators, inLevel: funnel.inLevel,
+        notFed: funnel.notFed, hours: funnel.hours, afterStreak: funnel.afterStreak,
+        unreadToday: state.counts.unreadToday, unreadPrev: state.counts.unreadPrev, prevRows: state.counts.prevRows
+      };
+    }
+    return { baseRows: filtered.rows, rows: shown, topIds: top, funnel: funnel, funnelSaved: funnelSaved };
+  }
+
+  function sameSettings(a, b) {
+    return !!a && !!b && Object.keys(DEFAULT_SETTINGS).every(function (k) { return a[k] === b[k]; });
+  }
+
+  function widerThan(s, saved) {
+    return s.levelMin < saved.levelMin || s.levelMax > saved.levelMax || (!s.donatorOnly && saved.donatorOnly) ||
+      s.minHours < saved.minHours;
+  }
+
+  function showText(id, text) {
+    var box = $(id);
+    box.textContent = text || '';
+    box.hidden = !text;
+  }
+
+  function renderKeys() {
+    var leader = lsGet(KEY_STORE);
+    var rf = lsGet(RF_KEY_STORE);
+    $('leaderKeyIn').hidden = !!leader;
+    $('leaderKeySaved').hidden = !leader;
+    $('leaderKeyText').textContent = rf
+      ? 'Saved in this browser and shared with the other Leader Tools pages. This page uses your Recruit Finder key instead.'
+      : 'Saved in this browser and shared with the other Leader Tools pages.';
+    $('rfKeyIn').hidden = !!rf;
+    $('rfKeySaved').hidden = !rf;
+    $('rfKeyHelp').hidden = !!rf;
+    $('rfKeyLinkRow').hidden = !!rf;
+    // Forget and Remove stay usable during a search: they cancel it.
+    ['signIn', 'saveRfKey'].forEach(function (id) { $(id).disabled = state.busy; });
+    showText('keyWork', state.keyWork);
+    showText('keyMsg', state.keyMsg);
+    var access = $('accessMsg');
+    access.hidden = !state.accessMissing;
+    $('accessText').textContent = state.accessMissing ? missingText(state.accessMissing) : '';
+  }
+
+  function renderSettingsInputs() {
+    var s = state.settings;
+    $('levelMin').value = String(s.levelMin);
+    $('levelMax').value = String(s.levelMax);
+    $('minHours').value = Number.isInteger(s.minHours) ? s.minHours.toFixed(1) : String(s.minHours);
+    $('minStreak').value = String(s.minStreak);
+    $('detailCount').value = String(s.detailCount);
+    $('donatorOnly').checked = s.donatorOnly;
+  }
+
+  function renderStatus() {
+    showText('progress', state.progress);
+    showText('runMsg', state.runMsg);
+    showText('doneMsg', state.doneMsg);
+    showText('settingsMsg', state.settingsMsg);
+    var hasKey = !!activeKey().value;
+    var find = $('findBtn');
+    find.disabled = state.busy || !hasKey;
+    find.textContent = state.busy && state.progress ? 'Searching…' : 'Find recruits';
+    ['levelMin', 'levelMax', 'minHours', 'minStreak', 'detailCount', 'donatorOnly'].forEach(function (id) {
+      $(id).disabled = state.busy;
+    });
+
+    var asOf = $('asOf');
+    asOf.textContent = '';
+    if (state.fetchedAt === null) {
+      asOf.textContent = hasKey ? 'No search yet.' : '';
+    } else {
+      if (nowSec() - state.fetchedAt > STALE_AFTER_SECONDS) {
+        var stale = document.createElement('span');
+        stale.className = 'tag';
+        stale.textContent = 'STALE';
+        stale.title = 'Older than 24 hours';
+        asOf.appendChild(stale);
+      }
+      asOf.appendChild(document.createTextNode('Data as of ' + tctMinutes(state.fetchedAt) + ' TCT'));
+    }
+  }
+
+  function renderFunnel(view) {
+    var box = $('funnel');
+    var notes = $('notes');
+    notes.textContent = '';
+    function note(text, kind) {
+      var p = document.createElement('p');
+      p.className = kind ? 'msg ' + kind : 'note';
+      p.textContent = text;
+      notes.appendChild(p);
+    }
+    var counts = null;
+    var settings = state.settings;
+    if (view.funnel) {
+      counts = view.funnel;
+    } else if (state.counts && state.searchSettings) {
+      counts = state.counts;
+      settings = state.searchSettings;
+    }
+    box.hidden = !counts;
+    box.textContent = counts ? funnelText(counts, settings) : '';
+    if (!state.counts) return;
+    var c = state.counts;
+    if (c.unreadToday > 0) {
+      note('Today\'s snapshot: ' + fmtInt(c.unreadToday) + ' ' + plural(c.unreadToday, 'row', 'rows') +
+        ' could not be read.', 'warn');
+    }
+    if (c.unreadPrev > 0) {
+      note('Snapshot from 7 days ago: ' + fmtInt(c.unreadPrev) + ' ' + plural(c.unreadPrev, 'row', 'rows') +
+        ' could not be read.', 'warn');
+    }
+    if (state.pool === null && state.searchSettings && !sameSettings(state.settings, state.searchSettings)) {
+      note('These counts are from the saved search. Changed filters are applied to the saved list only.' +
+        (widerThan(state.settings, state.searchSettings) ? ' Press Find recruits to include players outside it.' : ''), 'warn');
+    }
+    if (state.unsaved) note('Could not save the list in this browser; it is kept until you close the page.', 'warn');
+  }
+
+  var COLUMNS = [
+    { key: 'name', label: 'Name', text: true },
+    { key: 'level', label: 'Level' },
+    { key: 'donator', label: 'Donator', title: 'As reported in Torn\'s daily player snapshot' },
+    { key: 'age', label: 'Account age (days)' },
+    { key: 'hours', label: 'Hours/day (7 d)', title: 'Time played between the two snapshots, divided by 7' },
+    { key: 'streakNow', label: 'Streak now', stat: true },
+    { key: 'streakBest', label: 'Streak best', stat: true },
+    { key: 'xanax', label: 'Xanax', stat: true },
+    { key: 'refills', label: 'Energy refills', stat: true },
+    { key: 'attacksWon', label: 'Attacks won', stat: true },
+    { key: 'donatorDays', label: 'Donator days', stat: true },
+    { key: 'rwWins', label: 'RW wins', stat: true }
+  ];
+
+  var HOURS_WHY = {
+    missing: 'Not in the snapshot from 7 days ago, so daily play time cannot be measured.',
+    nodata: 'Torn\'s snapshot gave no time played for this player.',
+    negative: 'Torn\'s time played went down between the snapshots, so it cannot be measured.'
+  };
+
+  function dashReason(col, row) {
+    if (col.key === 'hours') return HOURS_WHY[row.hoursWhy] || '';
+    if (col.key === 'age') return 'Torn\'s snapshot gave no sign-up date.';
+    if (!col.stat) return '';
+    var entry = state.statsById.get(row.id);
+    if (entry) return 'Torn did not return this number.';
+    var idx = state.checkedIds ? state.checkedIds.indexOf(row.id) : -1;
+    if (idx !== -1 && state.busy) return 'Not checked yet.';
+    if (idx !== -1 && state.stoppedAt) return 'Not checked: the search stopped before this player.';
+    return 'Not checked in detail. Press Find recruits to check the top players again.';
+  }
+
+  function sortedRows(view) {
+    return sortRows(view.rows, state.sortKey, state.sortDir, state.statsById, nowSec());
+  }
+
+  function fillCell(td, col, row, entry, nowS) {
+    td.textContent = '';
+    td.removeAttribute('title');
+    if (col.text) {
+      td.className = 'name';
+      var link = document.createElement('a');
+      link.href = profileUrl(row.id);
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = row.name;
+      link.title = row.name + ' [' + row.id + ']';
+      td.appendChild(link);
+      return;
+    }
+    var v = cellValue(row, col.key, entry, nowS);
+    td.className = 'num' + (v === null ? ' none' : '');
+    if (v === null) {
+      td.textContent = '—';
+      var why = dashReason(col, row);
+      if (why) td.title = why;
+    } else if (col.key === 'donator') {
+      td.textContent = v ? 'Yes' : 'No';
+    } else if (col.key === 'hours') {
+      td.textContent = fmtHours(v);
+    } else {
+      td.textContent = fmtInt(v);
+    }
+  }
+
+  function buildRow(row, nowS) {
+    var tr = document.createElement('tr');
+    tr.setAttribute('data-id', String(row.id));
+    var entry = state.statsById.get(row.id);
+    COLUMNS.forEach(function (col) {
+      var td = document.createElement('td');
+      td.setAttribute('data-col', col.key);
+      fillCell(td, col, row, entry, nowS);
+      tr.appendChild(td);
+    });
+    return tr;
+  }
+
+  // While players are checked one by one, only that player's row changes; the table is not rebuilt.
+  function updateRow(id) {
+    var tr = $('tbody').querySelector('tr[data-id="' + id + '"]');
+    if (!tr) return;
+    var row = null;
+    var base = state.pool !== null ? state.pool : state.savedRows;
+    for (var i = 0; i < base.length; i += 1) { if (base[i].id === id) { row = base[i]; break; } }
+    if (!row) return;
+    var entry = state.statsById.get(id);
+    var nowS = nowSec();
+    COLUMNS.forEach(function (col, i) { if (col.stat) fillCell(tr.children[i], col, row, entry, nowS); });
+  }
+
+  function renderResults() {
+    var view = computeView();
+    var nowS = nowSec();
+    var head = $('headRow');
+    head.textContent = '';
+    COLUMNS.forEach(function (col) {
+      var th = document.createElement('th');
+      if (col.text) th.className = 'name';
+      th.setAttribute('data-col', col.key);
+      th.setAttribute('aria-sort', state.sortKey === col.key ? (state.sortDir === 1 ? 'ascending' : 'descending') : 'none');
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = col.label;
+      if (col.title) b.title = col.title;
+      b.setAttribute('data-sort', col.key);
+      th.appendChild(b);
+      head.appendChild(th);
+    });
+
+    var body = $('tbody');
+    var rows = sortedRows(view);
+    var shown = rows.slice(0, state.visibleRows);
+    var fragment = document.createDocumentFragment();
+    shown.forEach(function (row) { fragment.appendChild(buildRow(row, nowS)); });
+    body.textContent = '';
+    body.appendChild(fragment);
+    var left = rows.length - shown.length;
+    $('moreRow').hidden = left <= 0;
+    $('moreText').textContent = left > 0 ? 'Showing ' + fmtInt(shown.length) + ' of ' + fmtInt(rows.length) +
+      ' players. The order and Copy list cover all of them.' : '';
+    $('moreBtn').textContent = 'Show ' + fmtInt(Math.min(TABLE_PAGE_ROWS, Math.max(left, 0))) + ' more';
+
+    var hasList = state.pool !== null || state.fetchedAt !== null;
+    $('tableScroll').hidden = !hasList || rows.length === 0;
+    var empty = $('tableEmpty');
+    empty.hidden = hasList && rows.length > 0;
+    if (!hasList) {
+      empty.textContent = state.runFailed ? 'No list. The search stopped; see the message above.'
+        : activeKey().value ? 'Press Find recruits.' : 'Sign in and press Find recruits.';
+    } else if (rows.length === 0) {
+      empty.textContent = 'No players match these filters.';
+    }
+    $('copyBtn').disabled = rows.length === 0;
+    renderFunnel(view);
+  }
+
+  function render() {
+    renderKeys();
+    renderStatus();
+    renderResults();
+  }
+
+  function toast(text) {
+    var box = $('toast');
+    box.textContent = text;
+    box.hidden = false;
+    if (state.toastTimer) clearTimeout(state.toastTimer);
+    state.toastTimer = setTimeout(function () { box.hidden = true; state.toastTimer = null; }, 6000);
+  }
+
+  /* ================================================================
+     Wiring
+     ================================================================ */
+
+  $('headRow').addEventListener('click', function (event) {
+    var b = event.target.closest ? event.target.closest('button[data-sort]') : null;
+    if (!b) return;
+    var key = b.getAttribute('data-sort');
+    if (state.sortKey === key) state.sortDir = -state.sortDir;
+    else { state.sortKey = key; state.sortDir = key === 'name' ? 1 : -1; }
+    renderResults();
+  });
+
+  function onSettingChange(name) {
+    var r = readSetting(name, $(name).value);
+    if (!r.ok) {
+      state.settingsMsg = r.error;
+      renderSettingsInputs();
+      renderStatus();
+      return;
+    }
+    var next = copySettings(state.settings);
+    next[name] = r.value;
+    if (next.levelMax < next.levelMin) {
+      state.settingsMsg = 'Level max cannot be below Level min.';
+      renderSettingsInputs();
+      renderStatus();
+      return;
+    }
+    state.settingsMsg = '';
+    applySettings(next);
+  }
+
+  // New filters are worked out on the data in hand, without a call. With the full search in memory
+  // the saved list is rebuilt from it, so the saved filters always describe the saved rows.
+  function applySettings(next) {
+    state.settings = next;
+    saveSettings();
+    if (state.pool !== null && state.complete) {
+      state.searchSettings = copySettings(next);
+      saveCache(computeView());
+    }
+    renderSettingsInputs();
+    render();
+  }
+
+  ['levelMin', 'levelMax', 'minHours', 'minStreak', 'detailCount'].forEach(function (name) {
+    $(name).addEventListener('change', function () { onSettingChange(name); });
+  });
+  $('donatorOnly').addEventListener('change', function () {
+    var next = copySettings(state.settings);
+    next.donatorOnly = $('donatorOnly').checked;
+    state.settingsMsg = '';
+    applySettings(next);
+  });
+
+  $('moreBtn').addEventListener('click', function () {
+    state.visibleRows += TABLE_PAGE_ROWS;
+    renderResults();
+  });
+
+  $('findBtn').addEventListener('click', function () { void findRecruits(); });
+  $('signIn').addEventListener('click', function () { void saveKey('leader'); });
+  $('leaderKey').addEventListener('keydown', function (event) { if (event.key === 'Enter') void saveKey('leader'); });
+  $('saveRfKey').addEventListener('click', function () { void saveKey('recruit'); });
+  $('rfKey').addEventListener('keydown', function (event) { if (event.key === 'Enter') void saveKey('recruit'); });
+  $('forgetLeaderKey').addEventListener('click', function () { forget('leader'); });
+  $('removeRfKey').addEventListener('click', function () { forget('recruit'); });
+  $('toggleLeaderKey').addEventListener('click', function () {
+    var input = $('leaderKey');
+    var showing = input.type === 'text';
+    input.type = showing ? 'password' : 'text';
+    $('toggleLeaderKey').textContent = showing ? 'Show' : 'Hide';
+    $('toggleLeaderKey').setAttribute('aria-pressed', String(!showing));
+  });
+
+  $('copyBtn').addEventListener('click', function () {
+    var rows = sortedRows(computeView());
+    if (rows.length === 0) return;
+    var text = copyText(rows);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        toast('Copied ' + rows.length + ' ' + plural(rows.length, 'player', 'players') + '.');
+      }, function () { toast('Could not copy. Select the table and copy by hand.'); });
+    } else {
+      toast('Clipboard unavailable in this browser.');
+    }
+  });
+
+  // Leaving the page ends everything: the queue is aborted and no timer is left running.
+  window.addEventListener('pagehide', function () {
+    var wasSearching = state.busy && !state.keyWork;
+    cancelOp(wasSearching ? 'The search was stopped when you left the page.' : '');
+    if (state.toastTimer) { clearTimeout(state.toastTimer); state.toastTimer = null; }
+    yieldQueue.length = 0;
+  });
+  window.addEventListener('pageshow', function (event) {
+    if (event.persisted) render();
+  });
+
+  /* ================================================================
+     Start
+     ================================================================ */
+
+  var cache = loadCache();
+  state.settings = cleanSettings(readJson(SETTINGS_STORE) || (cache ? cache.settings : null));
+  if (cache) {
+    state.savedRows = cache.rows;
+    state.statsById = cache.stats;
+    state.searchSettings = cache.settings;
+    state.counts = cache.funnel;
+    state.checkedIds = cache.checked;
+    state.fetchedAt = cache.fetchedAt;
+    state.snapshotTs = cache.snapshotTs;
+    state.prevTs = cache.prevTs;
+    state.complete = true;
+  }
+  renderSettingsInputs();
+  render();
+})();
+</script>
+</body>
+</html>
