@@ -246,7 +246,7 @@
   .table-scroll { overflow-x: auto; max-width: 100%; border: 1px solid var(--line); border-radius: 3px; }
   /* Fixed layout: the widths come from the heading row alone, so a long list is laid out in one pass
      instead of measuring every cell again whenever anything on the page changes. */
-  table { border-collapse: collapse; width: 100%; min-width: 1250px; table-layout: fixed; }
+  table { border-collapse: collapse; width: 100%; min-width: 1290px; table-layout: fixed; }
   th {
     font-family: var(--display);
     font-weight: 600;
@@ -261,7 +261,7 @@
     vertical-align: bottom;
   }
   th.name { width: 190px; position: sticky; left: 0; z-index: 1; }
-  th.contacted { width: 160px; padding: 8px 10px; text-align: left; }
+  th.status { width: 200px; padding: 8px 10px; text-align: left; }
   th button {
     font: inherit; color: inherit; background: none; border: 0;
     padding: 8px 10px; width: 100%; text-align: right; cursor: pointer; line-height: 1.25;
@@ -277,10 +277,12 @@
   td.name { font-weight: 500; position: sticky; left: 0; background: var(--surface); max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
   td.name a { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--faint); }
   td.name a:hover { color: var(--accent); border-bottom-color: var(--accent); }
-  /* A contacted player (shown only when "Show contacted" is on) is toned down; the Undo cell stays clear. */
-  tr.is-contacted td { color: var(--faint); }
+  /* A contacted, joined or found-in-a-faction player (shown only when the matching box is on) is toned down;
+     the button cell stays clear. */
+  tr.is-contacted td, tr.is-joined td, tr.is-faction td { color: var(--faint); }
   td.contact { white-space: normal; }
   td.contact .cdate { display: block; margin-bottom: 4px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  td.contact .mini + .mini { margin-left: 6px; }
 
   .empty { padding: 26px 12px; text-align: center; color: var(--faint); margin: 0; }
 
@@ -361,11 +363,11 @@
         <p class="note grow">Saved. This page uses it instead of the Leader Tools key.</p>
         <button type="button" class="mini link" id="removeRfKey">Remove key</button>
       </div>
-      <p class="note" id="rfKeyHelp">A separate Custom Key with only user &rarr; snapshot and personalstats.
-        The button opens Torn's key form with those boxes ticked.</p>
+      <p class="note" id="rfKeyHelp">A separate Custom Key with only user &rarr; snapshot, personalstats and profile
+        (profile is optional). The button opens Torn's key form with those boxes ticked.</p>
       <div class="row" id="rfKeyLinkRow">
         <a class="mini" id="rfKeyLink" target="_blank" rel="noopener noreferrer"
-           href="https://www.torn.com/preferences.php#tab=api?step=addNewKey&amp;title=KSRecruitFinder&amp;user=snapshot,personalstats">Create a key for Recruit Finder</a>
+           href="https://www.torn.com/preferences.php#tab=api?step=addNewKey&amp;title=KSRecruitFinder&amp;user=snapshot,personalstats,profile">Create a key for Recruit Finder</a>
       </div>
     </div>
 
@@ -374,7 +376,7 @@
     <div class="msg err" id="accessMsg" role="alert" hidden>
       <span id="accessText"></span>
       <a class="mini" id="accessLink" target="_blank" rel="noopener noreferrer"
-         href="https://www.torn.com/preferences.php#tab=api?step=addNewKey&amp;title=KSRecruitFinder&amp;user=snapshot,personalstats">Create a key for Recruit Finder</a>
+         href="https://www.torn.com/preferences.php#tab=api?step=addNewKey&amp;title=KSRecruitFinder&amp;user=snapshot,personalstats,profile">Create a key for Recruit Finder</a>
     </div>
 
     <details id="disclosure">
@@ -384,8 +386,12 @@
         <dd>Find active players without a faction for recruitment. It reads only when you press Sign in,
           Save key or Find recruits. Nothing runs in the background.</dd>
         <dt>Calls</dt>
-        <dd>api.torn.com only: key/info, user/snapshot twice (today and 7 days ago), and
-          user/{id}/personalstats for up to the number of players you choose to check in detail.
+        <dd>api.torn.com only: key/info, user/snapshot twice (today and 7 days ago), and for up to the
+          number of players you choose to check in detail (and at most 20 more, when some turn out to be in a
+          faction now) one user call that reads the player's personalstats and profile (the faction) together.
+          If Torn does not answer both in that call (answers about another player, or refuses the call with an error
+          that is not about your key or a busy Torn, on the first player), the page uses two calls per player instead: user/{id}/profile and user/{id}/personalstats; the first player can then cost up to
+          three calls. Without profile on your key, only personalstats is read.
           At most 50 calls a minute, one at a time. Every call is tagged <code>KSRecruitFinder</code> in
           your own API log. The key goes in a request header, never in a web address.</dd>
         <dt>Storage</dt>
@@ -393,12 +399,14 @@
           shared with the other Leader Tools pages, or <code>ks-recruit-finder-key</code>). The result list
           and your filters are kept under <code>ks-recruit-finder-v1</code> until the next search. Torn's
           player snapshot itself is never saved. The players you mark as contacted are kept under
-          <code>ks-recruit-finder-contacted-v1</code> until you undo them.</dd>
+          <code>ks-recruit-finder-contacted-v1</code>, and the players you mark as joined a faction under
+          <code>ks-recruit-finder-joined-v1</code>, until you undo them.</dd>
         <dt>Sharing</dt>
         <dd>Nobody. There is no server and no account. The key is not in the saved list or the copied text.</dd>
         <dt>Key access</dt>
-        <dd>Custom: user &rarr; <strong>snapshot</strong>, <strong>personalstats</strong>. The key must
-          belong to a current member of faction 48039.</dd>
+        <dd>Custom: user &rarr; <strong>snapshot</strong>, <strong>personalstats</strong>,
+          <strong>profile</strong> (profile is optional: without it, players who joined a faction since Torn's
+          snapshot are not found automatically). The key must belong to a current member of faction 48039.</dd>
         <dt>Writes</dt>
         <dd>None. This page only reads. It never opens a Torn page, clicks or sends anything in Torn;
           profile links open only when you click them.</dd>
@@ -429,7 +437,7 @@
       <div class="field">
         <label class="lbl" for="detailCount">How many to check in detail</label>
         <input type="text" id="detailCount" inputmode="numeric" autocomplete="off">
-        <span class="note">10 to 100. One call each.</span>
+        <span class="note">10 to 100. Usually one call each; up to 20 more players when some are in a faction now.</span>
       </div>
       <div class="field">
         <span class="lbl">Donator</span>
@@ -438,6 +446,10 @@
       <div class="field">
         <span class="lbl">Contacted</span>
         <label class="check" title="Players you marked as contacted are hidden unless this is on"><input type="checkbox" id="showContacted"> Show contacted</label>
+      </div>
+      <div class="field">
+        <span class="lbl">Joined</span>
+        <label class="check" title="Players you marked as joined a faction, and players found in a faction now, are hidden unless this is on"><input type="checkbox" id="showJoined"> Show joined</label>
       </div>
     </div>
     <p class="msg err" id="settingsMsg" role="alert" hidden></p>
@@ -501,7 +513,8 @@
         <dd>Whole days since the player signed up.</dd>
         <dt>Streak to RW wins</dt>
         <dd>From Torn's personal stats, read only for the players with the most hours per day, up to the
-          number you choose to check in detail. The rest show a dash.</dd>
+          number you choose to check in detail (and up to 20 more when some of them are in a faction now). The
+          rest show a dash.</dd>
         <dt>Dash</dt>
         <dd>Torn did not give the number, or it was not read. A dash is never a zero; hover it for the
           reason.</dd>
@@ -509,6 +522,16 @@
         <dd>A mark you set yourself on a player you have sent a recruitment letter. It is saved only in this
           browser and is not shared with other leaders. Marked players are hidden, left out of Copy list and
           not checked in detail; turn on Show contacted to see them toned down, with the date and Undo.</dd>
+        <dt>Joined</dt>
+        <dd>The Joined button marks a player who has joined a faction since Torn's daily snapshot. It is saved
+          only in this browser, like Contacted. Such players are hidden, left out of Copy list and not checked in
+          detail; turn on Show joined to see them toned down, with the date and Undo. Marking a contacted player
+          as joined moves them from Contacted to Joined.</dd>
+        <dt>In a faction now</dt>
+        <dd>When a player is checked in detail, Torn's profile shows their faction. A player who is in a faction
+          now is hidden in that search (turn on Show joined to see them), and the next player takes their place in
+          the check, up to 20 more. They are not added to the Joined list: this list keeps them hidden, and a new
+          search checks them again.</dd>
       </dl>
     </details>
   </section>
@@ -540,7 +563,11 @@
   var SETTINGS_STORE = NS + ':settings';
   // The players you marked as contacted. Its own namespace: no search, Forget key or Remove key touches it.
   var CONTACTED_STORE = 'ks-recruit-finder-contacted-v1';
+  // The players you marked as joined a faction since Torn's snapshot. Same rules, its own namespace.
+  var JOINED_STORE = 'ks-recruit-finder-joined-v1';
   var MAX_ADD_IDS = 200;
+  // The detail check looks at this many players more than you asked for when some are in a faction now.
+  var MAX_EXTRA_PLAYERS = 20;
   var COMMENT = 'KSRecruitFinder';
   var API = 'https://api.torn.com/v2';
 
@@ -565,13 +592,18 @@
   var DENIED_TEXT = 'This key does not belong to a current member of faction 48039.';
   var SNAPSHOT_BLOCKED_TEXT = 'Your browser could not read Torn\'s player snapshot (blocked or unreachable).';
   var REMOVED_TEXT = ' The key has been removed from this browser.';
+  var NO_PROFILE_TEXT = 'Your key is missing user → profile, so players who joined a faction since Torn\'s snapshot are not found automatically.';
+  var MODE_TEXT = {
+    one: 'Checked faction and stats in one call per player.',
+    two: 'Checked faction and stats in two calls per player.'
+  };
 
   /* ================================================================
      Pure part: no page, no storage, no network. The tests run this block on its own.
      ================================================================ */
 
   // ---- pure: begin ----
-  var DEFAULT_SETTINGS = { levelMin: 15, levelMax: 50, donatorOnly: true, minHours: 1, minStreak: 0, detailCount: 40, showContacted: false };
+  var DEFAULT_SETTINGS = { levelMin: 15, levelMax: 50, donatorOnly: true, minHours: 1, minStreak: 0, detailCount: 40, showContacted: false, showJoined: false };
   var TODAY_COLUMNS = ['id', 'name', 'signed_up', 'level', 'donator', 'faction', 'fed', 'time_played'];
   var PREV_COLUMNS = ['id', 'time_played'];
   // A quoted field may run over a line break; a record is never allowed to swallow more lines than this.
@@ -842,8 +874,9 @@
   function fmtInt(n) { return Math.round(n).toLocaleString('en-US'); }
   function fmtHours(v) { return (Math.round(v * 10) / 10).toFixed(1); }
 
-  // contactedN: players of the list that are marked as contacted; they are counted apart, last.
-  function funnelText(c, s, contactedN, contactedShown) {
+  // contactedN: players of the list that are marked as contacted; joinedN: marked as joined a faction;
+  // factionN: found in a faction now by the detail check. They are counted apart, last, each player once.
+  function funnelText(c, s, contactedN, contactedShown, joinedN, joinedShown, factionN) {
     var parts = [fmtInt(c.active) + ' active players', fmtInt(c.withoutFaction) + ' without a faction'];
     if (s.donatorOnly) parts.push(fmtInt(c.donators) + (c.donators === 1 ? ' donator' : ' donators'));
     parts.push(fmtInt(c.inLevel) + ' in level range');
@@ -851,6 +884,8 @@
     if (s.minHours > 0) parts.push(fmtInt(c.hours) + ' at ' + String(s.minHours) + ' h/day or more');
     if (s.minStreak > 0) parts.push(fmtInt(c.afterStreak) + ' left after the streak filter');
     if (contactedN > 0) parts.push(fmtInt(contactedN) + ' already contacted (' + (contactedShown ? 'shown' : 'hidden') + ')');
+    if (joinedN > 0) parts.push(fmtInt(joinedN) + ' joined a faction (' + (joinedShown ? 'shown' : 'hidden') + ')');
+    if (factionN > 0) parts.push(fmtInt(factionN) + ' found in a faction now (' + (joinedShown ? 'shown' : 'hidden') + ')');
     return parts.join(' · ');
   }
 
@@ -903,6 +938,33 @@
     return JSON.stringify({ schema: 1, players: o });
   }
 
+  // Does the answer hold this part (profile, personalstats) as an object?
+  function hasPart(payload, name) {
+    var p = payload && typeof payload === 'object' ? payload[name] : null;
+    return !!p && typeof p === 'object' && !Array.isArray(p);
+  }
+
+  // A profile answer about this very player: it holds a profile whose id is the one asked for.
+  function ownProfile(payload, id) {
+    return hasPart(payload, 'profile') && payload.profile.id === id;
+  }
+
+  // An answer with personal stats in the shape this page reads: at least one of the numbers it shows can be read.
+  function hasStats(payload) {
+    if (!hasPart(payload, 'personalstats')) return false;
+    var s = parseStats(payload);
+    return STAT_KEYS.some(function (k) { return s[k] !== null; });
+  }
+
+  // The faction in a profile answer: 'in' (faction_id above 0), 'none' (0 or null) or 'unknown' (anything else,
+  // including a missing profile). Unknown is never read as "no faction" or "in a faction" by guesswork.
+  function factionState(payload) {
+    if (!hasPart(payload, 'profile')) return 'unknown';
+    var f = payload.profile.faction_id;
+    if (f === null || f === 0) return 'none';
+    return Number.isSafeInteger(f) && f > 0 ? 'in' : 'unknown';
+  }
+
   // Each setting: its rule, and the text shown when a typed value breaks it.
   var SETTING_RULES = {
     levelMin: { re: /^[0-9]{1,3}$/, min: 1, max: 100, text: 'Level min must be a whole number from 1 to 100.' },
@@ -933,6 +995,7 @@
     });
     if (typeof raw.donatorOnly === 'boolean') s.donatorOnly = raw.donatorOnly;
     if (typeof raw.showContacted === 'boolean') s.showContacted = raw.showContacted;
+    if (typeof raw.showJoined === 'boolean') s.showJoined = raw.showJoined;
     if (s.levelMax < s.levelMin) { s.levelMin = DEFAULT_SETTINGS.levelMin; s.levelMax = DEFAULT_SETTINGS.levelMax; }
     return s;
   }
@@ -1031,6 +1094,11 @@
     contacted: new Map(),   // id -> { name, at }: the players marked as contacted (valid saved entries only)
     contactedUnreadable: false, // the saved list had content that could not be read
     contactedUnsaved: false,    // the last write of the list did not fit in this browser
+    joined: new Map(),      // id -> { name, at }: the players marked as joined a faction (same rules as contacted)
+    joinedUnreadable: false,
+    joinedUnsaved: false,
+    inFactionNow: new Set(), // ids the detail check found in a faction now: hidden in this search, never saved as joined
+    detailNotes: [],        // [{ text, kind }]: what the detail check did (calls per player, profile, the cap)
     contactNotes: [],       // [{ text, kind }]: the answer to the last Add
     confirmAll: null        // { rows: [{ id, name }] } while "Mark all shown" waits for Yes
   };
@@ -1104,10 +1172,12 @@
       if (clean.stats) stats.set(clean.row.id, { stats: clean.stats, at: clean.at });
     }
     var checked = c.checked.filter(isCount);
+    // Added in 1.2; a list saved by 1.0 or 1.1 has none.
+    var inFaction = Array.isArray(c.inFaction) ? c.inFaction.filter(function (id) { return isCount(id) && id > 0; }) : [];
     return {
       fetchedAt: c.fetchedAt, snapshotTs: isCount(c.snapshotTs) ? c.snapshotTs : c.fetchedAt,
       prevTs: isCount(c.prevTs) ? c.prevTs : null, settings: cleanSettings(c.settings), funnel: funnel,
-      rows: rows, stats: stats, checked: checked
+      rows: rows, stats: stats, checked: checked, inFaction: inFaction
     };
   }
 
@@ -1117,6 +1187,7 @@
       schema: 1, factionId: FACTION_ID, fetchedAt: state.fetchedAt, snapshotTs: state.snapshotTs, prevTs: state.prevTs,
       settings: state.searchSettings, funnel: view.funnelSaved,
       checked: state.checkedIds ? state.checkedIds.slice() : [],
+      inFaction: Array.from(state.inFactionNow),
       rows: view.baseRows.map(function (r) {
         var e = state.statsById.get(r.id);
         return {
@@ -1133,47 +1204,56 @@
   function saveSettings() { lsSet(SETTINGS_STORE, JSON.stringify(state.settings)); }
 
   /* ----------------------------------------------------------------
-     The contacted list: players you have written to. Its own namespace, written only when you mark,
-     undo or add (a name filled in by a search is the one exception). Never touched by Forget key,
-     Remove key or a new search, and never removed by the page.
+     The contacted list (players you have written to) and the joined list (players you marked as joined a
+     faction): the same rules for both, each in its own namespace, written only when you mark, undo, add or
+     move a player (a name filled in by a search is the one exception, contacted only). Never touched by
+     Forget key, Remove key or a new search, and never removed by the page.
+     which: 'contacted' or 'joined'. The page holds the list in state[which], and whether it could be read
+     (state[which + 'Unreadable']) and whether the last write failed (state[which + 'Unsaved']).
      ---------------------------------------------------------------- */
 
-  function readContactedStore() {
-    var raw = lsGet(CONTACTED_STORE);
+  var LIST_KEYS = { contacted: CONTACTED_STORE, joined: JOINED_STORE };
+
+  function readListStore(which) {
+    var raw = lsGet(LIST_KEYS[which]);
     if (raw === null) return cleanContacted(undefined);
     var parsed;
     try { parsed = JSON.parse(raw); } catch (e) { return { players: new Map(), unreadable: true }; }
     return cleanContacted(parsed);
   }
 
-  function loadContacted() {
-    var r = readContactedStore();
-    state.contacted = r.players;
-    state.contactedUnreadable = r.unreadable;
+  function loadList(which) {
+    var r = readListStore(which);
+    state[which] = r.players;
+    state[which + 'Unreadable'] = r.unreadable;
   }
 
-  // Applies one change to the list. fn changes the map it is given and returns how many players it
+  // Applies one change to a list. fn changes the map it is given and returns how many players it
   // changed; nothing is written when that is 0. The list is read from the browser first, so a second
   // tab's changes are not lost, unless the last write failed (then this page holds the newer list).
   // An automatic change (a name filled in) never writes over content that could not be read.
-  function changeContacted(fn, automatic) {
+  function changeList(which, fn, automatic) {
     var base;
-    if (state.contactedUnsaved) {
-      base = new Map(state.contacted);
+    if (state[which + 'Unsaved']) {
+      base = new Map(state[which]);
     } else {
-      var r = readContactedStore();
+      var r = readListStore(which);
       base = r.players;
-      state.contactedUnreadable = r.unreadable;
+      state[which + 'Unreadable'] = r.unreadable;
     }
-    if (automatic && state.contactedUnreadable) { state.contacted = base; return 0; }
+    if (automatic && state[which + 'Unreadable']) { state[which] = base; return 0; }
     var changed = fn(base);
-    state.contacted = base;
+    state[which] = base;
     if (!changed) return 0;
-    var saved = lsSet(CONTACTED_STORE, contactedJson(base));
-    state.contactedUnsaved = !saved;
-    if (saved) state.contactedUnreadable = false;
+    var saved = lsSet(LIST_KEYS[which], contactedJson(base));
+    state[which + 'Unsaved'] = !saved;
+    if (saved) state[which + 'Unreadable'] = false;
     return changed;
   }
+
+  function loadContacted() { loadList('contacted'); }
+  function changeContacted(fn, automatic) { return changeList('contacted', fn, automatic); }
+  function changeJoined(fn) { return changeList('joined', fn, false); }
 
   /* ================================================================
      Torn: one queue, one pace
@@ -1412,6 +1492,7 @@
     if (code === 16) {
       if (e.part === 'snapshot') return 'Your key is missing user → snapshot.';
       if (e.part === 'stats') return 'Your key is missing user → personalstats.';
+      if (e.part === 'profile') return 'Your key is missing user → profile.';
       return 'Your key is missing a selection Torn needs for this call (error 16).';
     }
     if (code === 0) return e.part === 'snapshot' ? SNAPSHOT_BLOCKED_TEXT : 'Could not reach Torn.';
@@ -1424,7 +1505,8 @@
     return 'Your key is missing ' + list.map(function (n) { return 'user → ' + n; }).join(' and ') + '.';
   }
 
-  // key/info: the key must belong to faction 48039 and hold both selections.
+  // key/info: the key must belong to faction 48039 and hold snapshot and personalstats. profile is optional:
+  // without it the detail check reads personalstats only. Returns { missing, profile }.
   async function checkKey(op) {
     var payload = await tornJson('/key/info', 'key', op);
     var info = payload && typeof payload === 'object' ? payload.info : null;
@@ -1435,7 +1517,10 @@
     }
     if (user.faction_id !== FACTION_ID) throw new Denied();
     var sel = info.selections && Array.isArray(info.selections.user) ? info.selections.user : [];
-    return ['snapshot', 'personalstats'].filter(function (n) { return sel.indexOf(n) === -1; });
+    return {
+      missing: ['snapshot', 'personalstats'].filter(function (n) { return sel.indexOf(n) === -1; }),
+      profile: sel.indexOf('profile') !== -1
+    };
   }
 
   // Stops the operation for good. Returns the text for the message box.
@@ -1471,7 +1556,7 @@
     state.keyWork = 'Checking your key…';
     render();
     try {
-      var missing = await checkKey(op);
+      var missing = (await checkKey(op)).missing;
       if (!isCurrent(op)) return;
       lsSet(storeFor(source), candidate);
       state.accessMissing = missing.length ? missing : null;
@@ -1521,6 +1606,65 @@
     }, true);
   }
 
+  // The players the detail check may look at, most hours first: never a player already marked as contacted
+  // or joined, or found in a faction now. The check takes as many as it needs from the top of this list.
+  function detailCandidates() {
+    var base = state.pool !== null ? state.pool : state.savedRows;
+    var open = applyFilters(base, state.settings).rows.filter(function (r) { return rowStatus(r.id) === ''; });
+    return topRows(open, open.length).map(function (r) { return r.id; });
+  }
+
+  // One player's detail: the profile (faction) and the personal stats. det.mode is decided once per search, on
+  // the first player: 'one' (one call gives both), 'two' (Torn did not give both in one call: a call for the
+  // profile and one for the stats, for every player from then on) or 'stats' (no profile on the key).
+  async function checkPlayer(id, det, op) {
+    var profile = null;
+    var stats = null;
+    // A profile answer counts only when it is about the player asked for (its id), so an answer about someone
+    // else (the key owner, say) is never read as this player's faction.
+    async function ownProfileCall() {
+      var p = await tornJson('/user/' + id + '/profile', 'profile', op);
+      return ownProfile(p, id) ? p : null;
+    }
+    if (det.mode === 'stats') {
+      stats = await tornJson('/user/' + id + '/personalstats?cat=popular', 'stats', op);
+    } else if (det.mode === 'two') {
+      profile = await ownProfileCall();
+      stats = await tornJson('/user/' + id + '/personalstats?cat=popular', 'stats', op);
+    } else {
+      var both;
+      try {
+        both = await tornJson('/user?id=' + id + '&selections=profile,personalstats&cat=popular', 'stats', op);
+      } catch (e) {
+        // The combined call is an assumption about Torn. On the first player, an error that says nothing about the key
+        // or a busy Torn (dead key 2/10/13/18, try later 5/8/9/14/15/17/24, no answer) means Torn does not take it:
+        // two calls per player, the first player made whole. Anything else stops, as always.
+        if (det.mode !== null || !(e instanceof TornError) || e.code === 0 || TERMINAL_CODES[e.code] || RETRY_CODES[e.code]) throw e;
+        det.mode = 'two';
+        setDetailNote('mode', 'Checked faction and stats in two calls per player (Torn did not accept the combined call: error ' + e.code + ').', '');
+        profile = await ownProfileCall();
+        stats = await tornJson('/user/' + id + '/personalstats?cat=popular', 'stats', op);
+        return { profile: profile, stats: stats };
+      }
+      profile = ownProfile(both, id) ? both : null;
+      stats = hasStats(both) ? both : null;
+      if (det.mode === null) {
+        det.mode = profile && stats ? 'one' : 'two';
+        setDetailNote('mode', MODE_TEXT[det.mode], '');
+        // The first player is made whole with what the one call did not give.
+        if (!profile) profile = await ownProfileCall();
+        if (!stats) stats = await tornJson('/user/' + id + '/personalstats?cat=popular', 'stats', op);
+      }
+    }
+    return { profile: profile, stats: stats };
+  }
+
+  // One note per topic, so a repeated search never stacks them.
+  function setDetailNote(topic, text, kind) {
+    state.detailNotes = state.detailNotes.filter(function (n) { return n.topic !== topic; });
+    if (text) state.detailNotes.push({ topic: topic, text: text, kind: kind });
+  }
+
   async function findRecruits() {
     if (state.busy) return;
     var key = activeKey();
@@ -1538,8 +1682,8 @@
     render();
     try {
       setProgress(op, 'Checking your key…');
-      var missing = await checkKey(op);
-      if (missing.length) throw new MissingSelections(missing);
+      var keyInfo = await checkKey(op);
+      if (keyInfo.missing.length) throw new MissingSelections(keyInfo.missing);
 
       setProgress(op, 'Reading today\'s player snapshot…');
       var startedAt = nowSec();
@@ -1572,6 +1716,8 @@
       lsDel(NS);
       state.pool = pool;
       fillContactedNames(pool);
+      state.inFactionNow = new Set();
+      state.detailNotes = keyInfo.profile ? [] : [{ topic: 'profile', text: NO_PROFILE_TEXT, kind: 'warn' }];
       state.savedRows = [];
       state.searchSettings = copySettings(state.settings);
       state.counts = { active: today.count, unreadToday: today.bad, prevRows: prev.count, unreadPrev: prev.bad };
@@ -1584,25 +1730,61 @@
       state.unsaved = false;
       state.visibleRows = TABLE_PAGE_ROWS;
       committed = true;
-      var targets = computeView().topIds;
-      state.checkedIds = targets.slice();
-      total = targets.length;
+      // The detail check wants as many players as you chose, WITHOUT a faction. A player whose profile shows a
+      // faction now is hidden and the next one takes the place, at most MAX_EXTRA_PLAYERS more in all.
+      var wanted = state.settings.detailCount;
+      var cands = detailCandidates();
+      total = Math.min(wanted, cands.length);
+      state.checkedIds = cands.slice(0, total);
       state.liveRun = { done: 0, total: total };
+      var det = { mode: keyInfo.profile ? null : 'stats' };
+      var called = 0;
+      var found = 0;
+      var unknown = 0;
+      var capped = false;
       render();
 
-      for (var i = 0; i < targets.length; i += 1) {
-        // A player marked as contacted while the search runs gets no call.
-        if (state.contacted.has(targets[i])) {
+      for (var i = 0; i < total; i += 1) {
+        var id = cands[i];
+        // A player marked as contacted or joined while the search runs gets no call.
+        if (rowStatus(id) !== '') {
           checked = i + 1;
           state.liveRun.done = checked;
           continue;
         }
         setProgress(op, 'Checking players… ' + (i + 1) + ' of ' + total);
-        var payload = await tornJson('/user/' + targets[i] + '/personalstats?cat=popular', 'stats', op);
-        state.statsById.set(targets[i], { stats: parseStats(payload), at: nowSec() });
+        var got = await checkPlayer(id, det, op);
+        called += 1;
+        state.statsById.set(id, { stats: parseStats(got.stats), at: nowSec() });
         checked = i + 1;
         state.liveRun.done = checked;
-        updateRow(targets[i]);
+        var where = det.mode === 'stats' ? 'unknown' : factionState(got.profile);
+        if (where === 'in') {
+          state.inFactionNow.add(id);
+          found += 1;
+          if (total < cands.length) {
+            if (total < wanted + MAX_EXTRA_PLAYERS) {
+              total += 1;
+              state.checkedIds.push(cands[total - 1]);
+              state.liveRun.total = total;
+            } else {
+              capped = true;
+            }
+          }
+          renderResults();
+        } else {
+          if (where === 'unknown' && det.mode !== 'stats') unknown += 1;
+          updateRow(id);
+        }
+      }
+      if (capped) {
+        setDetailNote('cap', 'Stopped after ' + total + ' players: ' + found + ' of them were in a faction now, so only ' +
+          (called - found - unknown) + ' ' + plural(called - found - unknown, 'player', 'players') + ' without a faction ' +
+          plural(called - found - unknown, 'was', 'were') + ' checked in detail.', 'warn');
+      }
+      if (unknown > 0) {
+        setDetailNote('unknown', 'Torn did not show the faction of ' + unknown + ' ' + plural(unknown, 'player', 'players') +
+          ', so ' + plural(unknown, 'that player is', 'they are') + ' listed.', 'warn');
       }
 
       state.complete = true;
@@ -1610,14 +1792,15 @@
       saveCache(view);
       state.doneMsg = 'Done. Your browser read Torn\'s player snapshot for today (' + fmtInt(today.count + today.bad) +
         ' rows) and from 7 days ago (' + fmtInt(prev.count + prev.bad) + ' rows), and checked ' + total + ' ' +
-        plural(total, 'player', 'players') + ' in detail.';
+        plural(total, 'player', 'players') + ' in detail.' +
+        (found > 0 ? ' ' + found + ' of them ' + plural(found, 'was', 'were') + ' in a faction now.' : '');
     } catch (e) {
       if (isAbort(e) || !isCurrent(op)) return;
       state.runFailed = true;
       if (e instanceof MissingSelections) {
         state.accessMissing = e.list;
-      } else if (e instanceof TornError && e.code === 16 && (e.part === 'snapshot' || e.part === 'stats')) {
-        state.accessMissing = [e.part === 'snapshot' ? 'snapshot' : 'personalstats'];
+      } else if (e instanceof TornError && e.code === 16 && (e.part === 'snapshot' || e.part === 'stats' || e.part === 'profile')) {
+        state.accessMissing = [e.part === 'snapshot' ? 'snapshot' : e.part === 'profile' ? 'profile' : 'personalstats'];
       } else {
         state.runMsg = failureText(e, op);
       }
@@ -1635,16 +1818,31 @@
      What is on screen
      ================================================================ */
 
+  // Where a player stands: '' (open), 'joined' (marked as joined a faction), 'contacted' (marked as contacted) or
+  // 'faction' (found in a faction now by the detail check). Each player has one place, in this order.
+  function rowStatus(id) {
+    if (state.joined.has(id)) return 'joined';
+    if (state.contacted.has(id)) return 'contacted';
+    if (state.inFactionNow.has(id)) return 'faction';
+    return '';
+  }
+
   function computeView() {
     var s = state.settings;
     var base = state.pool !== null ? state.pool : state.savedRows;
     var filtered = applyFilters(base, s);
-    // The chain counts as before up to the hours step; after it the contacted players are set apart.
-    // The detail check never goes to a player already written to.
-    var open = filtered.rows.filter(function (r) { return !state.contacted.has(r.id); });
-    var top = topRows(open, s.detailCount).map(function (r) { return r.id; });
+    // The chain counts as before up to the hours step; after it the players set apart (contacted, joined, found
+    // in a faction now) are counted, each once. The detail check never goes to one of them.
     var shown = applyStreak(filtered.rows, state.statsById, s.minStreak);
-    var copyRows = shown.filter(function (r) { return !state.contacted.has(r.id); });
+    var copyRows = [];
+    var listed = [];
+    var apart = { contacted: 0, joined: 0, faction: 0 };
+    shown.forEach(function (r) {
+      var st = rowStatus(r.id);
+      if (st === '') { copyRows.push(r); listed.push(r); return; }
+      apart[st] += 1;
+      if (st === 'contacted' ? s.showContacted : s.showJoined) listed.push(r);
+    });
     var funnel = null;
     var funnelSaved = null;
     if (state.pool !== null && state.counts) {
@@ -1660,16 +1858,18 @@
     }
     return {
       baseRows: filtered.rows,
-      rows: s.showContacted ? shown : copyRows,   // what the table lists
-      copyRows: copyRows,                         // what Copy list and Mark all shown take: never a contacted player
-      contactedCount: shown.length - copyRows.length,
-      topIds: top, funnel: funnel, funnelSaved: funnelSaved
+      rows: listed,                               // what the table lists
+      copyRows: copyRows,                         // what Copy list and Mark all shown take: never a player set apart
+      apart: apart,                               // how many of the list are contacted, joined, found in a faction now
+      funnel: funnel, funnelSaved: funnelSaved
     };
   }
 
-  // Show contacted changes only what is drawn, not which players the search found.
+  // Show contacted and Show joined change only what is drawn, not which players the search found.
   function sameSettings(a, b) {
-    return !!a && !!b && Object.keys(DEFAULT_SETTINGS).every(function (k) { return k === 'showContacted' || a[k] === b[k]; });
+    return !!a && !!b && Object.keys(DEFAULT_SETTINGS).every(function (k) {
+      return k === 'showContacted' || k === 'showJoined' || a[k] === b[k];
+    });
   }
 
   function widerThan(s, saved) {
@@ -1713,6 +1913,7 @@
     $('detailCount').value = String(s.detailCount);
     $('donatorOnly').checked = s.donatorOnly;
     $('showContacted').checked = s.showContacted;
+    $('showJoined').checked = s.showJoined;
   }
 
   function renderStatus() {
@@ -1763,7 +1964,8 @@
       settings = state.searchSettings;
     }
     box.hidden = !counts;
-    box.textContent = counts ? funnelText(counts, settings, view.contactedCount, state.settings.showContacted) : '';
+    box.textContent = counts ? funnelText(counts, settings, view.apart.contacted, state.settings.showContacted,
+      view.apart.joined, state.settings.showJoined, view.apart.faction) : '';
     if (!state.counts) return;
     var c = state.counts;
     if (c.unreadToday > 0) {
@@ -1778,11 +1980,12 @@
       note('These counts are from the saved search. Changed filters are applied to the saved list only.' +
         (widerThan(state.settings, state.searchSettings) ? ' Press Find recruits to include players outside it.' : ''), 'warn');
     }
+    state.detailNotes.forEach(function (n) { note(n.text, n.kind); });
     if (state.unsaved) note('Could not save the list in this browser; it is kept until you close the page.', 'warn');
   }
 
   var COLUMNS = [
-    { key: 'contacted', label: 'Contacted', plain: true },
+    { key: 'status', label: 'Status', plain: true },
     { key: 'name', label: 'Name', text: true },
     { key: 'level', label: 'Level' },
     { key: 'donator', label: 'Donator', title: 'As reported in Torn\'s daily player snapshot' },
@@ -1809,6 +2012,7 @@
     if (!col.stat) return '';
     var entry = state.statsById.get(row.id);
     if (entry) return 'Torn did not return this number.';
+    if (state.joined.has(row.id)) return 'Not checked: marked as joined a faction.';
     if (state.contacted.has(row.id)) return 'Not checked: marked as contacted.';
     var idx = state.checkedIds ? state.checkedIds.indexOf(row.id) : -1;
     if (idx !== -1 && state.busy) return 'Not checked yet.';
@@ -1831,19 +2035,31 @@
     return b;
   }
 
-  // Not contacted: a Mark button. Contacted (only listed when Show contacted is on): the date and Undo.
+  function statusText(td, text) {
+    var span = document.createElement('span');
+    span.className = 'cdate';
+    span.textContent = text;
+    td.appendChild(span);
+  }
+
+  // Open: Mark and Joined buttons. Contacted (only listed when Show contacted is on): the date, Undo and Joined.
+  // Joined (only listed when Show joined is on): the date and Undo. Found in a faction now (Show joined): text only.
   function fillContactCell(td, row) {
     td.className = 'contact';
-    var c = state.contacted.get(row.id);
-    if (!c) {
+    var st = rowStatus(row.id);
+    if (st === 'faction') {
+      statusText(td, 'In a faction now');
+    } else if (st === 'joined') {
+      statusText(td, 'Joined a faction ' + contactedDate(state.joined.get(row.id).at));
+      td.appendChild(contactButton('unjoin', 'Undo', row, 'Undo joined a faction:'));
+    } else if (st === 'contacted') {
+      statusText(td, 'Contacted ' + contactedDate(state.contacted.get(row.id).at));
+      td.appendChild(contactButton('undo', 'Undo', row, 'Undo contacted:'));
+      td.appendChild(contactButton('joined', 'Joined', row, 'Mark as joined a faction:'));
+    } else {
       td.appendChild(contactButton('mark', 'Mark', row, 'Mark as contacted:'));
-      return;
+      td.appendChild(contactButton('joined', 'Joined', row, 'Mark as joined a faction:'));
     }
-    var date = document.createElement('span');
-    date.className = 'cdate';
-    date.textContent = 'Contacted ' + contactedDate(c.at);
-    td.appendChild(date);
-    td.appendChild(contactButton('undo', 'Undo', row, 'Undo contacted:'));
   }
 
   function fillCell(td, col, row, entry, nowS) {
@@ -1882,7 +2098,8 @@
   function buildRow(row, nowS) {
     var tr = document.createElement('tr');
     tr.setAttribute('data-id', String(row.id));
-    if (state.contacted.has(row.id)) tr.className = 'is-contacted';
+    var status = rowStatus(row.id);
+    if (status !== '') tr.className = 'is-' + status;
     var entry = state.statsById.get(row.id);
     COLUMNS.forEach(function (col) {
       var td = document.createElement('td');
@@ -1915,8 +2132,8 @@
       var th = document.createElement('th');
       th.setAttribute('data-col', col.key);
       if (col.plain) {
-        // The contacted column is not sorted: a heading, not a button.
-        th.className = 'contacted';
+        // The status column is not sorted: a heading, not a button.
+        th.className = 'status';
         th.textContent = col.label;
         head.appendChild(th);
         return;
@@ -1991,6 +2208,8 @@
     }
     if (state.contactedUnreadable) note('Some saved contacted players could not be read.', 'warn');
     if (state.contactedUnsaved) note('Could not save the contacted list in this browser.', 'warn');
+    if (state.joinedUnreadable) note('Some saved joined players could not be read.', 'warn');
+    if (state.joinedUnsaved) note('Could not save the joined list in this browser.', 'warn');
     state.contactNotes.forEach(function (n) { note(n.text, n.kind); });
   }
 
@@ -2083,6 +2302,14 @@
     render();
   });
 
+  $('showJoined').addEventListener('change', function () {
+    var next = copySettings(state.settings);
+    next.showJoined = $('showJoined').checked;
+    state.settings = next;
+    saveSettings();
+    render();
+  });
+
   function baseRowById(id) {
     var base = state.pool !== null ? state.pool : state.savedRows;
     for (var i = 0; i < base.length; i += 1) { if (base[i].id === id) return base[i]; }
@@ -2107,6 +2334,19 @@
       });
     } else if (act === 'undo') {
       changeContacted(function (m) { return m.delete(id) ? 1 : 0; });
+    } else if (act === 'joined') {
+      // The player moves to the joined list. A contacted player leaves the contacted list, but only once the
+      // joined list is saved: if it could not be, the contacted mark stays so nothing is lost on reload.
+      var jrow = baseRowById(id);
+      var jname = jrow ? jrow.name : '';
+      changeJoined(function (m) {
+        if (m.has(id)) return 0;
+        m.set(id, { name: jname, at: nowSec() });
+        return 1;
+      });
+      if (!state.joinedUnsaved) changeContacted(function (m) { return m.delete(id) ? 1 : 0; });
+    } else if (act === 'unjoin') {
+      changeJoined(function (m) { return m.delete(id) ? 1 : 0; });
     } else {
       return;
     }
@@ -2154,15 +2394,21 @@
     }
     if (r.ids.length > 0) {
       var at = nowSec();
+      // A player is never both contacted and joined: one already marked as joined a faction is not added.
+      var joinedNow = state.joinedUnsaved ? state.joined : readListStore('joined').players;
+      var addable = r.ids.filter(function (id) { return !joinedNow.has(id); });
+      var joinedSkipped = r.ids.length - addable.length;
       added = changeContacted(function (m) {
         var n = 0;
-        r.ids.forEach(function (id) { if (!m.has(id)) { m.set(id, { name: '', at: at }); n += 1; } });
+        addable.forEach(function (id) { if (!m.has(id)) { m.set(id, { name: '', at: at }); n += 1; } });
         return n;
       });
-      var already = r.ids.length - added;
+      var already = addable.length - added;
       notes.push({
         text: 'Added ' + added + ' ' + plural(added, 'player', 'players') + ' as contacted.' +
-          (already > 0 ? ' ' + already + ' ' + plural(already, 'was', 'were') + ' already marked.' : ''),
+          (already > 0 ? ' ' + already + ' ' + plural(already, 'was', 'were') + ' already marked.' : '') +
+          (joinedSkipped > 0 ? ' ' + joinedSkipped + ' ' + plural(joinedSkipped, 'was', 'were') +
+            ' already marked as joined a faction and not added.' : ''),
         kind: 'ok'
       });
     }
@@ -2213,9 +2459,9 @@
   // Another tab marked, undid or added someone: this page shows it at once, so a search or Copy list here
   // never works from an older list. A list this page could not save is newer than the saved one; it stays.
   window.addEventListener('storage', function (event) {
-    if (event.key !== null && event.key !== CONTACTED_STORE) return;
-    if (state.contactedUnsaved) return;
-    loadContacted();
+    if (event.key !== null && event.key !== CONTACTED_STORE && event.key !== JOINED_STORE) return;
+    if (!state.contactedUnsaved) loadList('contacted');
+    if (!state.joinedUnsaved) loadList('joined');
     render();
   });
 
@@ -2235,6 +2481,7 @@
      ================================================================ */
 
   loadContacted();
+  loadList('joined');
   var cache = loadCache();
   state.settings = cleanSettings(readJson(SETTINGS_STORE) || (cache ? cache.settings : null));
   if (cache) {
@@ -2243,6 +2490,7 @@
     state.searchSettings = cache.settings;
     state.counts = cache.funnel;
     state.checkedIds = cache.checked;
+    state.inFactionNow = new Set(cache.inFaction);
     state.fetchedAt = cache.fetchedAt;
     state.snapshotTs = cache.snapshotTs;
     state.prevTs = cache.prevTs;
