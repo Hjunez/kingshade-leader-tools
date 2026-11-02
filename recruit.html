@@ -187,8 +187,9 @@
   .mini.big { font-size: 14px; padding: 10px 18px; }
   .mini.link { background: none; border-color: transparent; color: var(--faint); padding: 8px 4px; }
   .mini.link:hover { color: var(--accent); }
+  .mini.tiny { font-size: 11px; padding: 5px 10px; }
   .mini[disabled] { opacity: .55; cursor: default; filter: none; }
-  .mini:focus-visible, input:focus-visible, summary:focus-visible, th button:focus-visible,
+  .mini:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible, th button:focus-visible,
   td.name a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
   .note { font-size: 13px; color: var(--faint); margin: 0; overflow-wrap: anywhere; }
@@ -206,7 +207,7 @@
     color: var(--muted);
   }
 
-  input[type="password"], input[type="text"] {
+  input[type="password"], input[type="text"], textarea {
     font-family: var(--mono);
     font-variant-numeric: tabular-nums;
     font-size: 14px;
@@ -218,6 +219,7 @@
     width: 100%;
     min-width: 0;
   }
+  textarea { resize: vertical; line-height: 1.4; }
   input[disabled] { opacity: .6; }
   .row input[type="password"] { flex: 1 1 200px; width: auto; }
 
@@ -244,7 +246,7 @@
   .table-scroll { overflow-x: auto; max-width: 100%; border: 1px solid var(--line); border-radius: 3px; }
   /* Fixed layout: the widths come from the heading row alone, so a long list is laid out in one pass
      instead of measuring every cell again whenever anything on the page changes. */
-  table { border-collapse: collapse; width: 100%; min-width: 1090px; table-layout: fixed; }
+  table { border-collapse: collapse; width: 100%; min-width: 1250px; table-layout: fixed; }
   th {
     font-family: var(--display);
     font-weight: 600;
@@ -259,6 +261,7 @@
     vertical-align: bottom;
   }
   th.name { width: 190px; position: sticky; left: 0; z-index: 1; }
+  th.contacted { width: 160px; padding: 8px 10px; text-align: left; }
   th button {
     font: inherit; color: inherit; background: none; border: 0;
     padding: 8px 10px; width: 100%; text-align: right; cursor: pointer; line-height: 1.25;
@@ -274,6 +277,10 @@
   td.name { font-weight: 500; position: sticky; left: 0; background: var(--surface); max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
   td.name a { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--faint); }
   td.name a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  /* A contacted player (shown only when "Show contacted" is on) is toned down; the Undo cell stays clear. */
+  tr.is-contacted td { color: var(--faint); }
+  td.contact { white-space: normal; }
+  td.contact .cdate { display: block; margin-bottom: 4px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
 
   .empty { padding: 26px 12px; text-align: center; color: var(--faint); margin: 0; }
 
@@ -385,7 +392,8 @@
         <dd>Your browser only. The key stays until you remove it (under <code>ks-leader-board-key</code>,
           shared with the other Leader Tools pages, or <code>ks-recruit-finder-key</code>). The result list
           and your filters are kept under <code>ks-recruit-finder-v1</code> until the next search. Torn's
-          player snapshot itself is never saved.</dd>
+          player snapshot itself is never saved. The players you mark as contacted are kept under
+          <code>ks-recruit-finder-contacted-v1</code> until you undo them.</dd>
         <dt>Sharing</dt>
         <dd>Nobody. There is no server and no account. The key is not in the saved list or the copied text.</dd>
         <dt>Key access</dt>
@@ -427,6 +435,10 @@
         <span class="lbl">Donator</span>
         <label class="check" title="As reported in Torn's daily player snapshot"><input type="checkbox" id="donatorOnly"> Donator only</label>
       </div>
+      <div class="field">
+        <span class="lbl">Contacted</span>
+        <label class="check" title="Players you marked as contacted are hidden unless this is on"><input type="checkbox" id="showContacted"> Show contacted</label>
+      </div>
     </div>
     <p class="msg err" id="settingsMsg" role="alert" hidden></p>
 
@@ -446,8 +458,23 @@
     <div class="row">
       <h2 class="grow">Players</h2>
       <button type="button" class="mini" id="copyBtn">Copy list</button>
+      <button type="button" class="mini" id="markAllBtn">Mark all shown as contacted</button>
+      <span class="row" id="markAllConfirm" hidden>
+        <span class="note" id="markAllText"></span>
+        <button type="button" class="mini primary" id="markAllYes">Yes</button>
+        <button type="button" class="mini link" id="markAllCancel">Cancel</button>
+      </span>
       <span class="note" id="toast" role="status" hidden></span>
     </div>
+    <div class="field">
+      <label class="lbl" for="addIds">Add contacted by ID</label>
+      <div class="row">
+        <textarea id="addIds" class="grow" rows="2" autocomplete="off" spellcheck="false" placeholder="Torn IDs, separated by commas, spaces or line breaks"></textarea>
+        <button type="button" class="mini" id="addBtn">Add</button>
+      </div>
+      <span class="note">Up to 200 at a time. For players you wrote to before this list existed. Nothing is sent anywhere.</span>
+    </div>
+    <div id="contactNotes" class="field"></div>
     <div class="table-scroll" id="tableScroll">
       <table id="results">
         <thead><tr id="headRow"></tr></thead>
@@ -478,6 +505,10 @@
         <dt>Dash</dt>
         <dd>Torn did not give the number, or it was not read. A dash is never a zero; hover it for the
           reason.</dd>
+        <dt>Contacted</dt>
+        <dd>A mark you set yourself on a player you have sent a recruitment letter. It is saved only in this
+          browser and is not shared with other leaders. Marked players are hidden, left out of Copy list and
+          not checked in detail; turn on Show contacted to see them toned down, with the date and Undo.</dd>
       </dl>
     </details>
   </section>
@@ -507,6 +538,9 @@
   var RF_KEY_STORE = 'ks-recruit-finder-key';
   var NS = 'ks-recruit-finder-v1';
   var SETTINGS_STORE = NS + ':settings';
+  // The players you marked as contacted. Its own namespace: no search, Forget key or Remove key touches it.
+  var CONTACTED_STORE = 'ks-recruit-finder-contacted-v1';
+  var MAX_ADD_IDS = 200;
   var COMMENT = 'KSRecruitFinder';
   var API = 'https://api.torn.com/v2';
 
@@ -537,7 +571,7 @@
      ================================================================ */
 
   // ---- pure: begin ----
-  var DEFAULT_SETTINGS = { levelMin: 15, levelMax: 50, donatorOnly: true, minHours: 1, minStreak: 0, detailCount: 40 };
+  var DEFAULT_SETTINGS = { levelMin: 15, levelMax: 50, donatorOnly: true, minHours: 1, minStreak: 0, detailCount: 40, showContacted: false };
   var TODAY_COLUMNS = ['id', 'name', 'signed_up', 'level', 'donator', 'faction', 'fed', 'time_played'];
   var PREV_COLUMNS = ['id', 'time_played'];
   // A quoted field may run over a line break; a record is never allowed to swallow more lines than this.
@@ -808,14 +842,65 @@
   function fmtInt(n) { return Math.round(n).toLocaleString('en-US'); }
   function fmtHours(v) { return (Math.round(v * 10) / 10).toFixed(1); }
 
-  function funnelText(c, s) {
+  // contactedN: players of the list that are marked as contacted; they are counted apart, last.
+  function funnelText(c, s, contactedN, contactedShown) {
     var parts = [fmtInt(c.active) + ' active players', fmtInt(c.withoutFaction) + ' without a faction'];
     if (s.donatorOnly) parts.push(fmtInt(c.donators) + (c.donators === 1 ? ' donator' : ' donators'));
     parts.push(fmtInt(c.inLevel) + ' in level range');
     if (c.notFed !== c.inLevel) parts.push(fmtInt(c.notFed) + ' not in federal jail');
     if (s.minHours > 0) parts.push(fmtInt(c.hours) + ' at ' + String(s.minHours) + ' h/day or more');
     if (s.minStreak > 0) parts.push(fmtInt(c.afterStreak) + ' left after the streak filter');
+    if (contactedN > 0) parts.push(fmtInt(contactedN) + ' already contacted (' + (contactedShown ? 'shown' : 'hidden') + ')');
     return parts.join(' · ');
+  }
+
+  // Torn IDs typed or pasted, separated by commas, spaces or line breaks. A repeated ID counts once.
+  // ids: at most max valid IDs; invalid: how many entries were not Torn IDs; over: valid IDs beyond max;
+  // rest: what was not added (the invalid entries, then the IDs beyond max), as text.
+  function parseIdList(text, max) {
+    var tokens = String(text).split(/[\s,]+/).filter(function (t) { return t !== ''; });
+    var ids = [];
+    var seen = {};
+    var rest = [];
+    var invalid = 0;
+    tokens.forEach(function (t) {
+      if (!/^[1-9][0-9]{0,14}$/.test(t)) { invalid += 1; rest.push(t); return; }
+      if (seen[t] === true) return;
+      seen[t] = true;
+      ids.push(Number(t));
+    });
+    var over = Math.max(0, ids.length - max);
+    ids.slice(max).forEach(function (id) { rest.push(String(id)); });
+    return { ids: ids.slice(0, max), invalid: invalid, over: over, rest: rest };
+  }
+
+  // The saved contacted list, as parsed JSON (undefined: nothing saved). Only entries that are whole and
+  // valid are read; anything else sets unreadable and is left out, so that player counts as not contacted.
+  function cleanContacted(raw) {
+    var out = { players: new Map(), unreadable: false };
+    if (raw === undefined) return out;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw) || raw.schema !== 1 ||
+        !raw.players || typeof raw.players !== 'object' || Array.isArray(raw.players)) {
+      out.unreadable = true;
+      return out;
+    }
+    Object.keys(raw.players).forEach(function (k) {
+      var id = wholeNumber(k);
+      var e = raw.players[k];
+      if (id === null || id === 0 || !e || typeof e !== 'object' || typeof e.name !== 'string' ||
+          !Number.isSafeInteger(e.at) || e.at < 0 || e.at > 8.64e12) {
+        out.unreadable = true;
+        return;
+      }
+      out.players.set(id, { name: e.name, at: e.at });
+    });
+    return out;
+  }
+
+  function contactedJson(players) {
+    var o = {};
+    players.forEach(function (e, id) { o[id] = { name: e.name, at: e.at }; });
+    return JSON.stringify({ schema: 1, players: o });
   }
 
   // Each setting: its rule, and the text shown when a typed value breaks it.
@@ -847,6 +932,7 @@
           (k === 'minHours' ? Math.abs(Math.round(v * 100) - v * 100) < 1e-6 : Number.isInteger(v))) s[k] = v;
     });
     if (typeof raw.donatorOnly === 'boolean') s.donatorOnly = raw.donatorOnly;
+    if (typeof raw.showContacted === 'boolean') s.showContacted = raw.showContacted;
     if (s.levelMax < s.levelMin) { s.levelMin = DEFAULT_SETTINGS.levelMin; s.levelMax = DEFAULT_SETTINGS.levelMax; }
     return s;
   }
@@ -861,6 +947,11 @@
   function perfNow() { return performance.now(); }
   function pad2(n) { return n < 10 ? '0' + n : String(n); }
   function plural(n, one, many) { return n === 1 ? one : many; }
+
+  function contactedDate(sec) {
+    var d = new Date(sec * 1000);
+    return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate());
+  }
 
   function tctMinutes(sec) {
     var d = new Date(sec * 1000);
@@ -936,7 +1027,12 @@
     settingsMsg: '',
     runFailed: false,
     liveRun: null,          // { done, total } while a search checks players into a list on screen
-    toastTimer: null
+    toastTimer: null,
+    contacted: new Map(),   // id -> { name, at }: the players marked as contacted (valid saved entries only)
+    contactedUnreadable: false, // the saved list had content that could not be read
+    contactedUnsaved: false,    // the last write of the list did not fit in this browser
+    contactNotes: [],       // [{ text, kind }]: the answer to the last Add
+    confirmAll: null        // { rows: [{ id, name }] } while "Mark all shown" waits for Yes
   };
 
   /* ================================================================
@@ -1035,6 +1131,49 @@
   }
 
   function saveSettings() { lsSet(SETTINGS_STORE, JSON.stringify(state.settings)); }
+
+  /* ----------------------------------------------------------------
+     The contacted list: players you have written to. Its own namespace, written only when you mark,
+     undo or add (a name filled in by a search is the one exception). Never touched by Forget key,
+     Remove key or a new search, and never removed by the page.
+     ---------------------------------------------------------------- */
+
+  function readContactedStore() {
+    var raw = lsGet(CONTACTED_STORE);
+    if (raw === null) return cleanContacted(undefined);
+    var parsed;
+    try { parsed = JSON.parse(raw); } catch (e) { return { players: new Map(), unreadable: true }; }
+    return cleanContacted(parsed);
+  }
+
+  function loadContacted() {
+    var r = readContactedStore();
+    state.contacted = r.players;
+    state.contactedUnreadable = r.unreadable;
+  }
+
+  // Applies one change to the list. fn changes the map it is given and returns how many players it
+  // changed; nothing is written when that is 0. The list is read from the browser first, so a second
+  // tab's changes are not lost, unless the last write failed (then this page holds the newer list).
+  // An automatic change (a name filled in) never writes over content that could not be read.
+  function changeContacted(fn, automatic) {
+    var base;
+    if (state.contactedUnsaved) {
+      base = new Map(state.contacted);
+    } else {
+      var r = readContactedStore();
+      base = r.players;
+      state.contactedUnreadable = r.unreadable;
+    }
+    if (automatic && state.contactedUnreadable) { state.contacted = base; return 0; }
+    var changed = fn(base);
+    state.contacted = base;
+    if (!changed) return 0;
+    var saved = lsSet(CONTACTED_STORE, contactedJson(base));
+    state.contactedUnsaved = !saved;
+    if (saved) state.contactedUnreadable = false;
+    return changed;
+  }
 
   /* ================================================================
      Torn: one queue, one pace
@@ -1367,6 +1506,21 @@
     return out;
   }
 
+  // A player added by ID has no name until a search lists them.
+  function fillContactedNames(pool) {
+    var wanted = false;
+    state.contacted.forEach(function (e) { if (e.name === '') wanted = true; });
+    if (!wanted) return;
+    changeContacted(function (m) {
+      var n = 0;
+      for (var i = 0; i < pool.length; i += 1) {
+        var e = m.get(pool[i].id);
+        if (e && e.name === '') { m.set(pool[i].id, { name: pool[i].name, at: e.at }); n += 1; }
+      }
+      return n;
+    }, true);
+  }
+
   async function findRecruits() {
     if (state.busy) return;
     var key = activeKey();
@@ -1417,6 +1571,7 @@
       // saved by the previous search goes now: what is kept is only ever the latest finished search.
       lsDel(NS);
       state.pool = pool;
+      fillContactedNames(pool);
       state.savedRows = [];
       state.searchSettings = copySettings(state.settings);
       state.counts = { active: today.count, unreadToday: today.bad, prevRows: prev.count, unreadPrev: prev.bad };
@@ -1436,6 +1591,12 @@
       render();
 
       for (var i = 0; i < targets.length; i += 1) {
+        // A player marked as contacted while the search runs gets no call.
+        if (state.contacted.has(targets[i])) {
+          checked = i + 1;
+          state.liveRun.done = checked;
+          continue;
+        }
         setProgress(op, 'Checking players… ' + (i + 1) + ' of ' + total);
         var payload = await tornJson('/user/' + targets[i] + '/personalstats?cat=popular', 'stats', op);
         state.statsById.set(targets[i], { stats: parseStats(payload), at: nowSec() });
@@ -1478,8 +1639,12 @@
     var s = state.settings;
     var base = state.pool !== null ? state.pool : state.savedRows;
     var filtered = applyFilters(base, s);
-    var top = topRows(filtered.rows, s.detailCount).map(function (r) { return r.id; });
+    // The chain counts as before up to the hours step; after it the contacted players are set apart.
+    // The detail check never goes to a player already written to.
+    var open = filtered.rows.filter(function (r) { return !state.contacted.has(r.id); });
+    var top = topRows(open, s.detailCount).map(function (r) { return r.id; });
     var shown = applyStreak(filtered.rows, state.statsById, s.minStreak);
+    var copyRows = shown.filter(function (r) { return !state.contacted.has(r.id); });
     var funnel = null;
     var funnelSaved = null;
     if (state.pool !== null && state.counts) {
@@ -1493,11 +1658,18 @@
         unreadToday: state.counts.unreadToday, unreadPrev: state.counts.unreadPrev, prevRows: state.counts.prevRows
       };
     }
-    return { baseRows: filtered.rows, rows: shown, topIds: top, funnel: funnel, funnelSaved: funnelSaved };
+    return {
+      baseRows: filtered.rows,
+      rows: s.showContacted ? shown : copyRows,   // what the table lists
+      copyRows: copyRows,                         // what Copy list and Mark all shown take: never a contacted player
+      contactedCount: shown.length - copyRows.length,
+      topIds: top, funnel: funnel, funnelSaved: funnelSaved
+    };
   }
 
+  // Show contacted changes only what is drawn, not which players the search found.
   function sameSettings(a, b) {
-    return !!a && !!b && Object.keys(DEFAULT_SETTINGS).every(function (k) { return a[k] === b[k]; });
+    return !!a && !!b && Object.keys(DEFAULT_SETTINGS).every(function (k) { return k === 'showContacted' || a[k] === b[k]; });
   }
 
   function widerThan(s, saved) {
@@ -1540,6 +1712,7 @@
     $('minStreak').value = String(s.minStreak);
     $('detailCount').value = String(s.detailCount);
     $('donatorOnly').checked = s.donatorOnly;
+    $('showContacted').checked = s.showContacted;
   }
 
   function renderStatus() {
@@ -1590,7 +1763,7 @@
       settings = state.searchSettings;
     }
     box.hidden = !counts;
-    box.textContent = counts ? funnelText(counts, settings) : '';
+    box.textContent = counts ? funnelText(counts, settings, view.contactedCount, state.settings.showContacted) : '';
     if (!state.counts) return;
     var c = state.counts;
     if (c.unreadToday > 0) {
@@ -1609,6 +1782,7 @@
   }
 
   var COLUMNS = [
+    { key: 'contacted', label: 'Contacted', plain: true },
     { key: 'name', label: 'Name', text: true },
     { key: 'level', label: 'Level' },
     { key: 'donator', label: 'Donator', title: 'As reported in Torn\'s daily player snapshot' },
@@ -1635,6 +1809,7 @@
     if (!col.stat) return '';
     var entry = state.statsById.get(row.id);
     if (entry) return 'Torn did not return this number.';
+    if (state.contacted.has(row.id)) return 'Not checked: marked as contacted.';
     var idx = state.checkedIds ? state.checkedIds.indexOf(row.id) : -1;
     if (idx !== -1 && state.busy) return 'Not checked yet.';
     if (idx !== -1 && state.stoppedAt) return 'Not checked: the search stopped before this player.';
@@ -1645,9 +1820,39 @@
     return sortRows(view.rows, state.sortKey, state.sortDir, state.statsById, nowSec());
   }
 
+  function contactButton(act, label, row, aria) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'mini tiny';
+    b.textContent = label;
+    b.setAttribute('data-act', act);
+    b.setAttribute('data-id', String(row.id));
+    b.setAttribute('aria-label', aria + ' ' + row.name + ' [' + row.id + ']');
+    return b;
+  }
+
+  // Not contacted: a Mark button. Contacted (only listed when Show contacted is on): the date and Undo.
+  function fillContactCell(td, row) {
+    td.className = 'contact';
+    var c = state.contacted.get(row.id);
+    if (!c) {
+      td.appendChild(contactButton('mark', 'Mark', row, 'Mark as contacted:'));
+      return;
+    }
+    var date = document.createElement('span');
+    date.className = 'cdate';
+    date.textContent = 'Contacted ' + contactedDate(c.at);
+    td.appendChild(date);
+    td.appendChild(contactButton('undo', 'Undo', row, 'Undo contacted:'));
+  }
+
   function fillCell(td, col, row, entry, nowS) {
     td.textContent = '';
     td.removeAttribute('title');
+    if (col.plain) {
+      fillContactCell(td, row);
+      return;
+    }
     if (col.text) {
       td.className = 'name';
       var link = document.createElement('a');
@@ -1677,6 +1882,7 @@
   function buildRow(row, nowS) {
     var tr = document.createElement('tr');
     tr.setAttribute('data-id', String(row.id));
+    if (state.contacted.has(row.id)) tr.className = 'is-contacted';
     var entry = state.statsById.get(row.id);
     COLUMNS.forEach(function (col) {
       var td = document.createElement('td');
@@ -1707,8 +1913,15 @@
     head.textContent = '';
     COLUMNS.forEach(function (col) {
       var th = document.createElement('th');
-      if (col.text) th.className = 'name';
       th.setAttribute('data-col', col.key);
+      if (col.plain) {
+        // The contacted column is not sorted: a heading, not a button.
+        th.className = 'contacted';
+        th.textContent = col.label;
+        head.appendChild(th);
+        return;
+      }
+      if (col.text) th.className = 'name';
       th.setAttribute('aria-sort', state.sortKey === col.key ? (state.sortDir === 1 ? 'ascending' : 'descending') : 'none');
       var b = document.createElement('button');
       b.type = 'button';
@@ -1742,8 +1955,43 @@
     } else if (rows.length === 0) {
       empty.textContent = 'No players match these filters.';
     }
-    $('copyBtn').disabled = rows.length === 0;
+    $('copyBtn').disabled = view.copyRows.length === 0;
+    renderMarkAll(view);
+    renderContactNotes();
     renderFunnel(view);
+  }
+
+  // "Mark all shown as contacted" takes exactly the players Copy list takes. If the list changes while
+  // it waits for Yes (another search, a filter, a mark), the question is dropped rather than answered
+  // for a list the user no longer sees.
+  function sameRows(a, b) {
+    if (a.length !== b.length) return false;
+    for (var i = 0; i < a.length; i += 1) { if (a[i].id !== b[i].id) return false; }
+    return true;
+  }
+
+  function renderMarkAll(view) {
+    if (state.confirmAll && !sameRows(state.confirmAll.rows, view.copyRows)) state.confirmAll = null;
+    var asking = !!state.confirmAll;
+    $('markAllBtn').hidden = asking;
+    $('markAllBtn').disabled = view.copyRows.length === 0;
+    $('markAllConfirm').hidden = !asking;
+    var n = asking ? state.confirmAll.rows.length : 0;
+    $('markAllText').textContent = asking ? 'Mark ' + fmtInt(n) + ' ' + plural(n, 'player', 'players') + ' as contacted?' : '';
+  }
+
+  function renderContactNotes() {
+    var box = $('contactNotes');
+    box.textContent = '';
+    function note(text, kind) {
+      var p = document.createElement('p');
+      p.className = 'msg ' + kind;
+      p.textContent = text;
+      box.appendChild(p);
+    }
+    if (state.contactedUnreadable) note('Some saved contacted players could not be read.', 'warn');
+    if (state.contactedUnsaved) note('Could not save the contacted list in this browser.', 'warn');
+    state.contactNotes.forEach(function (n) { note(n.text, n.kind); });
   }
 
   function render() {
@@ -1821,6 +2069,117 @@
     renderResults();
   });
 
+  /* ---- contacted: every change needs a real click (never a script's), and one click changes one thing ---- */
+
+  // A real click: made by the user (never by a script), and not the second click of a double click, which
+  // would land on whatever moved under the pointer after the first (the next row, or Yes).
+  function realClick(event) { return event.isTrusted && !(event.detail > 1); }
+
+  $('showContacted').addEventListener('change', function () {
+    var next = copySettings(state.settings);
+    next.showContacted = $('showContacted').checked;
+    state.settings = next;
+    saveSettings();
+    render();
+  });
+
+  function baseRowById(id) {
+    var base = state.pool !== null ? state.pool : state.savedRows;
+    for (var i = 0; i < base.length; i += 1) { if (base[i].id === id) return base[i]; }
+    return null;
+  }
+
+  $('tbody').addEventListener('click', function (event) {
+    if (!realClick(event)) return;
+    var b = event.target.closest ? event.target.closest('button[data-act]') : null;
+    if (!b) return;
+    var id = Number(b.getAttribute('data-id'));
+    if (!Number.isSafeInteger(id) || id <= 0) return;
+    var act = b.getAttribute('data-act');
+    state.contactNotes = [];
+    if (act === 'mark') {
+      var row = baseRowById(id);
+      var name = row ? row.name : '';
+      changeContacted(function (m) {
+        if (m.has(id)) return 0;
+        m.set(id, { name: name, at: nowSec() });
+        return 1;
+      });
+    } else if (act === 'undo') {
+      changeContacted(function (m) { return m.delete(id) ? 1 : 0; });
+    } else {
+      return;
+    }
+    render();
+  });
+
+  $('markAllBtn').addEventListener('click', function (event) {
+    if (!realClick(event)) return;
+    var rows = computeView().copyRows;
+    if (rows.length === 0) return;
+    state.confirmAll = { rows: rows.map(function (r) { return { id: r.id, name: r.name }; }) };
+    renderMarkAll(computeView());
+  });
+
+  $('markAllCancel').addEventListener('click', function (event) {
+    if (!event.isTrusted) return;
+    state.confirmAll = null;
+    renderMarkAll(computeView());
+  });
+
+  $('markAllYes').addEventListener('click', function (event) {
+    if (!realClick(event)) return;
+    var ask = state.confirmAll;
+    state.confirmAll = null;
+    state.contactNotes = [];
+    if (ask) {
+      var at = nowSec();
+      changeContacted(function (m) {
+        var n = 0;
+        ask.rows.forEach(function (r) { if (!m.has(r.id)) { m.set(r.id, { name: r.name, at: at }); n += 1; } });
+        return n;
+      });
+    }
+    render();
+  });
+
+  $('addBtn').addEventListener('click', function (event) {
+    if (!realClick(event)) return;
+    var field = $('addIds');
+    var r = parseIdList(field.value, MAX_ADD_IDS);
+    var notes = [];
+    var added = 0;
+    if (r.ids.length === 0 && r.invalid === 0) {
+      notes.push({ text: 'Type or paste at least one Torn ID.', kind: 'warn' });
+    }
+    if (r.ids.length > 0) {
+      var at = nowSec();
+      added = changeContacted(function (m) {
+        var n = 0;
+        r.ids.forEach(function (id) { if (!m.has(id)) { m.set(id, { name: '', at: at }); n += 1; } });
+        return n;
+      });
+      var already = r.ids.length - added;
+      notes.push({
+        text: 'Added ' + added + ' ' + plural(added, 'player', 'players') + ' as contacted.' +
+          (already > 0 ? ' ' + already + ' ' + plural(already, 'was', 'were') + ' already marked.' : ''),
+        kind: 'ok'
+      });
+    }
+    if (r.invalid > 0) notes.push({ text: r.invalid + ' entries were not Torn IDs and were skipped.', kind: 'warn' });
+    if (r.over > 0) {
+      notes.push({
+        text: 'Only ' + MAX_ADD_IDS + ' IDs can be added at a time. ' + r.over + ' more ' + plural(r.over, 'was', 'were') +
+          ' not added; press Add again for the next batch.',
+        kind: 'warn'
+      });
+    }
+    state.contactNotes = notes;
+    // What is left in the box is what was not added.
+    field.value = r.rest.join(', ');
+    render();
+  });
+
   $('findBtn').addEventListener('click', function () { void findRecruits(); });
   $('signIn').addEventListener('click', function () { void saveKey('leader'); });
   $('leaderKey').addEventListener('keydown', function (event) { if (event.key === 'Enter') void saveKey('leader'); });
@@ -1837,7 +2196,9 @@
   });
 
   $('copyBtn').addEventListener('click', function () {
-    var rows = sortedRows(computeView());
+    // Players marked as contacted are never copied, whether the table shows them or not.
+    var view = computeView();
+    var rows = sortRows(view.copyRows, state.sortKey, state.sortDir, state.statsById, nowSec());
     if (rows.length === 0) return;
     var text = copyText(rows);
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -1847,6 +2208,15 @@
     } else {
       toast('Clipboard unavailable in this browser.');
     }
+  });
+
+  // Another tab marked, undid or added someone: this page shows it at once, so a search or Copy list here
+  // never works from an older list. A list this page could not save is newer than the saved one; it stays.
+  window.addEventListener('storage', function (event) {
+    if (event.key !== null && event.key !== CONTACTED_STORE) return;
+    if (state.contactedUnsaved) return;
+    loadContacted();
+    render();
   });
 
   // Leaving the page ends everything: the queue is aborted and no timer is left running.
@@ -1864,6 +2234,7 @@
      Start
      ================================================================ */
 
+  loadContacted();
   var cache = loadCache();
   state.settings = cleanSettings(readJson(SETTINGS_STORE) || (cache ? cache.settings : null));
   if (cache) {
