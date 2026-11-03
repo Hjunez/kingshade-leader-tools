@@ -193,6 +193,7 @@
   td.name a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
   .note { font-size: 13px; color: var(--faint); margin: 0; overflow-wrap: anywhere; }
+  .note a { color: var(--accent); }
 
   .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; min-width: 0; }
   .grow { flex: 1 1 200px; min-width: 0; }
@@ -246,7 +247,7 @@
   .table-scroll { overflow-x: auto; max-width: 100%; border: 1px solid var(--line); border-radius: 3px; }
   /* Fixed layout: the widths come from the heading row alone, so a long list is laid out in one pass
      instead of measuring every cell again whenever anything on the page changes. */
-  table { border-collapse: collapse; width: 100%; min-width: 1290px; table-layout: fixed; }
+  table { border-collapse: collapse; width: 100%; min-width: 1496px; table-layout: fixed; }
   th {
     font-family: var(--display);
     font-weight: 600;
@@ -262,6 +263,7 @@
   }
   th.name { width: 190px; position: sticky; left: 0; z-index: 1; }
   th.status { width: 200px; padding: 8px 10px; text-align: left; }
+  th.est { width: 128px; }
   th button {
     font: inherit; color: inherit; background: none; border: 0;
     padding: 8px 10px; width: 100%; text-align: right; cursor: pointer; line-height: 1.25;
@@ -334,7 +336,7 @@
       <p class="sub">Active players without a faction who meet our bar, found in Torn's own daily player
         snapshot. One click, a list with profile links.</p>
     </div>
-    <span class="stamp">Leader &amp; Co-Leader</span>
+    <span class="stamp">Leader &amp; Co-Leader · 1.3</span>
   </header>
 
   <section class="card" id="keyCard">
@@ -371,6 +373,21 @@
       </div>
     </div>
 
+    <div class="field split">
+      <label class="lbl" for="ffKey">FFScouter key (optional)</label>
+      <div class="row" id="ffKeyRow">
+        <input type="password" id="ffKey" autocomplete="off" spellcheck="false" placeholder="Paste your own FFScouter key">
+        <button type="button" class="mini" id="toggleFfKey" aria-pressed="false">Show</button>
+        <button type="button" class="mini link" id="forgetFfKey">Forget FFScouter key</button>
+      </div>
+      <p class="note" id="ffKeyHelp">The same saved key War Room and Pre-war use in this browser. Forget removes it there too.</p>
+      <p class="note" id="ffPolicy">Estimated stats come from FFScouter (ffscouter.com), not from Torn. Read FFScouter's data
+        policy before you use your key here — it can change:
+        <a id="ffPolicyLink" href="https://ffscouter.com/" target="_blank" rel="noopener noreferrer">FFScouter data policy</a> ·
+        <a id="ffPrivacyLink" href="https://ffscouter.com/privacy" target="_blank" rel="noopener noreferrer">Privacy</a></p>
+      <p class="msg err" id="ffKeyMsg" role="alert" hidden></p>
+    </div>
+
     <p class="msg work" id="keyWork" role="status" hidden></p>
     <p class="msg err" id="keyMsg" role="alert" hidden></p>
     <div class="msg err" id="accessMsg" role="alert" hidden>
@@ -386,27 +403,37 @@
         <dd>Find active players without a faction for recruitment. It reads only when you press Sign in,
           Save key or Find recruits. Nothing runs in the background.</dd>
         <dt>Calls</dt>
-        <dd>api.torn.com only: key/info, user/snapshot twice (today and 7 days ago), and for up to the
+        <dd>Torn data comes from api.torn.com only: key/info, user/snapshot twice (today and 7 days ago), and for up to the
           number of players you choose to check in detail (and at most 20 more, when some turn out to be in a
           faction now) one user call that reads the player's personalstats and profile (the faction) together.
           If Torn does not answer both in that call (answers about another player, or refuses the call with an error
           that is not about your key or a busy Torn, on the first player), the page uses two calls per player instead: user/{id}/profile and user/{id}/personalstats; the first player can then cost up to
           three calls. Without profile on your key, only personalstats is read.
-          At most 50 calls a minute, one at a time. Every call is tagged <code>KSRecruitFinder</code> in
-          your own API log. The key goes in a request header, never in a web address.</dd>
+          After the detail check: one call to ffscouter.com/api/v1/get-stats with the IDs of the players checked in
+          detail (up to 200 per call), only if you have given an FFScouter key. FFScouter receives those player IDs and
+          your FFScouter key. Estimates are kept for 1 hour.
+          At most 50 Torn calls a minute, one at a time. Every call is tagged <code>KSRecruitFinder</code> in
+          your own API log. Your Torn key goes in a request header, never in a web address. Your FFScouter key goes in
+          the address of the FFScouter call, because FFScouter's API takes it nowhere else.</dd>
         <dt>Storage</dt>
         <dd>Your browser only. The key stays until you remove it (under <code>ks-leader-board-key</code>,
           shared with the other Leader Tools pages, or <code>ks-recruit-finder-key</code>). The result list
           and your filters are kept under <code>ks-recruit-finder-v1</code> until the next search. Torn's
           player snapshot itself is never saved. The players you mark as contacted are kept under
           <code>ks-recruit-finder-contacted-v1</code>, and the players you mark as joined a faction under
-          <code>ks-recruit-finder-joined-v1</code>, until you undo them.</dd>
+          <code>ks-recruit-finder-joined-v1</code>, until you undo them. Your FFScouter key stays until you forget it
+          (under <code>ks-war-room-ff-key</code>, shared with the War Room and Pre-war pages). FFScouter's estimates
+          are kept under <code>ks-recruit-finder-ff-v1</code>, fresh for 1 hour and removed after 7 days.</dd>
         <dt>Sharing</dt>
-        <dd>Nobody. There is no server and no account. The key is not in the saved list or the copied text.</dd>
+        <dd>Nobody, except that FFScouter receives the player IDs and your FFScouter key when you have given one (see
+          Calls). There is no server of ours and no account. No key is in the saved list or the copied text.</dd>
+        <dt>Estimated stats</dt>
+        <dd>From FFScouter, not from Torn. Only the public estimate is used.</dd>
         <dt>Key access</dt>
         <dd>Custom: user &rarr; <strong>snapshot</strong>, <strong>personalstats</strong>,
           <strong>profile</strong> (profile is optional: without it, players who joined a faction since Torn's
-          snapshot are not found automatically). The key must belong to a current member of faction 48039.</dd>
+          snapshot are not found automatically). The key must belong to a current member of faction 48039.
+          The optional FFScouter key is a separate 16-character key registered at ffscouter.com, not a Torn key.</dd>
         <dt>Writes</dt>
         <dd>None. This page only reads. It never opens a Torn page, clicks or sends anything in Torn;
           profile links open only when you click them.</dd>
@@ -462,6 +489,7 @@
     <p class="msg work" id="progress" role="status" hidden></p>
     <p class="msg err" id="runMsg" role="alert" hidden></p>
     <p class="msg ok" id="doneMsg" role="status" hidden></p>
+    <p class="msg" id="ffMsg" role="status" hidden></p>
     <p class="funnel" id="funnel" hidden></p>
     <div id="notes" class="field"></div>
   </section>
@@ -511,6 +539,13 @@
         <dd>As reported in Torn's daily player snapshot.</dd>
         <dt>Account age</dt>
         <dd>Whole days since the player signed up.</dd>
+        <dt>Est. stats</dt>
+        <dd>Estimated total battle stats from FFScouter, not Torn's figures. They are read once, after the detail
+          check, for the players checked in detail, and only if you have given an FFScouter key. They are kept for 1 hour.
+          "no estimate": FFScouter has none for the player. "no key": no FFScouter key. "UNKNOWN": FFScouter did not
+          give a usable answer. Sorting uses the number, and everything that is not a number sorts last.</dd>
+        <dt>Elo</dt>
+        <dd>Torn's personal stat attacking → elo, read with the other stats for the players checked in detail.</dd>
         <dt>Streak to RW wins</dt>
         <dd>From Torn's personal stats, read only for the players with the most hours per day, up to the
           number you choose to check in detail (and up to 20 more when some of them are in a faction now). The
@@ -565,6 +600,11 @@
   var CONTACTED_STORE = 'ks-recruit-finder-contacted-v1';
   // The players you marked as joined a faction since Torn's snapshot. Same rules, its own namespace.
   var JOINED_STORE = 'ks-recruit-finder-joined-v1';
+  // FFScouter (1.3). The key is the one War Room and Pre-war save: same name, same format (plain text).
+  var FF_KEY_STORE = 'ks-war-room-ff-key';
+  // FFScouter's estimates, one entry per player, fresh for an hour. Its own namespace; a cache, never a source of truth.
+  var FF_CACHE_STORE = 'ks-recruit-finder-ff-v1';
+  var FF_API = 'https://ffscouter.com/api/v1/get-stats';
   var MAX_ADD_IDS = 200;
   // The detail check looks at this many players more than you asked for when some are in a faction now.
   var MAX_EXTRA_PLAYERS = 20;
@@ -616,7 +656,8 @@
     refills: ['other', 'refills', 'energy'],
     attacksWon: ['attacking', 'attacks', 'won'],
     donatorDays: ['other', 'donator_days'],
-    rwWins: ['other', 'ranked_war_wins']
+    rwWins: ['other', 'ranked_war_wins'],
+    elo: ['attacking', 'elo']
   };
   var STAT_KEYS = Object.keys(STAT_PATHS);
 
@@ -835,13 +876,16 @@
     return signedUp > 0 && nowS >= signedUp ? Math.floor((nowS - signedUp) / 86400) : null;
   }
 
-  function cellValue(row, key, entry, nowS) {
+  // est: FFScouter's estimate as a number (the sort uses the number, never the text); anything else is a dash.
+  function cellValue(row, key, entry, nowS, est) {
     if (key === 'name') return row.name;
     if (key === 'level') return row.level;
     if (key === 'donator') return row.donator ? 1 : 0;
     if (key === 'age') return ageDays(row.signedUp, nowS);
     if (key === 'hours') return row.hours;
-    return entry ? entry.stats[key] : null;
+    if (key === 'est') return typeof est === 'number' ? est : null;
+    var v = entry ? entry.stats[key] : null;
+    return v === undefined ? null : v;
   }
 
   // One collator for every comparison; localeCompare with options builds a new one each call.
@@ -852,11 +896,11 @@
   }
 
   // A dash sorts last in both directions.
-  function sortRows(rows, key, dir, statsById, nowS) {
+  function sortRows(rows, key, dir, statsById, nowS, estById) {
     return rows.slice().sort(function (a, b) {
       if (key === 'name') return nameCompare(a, b) * dir;
-      var av = cellValue(a, key, statsById.get(a.id), nowS);
-      var bv = cellValue(b, key, statsById.get(b.id), nowS);
+      var av = cellValue(a, key, statsById.get(a.id), nowS, estById ? estById.get(a.id) : undefined);
+      var bv = cellValue(b, key, statsById.get(b.id), nowS, estById ? estById.get(b.id) : undefined);
       if (av === null && bv === null) return nameCompare(a, b);
       if (av === null) return 1;
       if (bv === null) return -1;
@@ -999,6 +1043,132 @@
     if (s.levelMax < s.levelMin) { s.levelMin = DEFAULT_SETTINGS.levelMin; s.levelMax = DEFAULT_SETTINGS.levelMax; }
     return s;
   }
+
+  /* FFScouter, built against FFScouter OpenAPI 1.20.0 (read 2026-11-03).
+     GET https://ffscouter.com/api/v1/get-stats?key=<16 letters and digits>&targets=<id,id,...> (up to 205 IDs a call).
+     An answer is an array with one object per ID asked for. Four fields are read and nothing else: player_id,
+     bs_estimate, bs_estimate_human and last_updated (Unix seconds). Errors come as { code, error } (400 codes 1-5,
+     401 code 6, 403 codes 4010/4011, 429 code 21 with retry_after_seconds). Text from an answer is never shown. */
+  var FF_CHUNK = 200;
+  var FF_CHUNK_GAP_MS = 1000;
+  var FF_FRESH_MS = 60 * 60 * 1000;
+  var FF_KEEP_MS = 7 * 86400 * 1000;
+  var FF_RETRY_DEFAULT_S = 15;
+  var FF_RETRY_MAX_S = 60;
+  var FF_KEY_RE = /^[A-Za-z0-9]{16}$/;
+  var FF_HUMAN_RE = /^[0-9][0-9.,]{0,9}[A-Za-z]{0,3}$/;
+  var FF_TEXT = {
+    badFormat: 'That does not look like an FFScouter key (16 letters and digits). Nothing was sent.',
+    tornKey: 'Use your separate FFScouter key, not your Torn key. Nothing was sent.',
+    keyRefused: 'That does not look like an FFScouter key (16 letters and digits).',
+    unknownKey: 'FFScouter does not know this key. It must be registered at ffscouter.com.',
+    network: 'FFScouter could not be reached from this page.',
+    unreadable: 'FFScouter answered something this page cannot read.',
+    busy: 'FFScouter is busy. Estimates were not read; search again later.',
+    noKey: 'Add your FFScouter key to see estimated stats.'
+  };
+
+  // '' if the key may be used: 16 letters and digits, and not one of the Torn keys on this page.
+  function ffKeyProblem(value, tornKeys) {
+    if (!FF_KEY_RE.test(value)) return FF_TEXT.badFormat;
+    if (tornKeys.indexOf(value) !== -1) return FF_TEXT.tornKey;
+    return '';
+  }
+
+  function splitChunks(ids, size) {
+    var out = [];
+    for (var i = 0; i < ids.length; i += size) out.push(ids.slice(i, i + size));
+    return out;
+  }
+
+  // How long to wait before the one new try after "busy": what FFScouter said, 15 s if nothing, 60 s at most.
+  function retryDelaySeconds(payload) {
+    var v = payload && typeof payload === 'object' ? payload.retry_after_seconds : undefined;
+    if (typeof v !== 'number' || !isFinite(v) || v <= 0) return FF_RETRY_DEFAULT_S;
+    return Math.min(Math.ceil(v), FF_RETRY_MAX_S);
+  }
+
+  function ffTime(v) { return Number.isSafeInteger(v) && v > 0 && v <= 8.64e12 ? v : null; }
+
+  // YYYY-MM-DD (UTC) of a Unix time in seconds.
+  function ffDate(sec) {
+    var d = new Date(sec * 1000);
+    return d.getUTCFullYear() + '-' + ('0' + (d.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + d.getUTCDate()).slice(-2);
+  }
+
+  // One row of an answer: { est, human, updated } (est and human are null together: FFScouter has no estimate),
+  // or null if the row cannot be read. Nothing but the four fields is looked at.
+  function parseFfRow(row) {
+    if (!row || typeof row !== 'object') return null;
+    var updated = ffTime(row.last_updated);
+    if (row.bs_estimate === null) return { est: null, human: null, updated: updated };
+    var est = row.bs_estimate;
+    var human = typeof row.bs_estimate_human === 'string' ? row.bs_estimate_human.trim() : '';
+    if (!Number.isSafeInteger(est) || est < 0 || !FF_HUMAN_RE.test(human)) return null;
+    return { est: est, human: human, updated: updated };
+  }
+
+  // What an answer means. kind 'ok' (rows: Map id -> entry or null), 'busy' (waitS) or 'error' (text).
+  // An answer about an ID that was not asked for, or the same ID twice, is thrown away whole.
+  function readFfAnswer(status, payload, ids) {
+    if (Array.isArray(payload)) {
+      if (status < 200 || status > 299) return { kind: 'error', text: FF_TEXT.unreadable };
+      var wanted = new Set(ids);
+      var rows = new Map();
+      for (var i = 0; i < payload.length; i += 1) {
+        var el = payload[i];
+        if (!el || typeof el !== 'object' || !Number.isSafeInteger(el.player_id) || !wanted.has(el.player_id) || rows.has(el.player_id)) {
+          return { kind: 'error', text: FF_TEXT.unreadable };
+        }
+        rows.set(el.player_id, parseFfRow(el));
+      }
+      return { kind: 'ok', rows: rows };
+    }
+    var code = payload && typeof payload === 'object' && Number.isSafeInteger(payload.code) ? payload.code : null;
+    if (status === 429 || code === 21) return { kind: 'busy', waitS: retryDelaySeconds(payload) };
+    if (status === 401 || code === 6) return { kind: 'error', text: FF_TEXT.unknownKey };
+    if (code === 4010 || code === 4011) return { kind: 'error', text: 'FFScouter has blocked this key or its faction (code ' + code + ').' };
+    if (code === 1 || code === 2) return { kind: 'error', text: FF_TEXT.keyRefused };
+    if (code === 3 || code === 4 || code === 5) return { kind: 'error', text: 'FFScouter refused the request (code ' + code + ').' };
+    return { kind: 'error', text: FF_TEXT.unreadable };
+  }
+
+  // The saved estimates, as parsed JSON (undefined: nothing saved). Only whole entries are read; anything else
+  // sets unreadable and is left out. Entries older than a week are not read either (they go at the next write).
+  function cleanFfCache(raw, nowMs) {
+    var out = { players: new Map(), unreadable: false };
+    if (raw === undefined) return out;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw) || raw.schema !== 1 ||
+        !raw.players || typeof raw.players !== 'object' || Array.isArray(raw.players)) {
+      out.unreadable = true;
+      return out;
+    }
+    Object.keys(raw.players).forEach(function (k) {
+      var id = wholeNumber(k);
+      var e = raw.players[k];
+      if (id === null || id === 0 || !e || typeof e !== 'object' || Array.isArray(e)) { out.unreadable = true; return; }
+      var estOk = e.est === null || (Number.isSafeInteger(e.est) && e.est >= 0);
+      var humanOk = e.human === null || (typeof e.human === 'string' && FF_HUMAN_RE.test(e.human));
+      var updatedOk = e.updated === null || ffTime(e.updated) !== null;
+      if (!estOk || !humanOk || !updatedOk || (e.est === null) !== (e.human === null) ||
+          !Number.isSafeInteger(e.at) || e.at < 0 || e.at > nowMs + 60000) {
+        out.unreadable = true;
+        return;
+      }
+      if (e.at < nowMs - FF_KEEP_MS) return;
+      out.players.set(id, { est: e.est, human: e.human, updated: e.updated, at: e.at });
+    });
+    return out;
+  }
+
+  function ffCacheJson(players) {
+    var o = {};
+    players.forEach(function (e, id) { o[id] = { est: e.est, human: e.human, updated: e.updated, at: e.at }; });
+    return JSON.stringify({ schema: 1, players: o });
+  }
+
+  // Fresh: read no more than an hour ago.
+  function ffFresh(entry, nowMs) { return !!entry && nowMs - entry.at <= FF_FRESH_MS; }
   // ---- pure: end ----
 
   /* ================================================================
@@ -1100,7 +1270,17 @@
     inFactionNow: new Set(), // ids the detail check found in a faction now: hidden in this search, never saved as joined
     detailNotes: [],        // [{ text, kind }]: what the detail check did (calls per player, profile, the cap)
     contactNotes: [],       // [{ text, kind }]: the answer to the last Add
-    confirmAll: null        // { rows: [{ id, name }] } while "Mark all shown" waits for Yes
+    confirmAll: null,       // { rows: [{ id, name }] } while "Mark all shown" waits for Yes
+    ffCache: new Map(),     // id -> { est, human, updated, at }: FFScouter's estimates (any age up to a week)
+    ffUnsaved: false,       // the last write of the estimates did not fit in this browser
+    ffHasKey: false,        // an FFScouter key is saved (read again at every render)
+    ffPending: new Set(),   // ids the running FFScouter call is about
+    ffCtrl: null,           // AbortController of the running FFScouter round
+    ffSeq: 0,               // bumped to cancel a round: an old answer writes nothing
+    ffLastStart: null,      // when the last FFScouter call of this round started (perfNow)
+    ffProgress: '',
+    ffStatus: null,         // { text, kind } the result of the last FFScouter round
+    ffKeyMsg: ''
   };
 
   /* ================================================================
@@ -1124,11 +1304,16 @@
 
   function isCount(v) { return Number.isSafeInteger(v) && v >= 0; }
 
+  // Stats a list saved by an older version does not have. Missing is a dash; a wrong type still drops the list.
+  var OPTIONAL_STAT_KEYS = ['elo'];
+
   function cleanStats(raw) {
     if (!raw || typeof raw !== 'object') return null;
     var out = {};
     for (var i = 0; i < STAT_KEYS.length; i += 1) {
       var v = raw[STAT_KEYS[i]];
+      // Added in 1.3: a list saved by 1.0 to 1.2 has no elo.
+      if (v === undefined && OPTIONAL_STAT_KEYS.indexOf(STAT_KEYS[i]) !== -1) v = null;
       if (v !== null && !isCount(v)) return null;
       out[STAT_KEYS[i]] = v;
     }
@@ -1582,6 +1767,202 @@
   }
 
   /* ================================================================
+     FFScouter: estimated stats for the players checked in detail
+     ================================================================ */
+
+  function FfProblem(text) { this.name = 'FfProblem'; this.text = text; this.message = text; }
+  FfProblem.prototype = Object.create(Error.prototype);
+
+  function ffKeyValue() { return lsGet(FF_KEY_STORE) || ''; }
+  function tornKeysNow() { return [lsGet(KEY_STORE), lsGet(RF_KEY_STORE)].filter(function (k) { return !!k; }); }
+  function refreshFfKey() { state.ffHasKey = ffKeyValue() !== ''; }
+
+  function readFfStore() {
+    var raw = lsGet(FF_CACHE_STORE);
+    if (raw === null) return cleanFfCache(undefined, Date.now());
+    var parsed;
+    try { parsed = JSON.parse(raw); } catch (e) { return { players: new Map(), unreadable: true }; }
+    return cleanFfCache(parsed, Date.now());
+  }
+
+  // Adds entries to the saved estimates. The store is read again first (another tab may have written), entries
+  // older than a week go, and an unreadable store is simply written over: it is only a cache.
+  function writeFfEntries(entries) {
+    var base = state.ffUnsaved ? new Map(state.ffCache) : readFfStore().players;
+    var cutoff = Date.now() - FF_KEEP_MS;
+    var merged = new Map();
+    base.forEach(function (e, id) { if (e.at >= cutoff) merged.set(id, e); });
+    entries.forEach(function (e, id) { merged.set(id, e); });
+    state.ffUnsaved = !lsSet(FF_CACHE_STORE, ffCacheJson(merged));
+    state.ffCache = merged;
+  }
+
+  // Ends a running round (a new search, a new or removed key, leaving the page). Its answer writes nothing.
+  function abortFf() {
+    if (state.ffCtrl) state.ffCtrl.abort();
+    state.ffCtrl = null;
+    state.ffSeq += 1;
+    state.ffPending = new Set();
+    state.ffProgress = '';
+  }
+
+  // The players the round asks about: checked in detail and listed as open (not contacted, joined, found in a
+  // faction now, nor hidden by the streak filter), in the order they were checked.
+  function ffCandidates() {
+    var open = new Set();
+    computeView().copyRows.forEach(function (r) { open.add(r.id); });
+    return (state.checkedIds || []).filter(function (id) { return open.has(id) && state.statsById.has(id); });
+  }
+
+  // At least FF_CHUNK_GAP_MS between two FFScouter calls of a round (plus the same margin the Torn pace keeps).
+  async function ffSlot(signal) {
+    if (state.ffLastStart !== null) {
+      var wait = FF_CHUNK_GAP_MS + PACE_MARGIN_MS - (perfNow() - state.ffLastStart);
+      if (wait > 0) await sleep(Math.ceil(wait), signal);
+    }
+    state.ffLastStart = perfNow();
+  }
+
+  // One request. The key is in the address (FFScouter takes it nowhere else) and in no other place.
+  async function ffRequest(ids, k, signal) {
+    var response;
+    try {
+      response = await fetch(FF_API + '?key=' + encodeURIComponent(k) + '&targets=' + ids.join(','), { signal: signal });
+    } catch (err) {
+      if (signal.aborted || isAbort(err)) throw abortError();
+      throw new FfProblem(FF_TEXT.network);
+    }
+    var payload = null;
+    try { payload = await response.json(); } catch (err) { payload = null; }
+    if (signal.aborted) throw abortError();
+    return { status: response.status, payload: payload };
+  }
+
+  // One batch of IDs. "Busy" (429 or code 21) gets one new try after the time FFScouter names; a second one gives up.
+  async function ffChunk(ids, k, signal, mine) {
+    var calls = 0;
+    for (var attempt = 0; attempt < 2; attempt += 1) {
+      await ffSlot(signal);
+      calls += 1;
+      var got = await ffRequest(ids, k, signal);
+      var read = readFfAnswer(got.status, got.payload, ids);
+      if (read.kind === 'ok') return { rows: read.rows, calls: calls };
+      if (read.kind === 'error') throw new FfProblem(read.text);
+      if (attempt === 1) throw new FfProblem(FF_TEXT.busy);
+      if (state.ffSeq === mine) {
+        state.ffProgress = 'FFScouter is busy; trying once more in ' + read.waitS + ' s…';
+        renderStatus();
+      }
+      await sleep(read.waitS * 1000, signal);
+    }
+    throw new FfProblem(FF_TEXT.busy);
+  }
+
+  function ffDoneText(got, calls, cached, missing) {
+    var t = calls > 0
+      ? 'Estimated stats from FFScouter for ' + got + ' ' + plural(got, 'player', 'players') + ' (' + calls + ' ' + plural(calls, 'call', 'calls') + ').'
+      : 'Estimated stats from FFScouter for ' + cached + ' ' + plural(cached, 'player', 'players') + ', all from the last hour\'s cache (no call).';
+    if (calls > 0 && cached > 0) t += ' ' + cached + ' from the last hour\'s cache.';
+    if (missing > 0) t += ' ' + missing + ' ' + plural(missing, 'player', 'players') + ' got no usable estimate from FFScouter.';
+    return t;
+  }
+
+  async function runFf() {
+    abortFf();
+    var mine = state.ffSeq;
+    state.ffStatus = null;
+    state.ffLastStart = null;
+    var ids = ffCandidates();
+    var k = ffKeyValue();
+    // No key (or nobody to ask about): nothing is sent; the cells say "no key" and the status line says what to do.
+    if (ids.length === 0 || !k) { render(); return; }
+    var problem = ffKeyProblem(k, tornKeysNow());
+    if (problem) { state.ffStatus = { text: problem, kind: 'err' }; render(); return; }
+    state.ffCache = state.ffUnsaved ? state.ffCache : readFfStore().players;
+    var now = Date.now();
+    var need = ids.filter(function (id) { return !ffFresh(state.ffCache.get(id), now); });
+    var cached = ids.length - need.length;
+    if (need.length === 0) {
+      state.ffStatus = { text: ffDoneText(0, 0, cached, 0), kind: 'ok' };
+      render();
+      return;
+    }
+    var ctrl = new AbortController();
+    state.ffCtrl = ctrl;
+    state.ffPending = new Set(need);
+    state.ffProgress = 'Asking FFScouter for estimated stats…';
+    render();
+    var calls = 0;
+    var got = 0;
+    var missing = 0;
+    var failed = '';
+    try {
+      var chunks = splitChunks(need, FF_CHUNK);
+      for (var c = 0; c < chunks.length; c += 1) {
+        var part = await ffChunk(chunks[c], k, ctrl.signal, mine);
+        if (state.ffSeq !== mine) return;
+        calls += part.calls;
+        var fresh = new Map();
+        var at = Date.now();
+        chunks[c].forEach(function (id) {
+          state.ffPending.delete(id);
+          var row = part.rows.get(id);
+          if (row) fresh.set(id, { est: row.est, human: row.human, updated: row.updated, at: at });
+          else missing += 1;
+        });
+        got += fresh.size;
+        writeFfEntries(fresh);
+        renderResults();
+      }
+    } catch (e) {
+      if (state.ffSeq !== mine || isAbort(e)) return;
+      failed = e instanceof FfProblem ? e.text : 'FFScouter could not be read.';
+    }
+    if (state.ffSeq !== mine) return;
+    state.ffCtrl = null;
+    state.ffPending = new Set();
+    state.ffProgress = '';
+    state.ffStatus = failed ? { text: failed, kind: 'err' } : { text: ffDoneText(got, calls, cached, missing), kind: 'ok' };
+    render();
+  }
+
+  // What the Est. stats cell of a row says. A player not asked about (not checked in detail, or set apart) has a dash.
+  function ffInfo(row, entry) {
+    var st = rowStatus(row.id);
+    if (st === 'joined') return { kind: 'dash', text: '—', title: 'Not asked: marked as joined a faction.' };
+    if (st === 'contacted') return { kind: 'dash', text: '—', title: 'Not asked: marked as contacted.' };
+    if (st === 'faction') return { kind: 'dash', text: '—', title: 'Not asked: found in a faction now.' };
+    if (!entry) return { kind: 'dash', text: '—', title: 'Not checked in detail, so FFScouter was not asked.' };
+    if (state.liveRun) return { kind: 'dash', text: '—', title: 'FFScouter is asked after the detail check.' };
+    if (!state.ffHasKey) return { kind: 'nokey', text: 'no key', title: FF_TEXT.noKey };
+    if (state.ffPending.has(row.id)) return { kind: 'checking', text: 'CHECKING', title: 'Waiting for FFScouter.' };
+    var e = state.ffCache.get(row.id);
+    if (!e) return { kind: 'unknown', text: 'UNKNOWN', title: 'No usable estimate from FFScouter for this player. Press Find recruits to ask again.' };
+    if (e.est === null) return { kind: 'none', text: 'no estimate', title: 'FFScouter has no estimate for this player.' };
+    return {
+      kind: 'value', est: e.est, text: e.human,
+      title: 'FFScouter estimate' + (e.updated !== null ? ', updated ' + ffDate(e.updated) : '')
+    };
+  }
+
+  function fillEstCell(td, row, entry) {
+    var f = ffInfo(row, entry);
+    td.className = 'num' + (f.kind === 'value' ? '' : ' none');
+    td.textContent = f.text;
+    td.title = f.title;
+  }
+
+  // id -> estimate (a number) for the rows whose cell shows one: the only rows that sort by value.
+  function estMapFor(rows) {
+    var m = new Map();
+    rows.forEach(function (r) {
+      var f = ffInfo(r, state.statsById.get(r.id));
+      if (f.kind === 'value') m.set(r.id, f.est);
+    });
+    return m;
+  }
+
+  /* ================================================================
      The search
      ================================================================ */
 
@@ -1671,6 +2052,9 @@
     if (!key.value) { state.runMsg = 'Sign in or save a Recruit Finder key first.'; render(); return; }
     var op = startOp(key);
     if (!op) return;
+    // A new search ends a running FFScouter round: its answer must not land on the new list.
+    abortFf();
+    state.ffStatus = null;
     state.runMsg = '';
     state.doneMsg = '';
     state.keyMsg = '';
@@ -1679,6 +2063,7 @@
     var checked = 0;
     var total = 0;
     var committed = false;
+    var ffAfter = false;
     render();
     try {
       setProgress(op, 'Checking your key…');
@@ -1794,6 +2179,7 @@
         ' rows) and from 7 days ago (' + fmtInt(prev.count + prev.bad) + ' rows), and checked ' + total + ' ' +
         plural(total, 'player', 'players') + ' in detail.' +
         (found > 0 ? ' ' + found + ' of them ' + plural(found, 'was', 'were') + ' in a faction now.' : '');
+      ffAfter = true;
     } catch (e) {
       if (isAbort(e) || !isCurrent(op)) return;
       state.runFailed = true;
@@ -1807,11 +2193,15 @@
       if (committed) {
         state.stoppedAt = { done: checked, total: total };
         state.runMsg = state.runMsg ? state.runMsg + ' ' + stopNote(checked, total) : stopNote(checked, total);
+        ffAfter = true;
       }
     } finally {
       endOp(op);
       render();
     }
+    // After the detail check, never before and never beside the Torn queue: one FFScouter round for the players
+    // that were checked (also when the check stopped halfway, then for those that were). A cancelled search gets none.
+    if (ffAfter && op.seq === state.runSeq) void runFf();
   }
 
   /* ================================================================
@@ -1917,9 +2307,11 @@
   }
 
   function renderStatus() {
-    showText('progress', state.progress);
+    showText('progress', state.progress || state.ffProgress);
     showText('runMsg', state.runMsg);
     showText('doneMsg', state.doneMsg);
+    renderFfStatus();
+    showText('ffKeyMsg', state.ffKeyMsg);
     showText('settingsMsg', state.settingsMsg);
     var hasKey = !!activeKey().value;
     var find = $('findBtn');
@@ -1943,6 +2335,16 @@
       }
       asOf.appendChild(document.createTextNode('Data as of ' + tctMinutes(state.fetchedAt) + ' TCT'));
     }
+  }
+
+  // The line for FFScouter: how the last round went, or what to do when there is no key.
+  function renderFfStatus() {
+    var box = $('ffMsg');
+    var s = state.ffStatus;
+    if (!s && !state.ffHasKey && !state.busy && state.statsById.size > 0) s = { text: FF_TEXT.noKey, kind: '' };
+    box.textContent = s ? s.text : '';
+    box.className = 'msg' + (s && s.kind ? ' ' + s.kind : '');
+    box.hidden = !s;
   }
 
   function renderFunnel(view) {
@@ -1988,6 +2390,8 @@
     { key: 'status', label: 'Status', plain: true },
     { key: 'name', label: 'Name', text: true },
     { key: 'level', label: 'Level' },
+    { key: 'est', label: 'Est. stats', ff: true, title: 'Estimated total battle stats from FFScouter (not Torn\'s figures)' },
+    { key: 'elo', label: 'Elo', stat: true, title: 'Torn personal stat attacking → elo' },
     { key: 'donator', label: 'Donator', title: 'As reported in Torn\'s daily player snapshot' },
     { key: 'age', label: 'Account age (days)' },
     { key: 'hours', label: 'Hours/day (7 d)', title: 'Time played between the two snapshots, divided by 7' },
@@ -2021,7 +2425,7 @@
   }
 
   function sortedRows(view) {
-    return sortRows(view.rows, state.sortKey, state.sortDir, state.statsById, nowSec());
+    return sortRows(view.rows, state.sortKey, state.sortDir, state.statsById, nowSec(), estMapFor(view.rows));
   }
 
   function contactButton(act, label, row, aria) {
@@ -2080,6 +2484,7 @@
       td.appendChild(link);
       return;
     }
+    if (col.ff) { fillEstCell(td, row, entry); return; }
     var v = cellValue(row, col.key, entry, nowS);
     td.className = 'num' + (v === null ? ' none' : '');
     if (v === null) {
@@ -2139,6 +2544,7 @@
         return;
       }
       if (col.text) th.className = 'name';
+      if (col.ff) th.className = 'est';
       th.setAttribute('aria-sort', state.sortKey === col.key ? (state.sortDir === 1 ? 'ascending' : 'descending') : 'none');
       var b = document.createElement('button');
       b.type = 'button';
@@ -2214,6 +2620,7 @@
   }
 
   function render() {
+    refreshFfKey();
     renderKeys();
     renderStatus();
     renderResults();
@@ -2441,10 +2848,74 @@
     $('toggleLeaderKey').setAttribute('aria-pressed', String(!showing));
   });
 
+  /* ---- the FFScouter key: War Room's and Pre-war's own store, checked before anything is saved or sent ---- */
+
+  function saveFfKey() {
+    var input = $('ffKey');
+    var value = input.value.trim();
+    var stored = ffKeyValue();
+    if (value === stored) { state.ffKeyMsg = ''; showText('ffKeyMsg', ''); return; }
+    if (value === '') {
+      lsDel(FF_KEY_STORE);
+      abortFf();
+      state.ffStatus = null;
+      state.ffKeyMsg = '';
+      render();
+      return;
+    }
+    var problem = ffKeyProblem(value, tornKeysNow());
+    if (problem) {
+      state.ffKeyMsg = problem;
+      // A Torn key does not stay in the field; the saved FFScouter key (if any) is shown again.
+      if (problem === FF_TEXT.tornKey) input.value = stored;
+      showText('ffKeyMsg', state.ffKeyMsg);
+      return;
+    }
+    if (!lsSet(FF_KEY_STORE, value)) {
+      state.ffKeyMsg = 'Could not save the FFScouter key in this browser.';
+      showText('ffKeyMsg', state.ffKeyMsg);
+      return;
+    }
+    abortFf();
+    state.ffStatus = null;
+    state.ffKeyMsg = '';
+    render();
+  }
+
+  $('ffKey').addEventListener('change', saveFfKey);
+  $('ffKey').addEventListener('keydown', function (event) { if (event.key === 'Enter') saveFfKey(); });
+  $('toggleFfKey').addEventListener('click', function () {
+    var input = $('ffKey');
+    var showing = input.type === 'text';
+    input.type = showing ? 'password' : 'text';
+    $('toggleFfKey').textContent = showing ? 'Show' : 'Hide';
+    $('toggleFfKey').setAttribute('aria-pressed', String(!showing));
+  });
+  $('forgetFfKey').addEventListener('click', function () {
+    lsDel(FF_KEY_STORE);
+    $('ffKey').value = '';
+    abortFf();
+    state.ffStatus = null;
+    state.ffKeyMsg = '';
+    render();
+  });
+
+  // Another tab (War Room, Pre-war, or this page) changed the FFScouter key or the estimates.
+  window.addEventListener('storage', function (event) {
+    if (event.key !== null && event.key !== FF_KEY_STORE && event.key !== FF_CACHE_STORE) return;
+    if (event.key === null || event.key === FF_KEY_STORE) {
+      if (document.activeElement !== $('ffKey')) $('ffKey').value = ffKeyValue();
+    }
+    if (event.key === null || event.key === FF_CACHE_STORE) {
+      if (!state.ffUnsaved) state.ffCache = readFfStore().players;
+    }
+    render();
+  });
+
   $('copyBtn').addEventListener('click', function () {
     // Players marked as contacted are never copied, whether the table shows them or not.
     var view = computeView();
-    var rows = sortRows(view.copyRows, state.sortKey, state.sortDir, state.statsById, nowSec());
+    var rows = sortRows(view.copyRows, state.sortKey, state.sortDir, state.statsById, nowSec(), estMapFor(view.copyRows));
     if (rows.length === 0) return;
     var text = copyText(rows);
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -2469,6 +2940,7 @@
   window.addEventListener('pagehide', function () {
     var wasSearching = state.busy && !state.keyWork;
     cancelOp(wasSearching ? 'The search was stopped when you left the page.' : '');
+    abortFf();
     if (state.toastTimer) { clearTimeout(state.toastTimer); state.toastTimer = null; }
     yieldQueue.length = 0;
   });
@@ -2482,6 +2954,8 @@
 
   loadContacted();
   loadList('joined');
+  state.ffCache = readFfStore().players;
+  $('ffKey').value = ffKeyValue();
   var cache = loadCache();
   state.settings = cleanSettings(readJson(SETTINGS_STORE) || (cache ? cache.settings : null));
   if (cache) {
