@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PC
 // @namespace    kingshade.torn
-// @version      1.1.16
+// @version      1.1.17
 // @downloadURL  https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @description  PC TEST: DIBS as a native roster column beside Torn's Attack cell; FF and Est from FFScouter's get-stats API. War Stuff Enhanced is detected and shown read-only; it never blocks.
@@ -17,6 +17,29 @@
 // ==/UserScript==
 
 /*
+ * KS Torn War Dibs PC v1.1.17 (2026-11-03) -- your own war page also opens as
+ * type=2. ONE MAIN CHANGE. Name, namespace, update address and every storage
+ * name are those of 1.1.16.
+ * FIXED
+ *   - During the war on 2026-10-24 Torn showed the own war page as
+ *     factions.php?step=your&type=2#/war/rank. 1.1.16 only accepted type=1 as
+ *     the own war page, so it treated type=2 as no own war: no panel and no DIBS
+ *     column was drawn.
+ * CHANGED
+ *   - isRankedWarRoute accepts type exactly "1" or exactly "2" (with step=your,
+ *     factions.php and #/war/rank as before). type=2 is then your own war page in
+ *     every respect, exactly like type=1. Any other type (missing, empty, 3, 12,
+ *     02, " 2") is still not the own war page.
+ * KNOWN ISSUES
+ *   - None new. Torn may use other type values in other situations; they are
+ *     not recognised until they have been seen.
+ * VERIFICATION
+ *   - Synthetic only. In Chrome: open factions.php?step=your&type=2#/war/rank on
+ *     your own war page; the panel and the DIBS column appear as on type=1.
+ * Everything else is unchanged from 1.1.16: DIBS, its rules and limits, Share
+ * with KS, the requests for the war, the clock and the panel. No new request,
+ * no new storage.
+ *
  * KS Torn War Dibs PC v1.1.16 (2026-10-24) -- Share with KS. ONE MAIN CHANGE.
  * Name, namespace, update address and every existing storage name are those
  * of 1.1.15.
@@ -668,8 +691,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs PC",
-    version: "1.1.16",
-    instanceKey: "__ksTornWarDibsPcV1116",
+    version: "1.1.17",
+    instanceKey: "__ksTornWarDibsPcV1117",
     rowHostPrefix: "ks-twd-wse-row-v010-",
     rosterStyleId: "ks-twd-wse-roster-style-v010",
     panelId: "ks-twd-wse-panel",
@@ -1194,14 +1217,17 @@
     try { return document.hasFocus(); } catch { return false; }
   }
 
+  // 1.1.17: type=2 is accepted as the own war page, exactly like type=1 (Torn
+  // showed the own war page as type=2 on 2026-10-24). Any other type is not.
   function isRankedWarRoute(value = location.href) {
     try {
       const url = new URL(value, location.href);
       const hashPath = String(url.hash || "").slice(1).split("?", 1)[0].replace(/\/+$/, "");
+      const warType = url.searchParams.get("type");
       return (
         /\/factions\.php$/i.test(url.pathname) &&
         url.searchParams.get("step") === "your" &&
-        url.searchParams.get("type") === "1" &&
+        (warType === "1" || warType === "2") &&
         hashPath === "/war/rank"
       );
     } catch {
