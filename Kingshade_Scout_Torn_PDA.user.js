@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kingshade Scout for Torn PDA
 // @namespace    https://kingshade.tools/
-// @version      0.9.5
+// @version      0.9.6
 // @downloadURL  https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/Kingshade_Scout_Torn_PDA.user.js
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/Kingshade_Scout_Torn_PDA.user.js
 // @description  KS Scout for Torn PDA: FF/EST, live faction status, countdowns, filters and sorting. Never runs on Ranked War lists.
@@ -10,10 +10,54 @@
 // @match        https://torn.com/factions.php*
 // @connect      ffscouter.com
 // @connect      api.torn.com
+// @connect      ks-war-room-claims.hans-viklund.workers.dev
 // @grant        GM_xmlhttpRequest
 // @run-at       document-idle
 // @noframes
 // ==/UserScript==
+//
+// 0.9.6: ONE MAIN CHANGE: the switch "Share with KS". Off by default. With it on, KS Scout sends YOUR OWN battle stats (five
+// numbers) to the KS War Room server, so that KS can turn Fair Fight results into stat estimates for the faction. No other
+// change: no travel times, no spy reports, nothing else is read or sent.
+//
+// ADDED
+// - Settings view (gear), section "Share with KS": a switch, off by default, with a line that says what is happening ("Off ·
+//   nothing is sent.", "On · sent 5m ago.", the server asked to wait, the server is offline, the key has no battle stats access,
+//   the key is not in the faction, the server refused the key or the data) and the text that explains it. Turning it off stops
+//   all sending at once, cuts a send in progress (its answer is thrown away) and forgets the sign-in.
+// - With the switch on, at most once per 6 hours while the page is open, visible and focused and the panel is mounted (never on a
+//   Ranked War list): three requests, in this order. 1. Torn: GET /v2/user/battlestats with your key (one more Torn request, only
+//   after a status answer and never closer than the floor of every other Torn request). 2. The KS War Room server: POST /session
+//   with your key, to confirm your Torn ID (only when there is no sign-in; the key goes nowhere else on that server). 3. POST
+//   /intel/submit with the five numbers and the time they were read (in the server's clock). Nothing is sent when Torn's answer
+//   is not five whole numbers whose total is the sum of the four.
+// - The time of the last accepted send and the time of the next allowed one are saved in localStorage "ks-share:battlestats",
+//   the same key for all KS scripts, so that a member with two scripts does not send twice. A lock in that key lets only one
+//   tab of a browser send at a time. A lock taken by another KS script (War Dibs) is respected too. A 429 from the server is respected, also after a page load. Failures are retried after
+//   15, 30, 60, 120, at most 360 minutes. A key that Torn says has no battle stats access, or that the server refuses, is not
+//   tried again until it is saved again (only a hash of the key is kept for that).
+// - The stats are never written to the page, the console (also with the debug log on), localStorage or a message.
+// CHANGED
+// - @connect: ks-war-room-claims.hans-viklund.workers.dev (the KS War Room server, a Cloudflare worker). Used only with the
+//   switch on.
+// - The last sentence of the footer follows the switch: "Share with KS is off: KS receives nothing." or "Share with KS is on:
+//   every 6 hours your own battle stats (five numbers) go to the KS War Room server, never shown to anyone."
+// - The disclosure (Data storage, Data sharing, Purpose of use, Key storage & sharing, Key access level) and the key, data use and
+//   privacy lines at the bottom of this header name the KS War Room server and what the switch sends.
+// KNOWN ISSUES
+// - Not run on a phone or a computer yet; synthetic only (KS PDA Testrigg).
+// - Until the KS server fetches the numbers (a later stage), the War Room server holds them at most 7 days and then deletes them.
+// - There is no way yet to have numbers that were already sent removed.
+// - A key saved before 0.9.6 may have no battle stats access: the line then says so and offers the link that creates a key with it.
+// VERIFICATION
+// - Synthetic only (KS PDA Testrigg). Acceptance test:
+// - 1. Torn PDA: update KS Scout to 0.9.6. The sub line in the panel reads "KS · PDA · v0.9.6".
+// - 2. Gear: the section "Share with KS" has a switch that is OFF and the line "Off · nothing is sent."
+// - 3. Turn the switch ON. Within a minute the line reads "On · sent" and a few seconds ago, e.g. "On · sent 5s ago."
+// - 4. Reload the page: the line still reads "On · sent" and a time ago, and nothing new is sent.
+// - 5. Turn the switch OFF: the line reads "Off · nothing is sent." and the footer ends "Share with KS is off: KS receives nothing."
+//
+// HISTORY. The text of 0.9.5, which this version replaces:
 //
 // 0.9.5: Words on the screen only, after the first run on a computer (Chrome + Tampermonkey, 2026-10-24). No logic, request,
 // storage or layout changes.
@@ -291,11 +335,12 @@
 // - Network requests run only while the manually opened Torn page is visible and focused and this script's panel is
 //   mounted; they pause when hidden or unfocused. Nothing is requested on a Ranked War list.
 // - The entered key is sent over HTTPS to FFScouter for a user-triggered /register request and documented /check-key, /get-stats and /player-flights requests; visible target IDs are sent where those lookups require them.
-// - The entered key is also sent over HTTPS to Torn's official API for faction/basic member status and mapping.
+// - The entered key is also sent over HTTPS to Torn's official API for faction/basic member status and mapping and, with Share with KS on, for user/battlestats.
+// - With Share with KS on (off by default), the key is also sent over HTTPS, once per send, to the KS War Room server (ks-war-room-claims.hans-viklund.workers.dev) to confirm your Torn ID, and your own battle stats (five numbers) and Torn ID are sent there. The server never stores or logs the key and shows the numbers to nobody.
 // - KS Scout stores the key (unencrypted), settings, manual values, notes and caches only in this Torn PDA webview.
-// - KS Scout has no developer-operated server and its developer cannot access users' keys or data.
+// - With Share with KS off, KS Scout sends nothing to any KS server. With it on, the KS War Room server (a Cloudflare worker run by the developer) holds the submitted numbers until the KS server has fetched them, at most 7 days; the KS server keeps them to compute faction estimates.
 // - FFScouter is an independent third-party service and may store/use registered keys and related data under its own terms and data policy.
-// - Direct Torn API use by KS Scout is limited to faction/basic. Full-access keys are not required.
+// - Direct Torn API use by KS Scout is limited to faction/basic and, with Share with KS on, user/battlestats. Full-access keys are not required.
 // - KS Scout does not automate attacks, clicks, travel, purchases or any other Torn action.
 // - Torn API terms: https://www.torn.com/api.html
 // - Torn scripting rules: https://www.torn.com/rules.php
@@ -328,7 +373,7 @@
     }
 
     const NAME = "KS Scout";
-    const VERSION = "0.9.5";
+    const VERSION = "0.9.6";
     // Where the script runs, read once at start: Torn PDA injects PDA_httpGet (and its flutter bridge) before userscripts run;
     // Tampermonkey on a computer has neither. Only used for words on the screen ("PDA" / "PC", "this browser").
     const ON_TORN_PDA = typeof window.PDA_httpGet === "function" || typeof window.flutter_inappwebview !== "undefined";
@@ -387,6 +432,42 @@
     const STYLE_ID = "kss-styles";
 
     const CREATE_KEY_URL = "https://www.torn.com/preferences.php#tab=api?step=addNewKey&title=Kingshade%20Scout%20FFScouter&user=basic,battlestats,hof,attacks,personalstats&faction=basic";
+
+    // ---------------------------------------------------------------------------------------------
+    // Share with KS (0.9.6). Every constant of the switch is here.
+    // ---------------------------------------------------------------------------------------------
+    // The KS War Room server (a Cloudflare worker). With "Share with KS" off, nothing is ever sent to it. Same address as
+    // KS_SERVER.origin in War Dibs PDA.
+    const KS_WAR_ROOM_ORIGIN = "https://ks-war-room-claims.hans-viklund.workers.dev";
+    // Least time between two accepted sends (an accepted send and a duplicate both count). The same limit for every KS script.
+    const SHARE_INTERVAL_SECONDS = 21600;
+    // How often a page that stays open asks whether a send is due. The question itself makes no request.
+    const SHARE_CHECK_MS = 600000;
+    // A tab that starts a send holds this lock in the timing key; a live lock of another tab means: do nothing.
+    const SHARE_LOCK_SECONDS = 90;
+    // After a failure (no answer, 5xx, 503, not JSON): wait this many minutes, step by step, the last step for good.
+    const SHARE_BACKOFF_MINUTES = [15, 30, 60, 120, 360];
+    // After the server refused the form of a send (HTTP 400): no new try for this long (the client is wrong, never loop).
+    const SHARE_BAD_REQUEST_PAUSE_SECONDS = 86400;
+    // A 429 without retryAfterSeconds: wait this long.
+    const SHARE_429_DEFAULT_SECONDS = 3600;
+    // A session is renewed this long before the server's own limit.
+    const SHARE_SESSION_MARGIN_MS = 60000;
+    // The setting (enabled, and the key the server refused) and the timing shared by all KS scripts.
+    const SHARE_STORAGE_KEY = "kingshade-scout:share";
+    const SHARE_TIMING_KEY = "ks-share:battlestats";
+    // Sent as client.name; the server accepts A-Z a-z 0-9 space . _ - (1-40 characters).
+    const SHARE_CLIENT_NAME = "KS Scout PDA";
+    // Added with the switch (not in the assignment's list): the server refuses a stat above 10^12; a session lives 600 s when the
+    // server does not say; a retryAfterSeconds above one day is cut to one day; a tab that took the lock waits this long and reads it
+    // back, so that two tabs that start together do not both send.
+    const SHARE_STAT_MAX = 1e12;
+    const SHARE_SESSION_TTL_DEFAULT_SECONDS = 600;
+    const SHARE_RETRY_AFTER_MAX_SECONDS = 86400;
+    const SHARE_LOCK_SETTLE_MS = 250;
+    // Torn PDA answers an identical POST (same address, headers and body) sent less than 2 s after the first with nothing at all
+    // (its PDA_httpPost de-duplicates). The one new sign-in after a 401 therefore waits this long.
+    const SHARE_RELOGIN_WAIT_MS = 2100;
 
     const FILTERS = new Set(["all", "ready", "easy", "soon", "hospital", "travel", "unknown"]);
     const SORTS = new Set(["original", "ff", "status", "soon"]);
@@ -487,6 +568,18 @@
     let setupSectionsOpened = false;
     let registerRunning = false;
     let saveRunning = false;
+
+    // Share with KS. Nothing here is saved: the session and the counters live in memory only.
+    let shareOnCached = false; // the switch as last read from storage (the footer and the settings view use it)
+    let shareEpoch = 0; // raised when the switch changes or the key is saved again: an answer of an older epoch is thrown away
+    let shareRunning = null; // the send in progress (one at a time in a tab)
+    let shareCheckTimer = null;
+    let shareRetryTimer = null;
+    let shareSession = null; // { token, expiresAtMs, clockOffsetMs }
+    let shareFailureStreak = 0;
+    let shareKeyHashCache = { key: "", hash: "" };
+    let shareLockId = "";
+    let shareHoldUntilMs = 0; // after a Torn answer that gave nothing to send: no new try before this time (not saved)
 
     const memoryCache = new Map();
     const factionDirectoryCache = new Map();
@@ -2223,6 +2316,8 @@
                 }
                 refreshAutoStatusLine();
                 updatePanel();
+                // Share with KS: the status request is done, so a send that waited for it may start.
+                shareCheck();
             }
         }
     }
@@ -4132,6 +4227,7 @@
         clearTimeout(ffRetryTimer);
         ffRetryTimer = null;
         stopUiTick();
+        stopShare();
         stopDetectProbe();
         abortActiveRequests();
         disconnectHeaderListener();
@@ -4174,6 +4270,7 @@
         if (mounted) {
             startUiTick();
             scheduleStatusRefresh(0);
+            shareCheck();
         }
         scheduleScan(resumeScanWhenVisible ? 0 : 80);
         startDetectProbe();
@@ -4245,6 +4342,548 @@
             mounted,
             data: localDataCounts()
         };
+    }
+
+
+    // ---------------------------------------------------------------------------------------------
+    // Share with KS (0.9.6). With the switch ON, the member's OWN battle stats go to the KS War Room server: three requests in
+    // this order (Torn battlestats, sign-in, submit), at most once per SHARE_INTERVAL_SECONDS, only while this page is open,
+    // visible and focused and the panel is mounted. With the switch OFF nothing is read and nothing is sent.
+    // The stats live in local variables of one send. They are never written to the page, the console, storage or a message.
+    // ---------------------------------------------------------------------------------------------
+
+    function shareNowSeconds() {
+        return Math.floor(Date.now() / 1000);
+    }
+
+    function shareSeconds(value) {
+        const number = Number(value);
+        return Number.isFinite(number) && number > 0 ? Math.floor(number) : 0;
+    }
+
+    // kingshade-scout:share = { schemaVersion:1, enabled, refusedKeyHash?, refusedReason?, pauseKind?, pauseError? }.
+    // Missing or unreadable means: off.
+    function readShareRecord() {
+        try {
+            const parsed = JSON.parse(localStorage.getItem(SHARE_STORAGE_KEY) || "null");
+            if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+        } catch {}
+        return {};
+    }
+
+    // A field in the patch whose value is undefined is removed.
+    function writeShareRecord(patch) {
+        const next = { ...readShareRecord(), ...patch, schemaVersion: 1 };
+        for (const field of Object.keys(next)) if (next[field] === undefined) delete next[field];
+        try { localStorage.setItem(SHARE_STORAGE_KEY, JSON.stringify(next)); } catch {}
+        return next;
+    }
+
+    // Read from storage every time, so that a switch turned off in another tab stops this tab too.
+    function shareEnabled() {
+        shareOnCached = readShareRecord().enabled === true;
+        return shareOnCached;
+    }
+
+    // ks-share:battlestats = { schemaVersion:1, lastAcceptedAt, nextAllowedAt, lockUntil, sender } (unix seconds), the same for
+    // every KS script. lockOwner is a random word that tells the tabs of one browser apart. Fields of other scripts are kept.
+    function readShareTiming() {
+        let raw = {};
+        try {
+            const parsed = JSON.parse(localStorage.getItem(SHARE_TIMING_KEY) || "null");
+            if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) raw = parsed;
+        } catch {}
+        return {
+            raw,
+            lastAcceptedAt: shareSeconds(raw.lastAcceptedAt),
+            nextAllowedAt: shareSeconds(raw.nextAllowedAt),
+            lockUntil: shareSeconds(raw.lockUntil),
+            lockOwner: typeof raw.lockOwner === "string" ? raw.lockOwner : "",
+            sender: typeof raw.sender === "string" ? raw.sender : ""
+        };
+    }
+
+    function writeShareTiming(patch) {
+        const current = readShareTiming();
+        const next = {
+            ...current.raw,
+            schemaVersion: 1,
+            lastAcceptedAt: current.lastAcceptedAt,
+            nextAllowedAt: current.nextAllowedAt,
+            lockUntil: current.lockUntil,
+            lockOwner: current.lockOwner,
+            sender: current.sender,
+            ...patch
+        };
+        if (!next.lockOwner) delete next.lockOwner;
+        try { localStorage.setItem(SHARE_TIMING_KEY, JSON.stringify(next)); } catch {}
+    }
+
+    // Seconds until a send may start, counted from the timing key alone (0 = due).
+    function shareDueIn(now) {
+        const timing = readShareTiming();
+        // A time far in the future (the phone's clock was wrong once) must not block for good.
+        const last = timing.lastAcceptedAt > now + 300 ? 0 : timing.lastAcceptedAt;
+        const next = timing.nextAllowedAt > now + 2 * SHARE_BAD_REQUEST_PAUSE_SECONDS ? 0 : timing.nextAllowedAt;
+        const byInterval = last ? last + SHARE_INTERVAL_SECONDS - now : 0;
+        return Math.max(0, byInterval, next - now);
+    }
+
+    function shareFallbackHash(text) {
+        let a = 0x811c9dc5;
+        let b = 0x01000193;
+        for (let index = 0; index < text.length; index++) {
+            const code = text.charCodeAt(index);
+            a = Math.imul(a ^ code, 0x01000193) >>> 0;
+            b = Math.imul(b + code, 0x85ebca6b) >>> 0;
+            b ^= b >>> 13;
+        }
+        return a.toString(16).padStart(8, "0") + b.toString(16).padStart(8, "0");
+    }
+
+    // SHA-256 of the key, the first 16 hex characters. The key itself is never saved; this is all that is kept of it.
+    async function shareKeyHash(key) {
+        if (shareKeyHashCache.key === key && shareKeyHashCache.hash) return shareKeyHashCache.hash;
+        let hash = "";
+        try {
+            const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(key));
+            hash = Array.from(new Uint8Array(digest)).slice(0, 8).map(byte => byte.toString(16).padStart(2, "0")).join("");
+        } catch {}
+        if (!hash) hash = shareFallbackHash(key);
+        shareKeyHashCache = { key, hash };
+        return hash;
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // What the settings view says. Words only; never a number out of the stats.
+    // ---------------------------------------------------------------------------------------------
+
+    const SHARE_REFUSED_TEXT = {
+        no_battlestats: "Not sent · your key has no battle stats access. Create a key with the link below and save it.",
+        not_a_member: "Not sent · this key is not in the faction. Sharing is for faction members only.",
+        key_rejected: "Not sent · the KS server rejected the key."
+    };
+
+    function shareStatusView() {
+        if (!shareOnCached) return { text: "Off · nothing is sent.", tone: "unknown", keyLink: false };
+        const record = readShareRecord();
+        const timing = readShareTiming();
+        const now = shareNowSeconds();
+        const key = getApiKey();
+
+        if (record.refusedKeyHash && key && shareKeyHashCache.key === key && shareKeyHashCache.hash === record.refusedKeyHash) {
+            const text = SHARE_REFUSED_TEXT[record.refusedReason] || SHARE_REFUSED_TEXT.key_rejected;
+            return { text, tone: "stop", keyLink: record.refusedReason === "no_battlestats" };
+        }
+
+        const remaining = timing.nextAllowedAt - now;
+        if (remaining > 0 && remaining <= 2 * SHARE_BAD_REQUEST_PAUSE_SECONDS) {
+            const wait = formatCountdown(remaining);
+            if (record.pauseKind === "offline") return { text: `On · KS server offline · retry in ${wait}.`, tone: "wait", keyLink: false };
+            if (record.pauseKind === "data") {
+                const word = /^[a-z_]{1,40}$/.test(String(record.pauseError || "")) ? record.pauseError : "error";
+                return { text: `Not sent · the KS server refused the data (${word}). Update KS Scout.`, tone: "stop", keyLink: false };
+            }
+            if (record.pauseKind === "unreadable") return { text: "Not sent · Torn's answer could not be read.", tone: "stop", keyLink: false };
+            return { text: `On · waiting ${wait} · the KS server asked to wait.`, tone: "wait", keyLink: false };
+        }
+
+        if (!suiteDataEnabled()) return { text: "On · waiting for a saved API key.", tone: "wait", keyLink: false };
+        if (timing.lastAcceptedAt > 0 && timing.lastAcceptedAt <= now + 300) {
+            return { text: `On · sent ${formatAgo(Math.max(0, now - timing.lastAcceptedAt))}.`, tone: "go", keyLink: false };
+        }
+        return { text: "On · next send when this page is open and 6 hours have passed.", tone: "unknown", keyLink: false };
+    }
+
+    function renderShareSettings(panel) {
+        const $ = key => panel.querySelector(`[data-k="${key}"]`);
+        const toggle = $("shareToggle");
+        if (toggle && toggle.checked !== shareOnCached) toggle.checked = shareOnCached;
+        const view = shareStatusView();
+        const line = $("sharestatus");
+        if (line) {
+            setIfChanged(line, view.text);
+            if (line.dataset.tone !== view.tone) line.dataset.tone = view.tone;
+        }
+        // The link that creates a key with battle stats access exists only while the line asks for it.
+        const link = $("sharekeylink");
+        if (view.keyLink && !link && line) {
+            const anchor = document.createElement("a");
+            anchor.className = "kss-link";
+            anchor.dataset.k = "sharekeylink";
+            anchor.href = CREATE_KEY_URL;
+            anchor.target = "_blank";
+            anchor.rel = "noopener noreferrer";
+            anchor.textContent = "Create custom API key";
+            line.insertAdjacentElement("afterend", anchor);
+        } else if (!view.keyLink && link) {
+            link.remove();
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // The switch
+    // ---------------------------------------------------------------------------------------------
+
+    // Off: a send in progress is cut off (its answer is thrown away), nothing new is sent, the sign-in is forgotten.
+    // On: the first try is made at once when the conditions of shareCheck hold.
+    function setShareEnabled(on) {
+        shareEpoch += 1;
+        clearTimeout(shareRetryTimer);
+        shareRetryTimer = null;
+        shareSession = null;
+        shareFailureStreak = 0;
+        shareHoldUntilMs = 0;
+        writeShareRecord({ enabled: Boolean(on) });
+        shareOnCached = Boolean(on);
+        dlog(on ? "share: switched on" : "share: switched off");
+        updatePanel();
+        if (on) shareCheck();
+    }
+
+    // The key was saved again or removed. A key the server refused gets a new chance (its access may have been changed on Torn's
+    // site without changing the key), and the old sign-in is forgotten.
+    function shareKeyChanged() {
+        shareEpoch += 1;
+        shareSession = null;
+        shareHoldUntilMs = 0;
+        shareKeyHashCache = { key: "", hash: "" };
+        const record = readShareRecord();
+        if (record.refusedKeyHash || record.refusedReason) writeShareRecord({ refusedKeyHash: undefined, refusedReason: undefined });
+        if (shareEnabled()) shareCheck();
+        else updatePanel();
+    }
+
+    function startShareTimer() {
+        if (shareCheckTimer) return;
+        shareCheckTimer = setInterval(() => {
+            if (destroyed || !isPageVisible()) return;
+            shareCheck();
+        }, SHARE_CHECK_MS);
+    }
+
+    function stopShare() {
+        clearInterval(shareCheckTimer);
+        shareCheckTimer = null;
+        clearTimeout(shareRetryTimer);
+        shareRetryTimer = null;
+        shareSession = null;
+    }
+
+    function scheduleShareRetry(delayMs) {
+        clearTimeout(shareRetryTimer);
+        shareRetryTimer = setTimeout(() => {
+            shareRetryTimer = null;
+            shareCheck();
+        }, Math.max(100, Math.ceil(delayMs)));
+    }
+
+    // Asks whether a send is due and starts one if it is. Makes no request itself. Called when the panel is mounted, when the page
+    // comes back, when the switch is turned on or the key saved, when a status request has ended and every SHARE_CHECK_MS.
+    function shareCheck() {
+        if (!shareEnabled() || destroyed || shareRunning) return;
+        if (!mounted || blockedRoute() || !isPageVisible() || !suiteDataEnabled()) return;
+        // A key the server refused is not tried again (the hash is worked out once per key, then the check goes on).
+        const key = getApiKey();
+        if (shareKeyHashCache.key !== key) {
+            shareKeyHash(key).then(() => {
+                updatePanel();
+                shareCheck();
+            });
+            return;
+        }
+        if (readShareRecord().refusedKeyHash === shareKeyHashCache.hash) return;
+        if (Date.now() < shareHoldUntilMs) return;
+        if (shareDueIn(shareNowSeconds()) > 0) return;
+        if (tornRequestsBlocked()) {
+            if (tornPaused()) scheduleShareRetry(tornPausedUntil - Date.now() + 500);
+            return;
+        }
+        // The faction status goes first: it must have an answer, and none may be on its way.
+        if (statusRequestRunning || !matchingSnapshot()) return;
+        const startedEpoch = shareEpoch;
+        const running = shareSend().finally(() => {
+            if (shareRunning === running) shareRunning = null;
+            if (startedEpoch !== shareEpoch) shareCheck();
+        });
+        shareRunning = running;
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Tab lock: one send at a time in a browser (PC: several tabs).
+    // ---------------------------------------------------------------------------------------------
+
+    // A live lock (lockUntil in the future) means somebody is sending. A lock without lockOwner comes from another KS script
+    // (War Dibs writes its lock without that field), and it is respected too. Scout's own lock cannot block Scout for good: it
+    // is released in the finally of shareSend and runs out after SHARE_LOCK_SECONDS.
+    async function shareTakeLock() {
+        const now = shareNowSeconds();
+        const timing = readShareTiming();
+        if (timing.lockUntil > now) return false;
+        const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+        shareLockId = id;
+        writeShareTiming({ lockUntil: now + SHARE_LOCK_SECONDS, lockOwner: id });
+        await wait(SHARE_LOCK_SETTLE_MS);
+        if (readShareTiming().lockOwner !== id) {
+            shareLockId = "";
+            return false;
+        }
+        return true;
+    }
+
+    function shareReleaseLock() {
+        if (!shareLockId) return;
+        if (readShareTiming().lockOwner === shareLockId) writeShareTiming({ lockUntil: 0, lockOwner: "" });
+        shareLockId = "";
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // What a server answer does to the saved state
+    // ---------------------------------------------------------------------------------------------
+
+    function sharePause(kind, seconds, error) {
+        writeShareTiming({ nextAllowedAt: shareNowSeconds() + seconds });
+        writeShareRecord({ pauseKind: kind, pauseError: error });
+    }
+
+    // Status 0, 5xx, 503, not JSON, anything unexpected: 15 min, then 30, 60, 120, at most 360.
+    function shareBackoff() {
+        const minutes = SHARE_BACKOFF_MINUTES[Math.min(shareFailureStreak, SHARE_BACKOFF_MINUTES.length - 1)];
+        shareFailureStreak += 1;
+        sharePause("offline", minutes * 60);
+        dlog("share: offline retry=" + minutes + "m");
+    }
+
+    // 429: never a new try before the time the server named (saved, so that it holds over a page load).
+    function shareRateLimited(body) {
+        const asked = Number(body?.retryAfterSeconds);
+        const seconds = Number.isFinite(asked) && asked > 0
+            ? Math.min(SHARE_RETRY_AFTER_MAX_SECONDS, Math.ceil(asked))
+            : SHARE_429_DEFAULT_SECONDS;
+        sharePause("rate", seconds);
+        dlog("share: 429 retry=" + seconds);
+    }
+
+    // The server refused THIS key: remembered as a hash of the key, never the key.
+    function shareRefuseKey(hash, reason) {
+        writeShareRecord({ refusedKeyHash: hash, refusedReason: reason, pauseKind: undefined, pauseError: undefined });
+        shareSession = null;
+        dlog("share: key refused reason=" + reason);
+    }
+
+    function shareAccepted(body) {
+        const duplicate = body?.accepted === false;
+        writeShareTiming({ lastAcceptedAt: shareNowSeconds(), sender: SHARE_CLIENT_NAME });
+        writeShareRecord({ pauseKind: undefined, pauseError: undefined });
+        shareFailureStreak = 0;
+        dlog(duplicate ? "share: duplicate" : "share: accepted seq=" + (Number.isSafeInteger(body?.seq) ? body.seq : 0));
+    }
+
+    // The sign-in answer. Returns the session, or null when the answer was dealt with (and saved).
+    function shareApplyLogin(login, hash) {
+        const body = login.body;
+        const error = body ? String(body.error || "") : "";
+        if (login.status === 200 && body?.ok === true && typeof body.session === "string" && body.session) {
+            const issuedAt = Number(body.issuedAt);
+            if (!Number.isFinite(issuedAt) || issuedAt <= 0) {
+                shareBackoff();
+                return null;
+            }
+            const ttl = Number(body.sessionTtlSeconds);
+            const ttlMs = (Number.isFinite(ttl) && ttl > 0 ? ttl : SHARE_SESSION_TTL_DEFAULT_SECONDS) * 1000;
+            shareSession = {
+                token: body.session,
+                hash,
+                expiresAtMs: Date.now() + Math.max(1000, ttlMs - SHARE_SESSION_MARGIN_MS),
+                // The server's clock minus this phone's clock, so that observedAt follows the server.
+                clockOffsetMs: issuedAt - login.recvMs
+            };
+            return shareSession;
+        }
+        if ((login.status === 400 && error === "invalid_key") || (login.status === 401 && error === "key_rejected" && body?.retryable !== true)) {
+            shareRefuseKey(hash, "key_rejected");
+        } else if (login.status === 403 && error === "not_a_member") {
+            shareRefuseKey(hash, "not_a_member");
+        } else if (login.status === 429) {
+            shareRateLimited(body);
+        } else {
+            shareBackoff();
+        }
+        return null;
+    }
+
+    // The submit answer. Returns "relogin" for a 401 (the caller signs in ONCE more), otherwise "done".
+    function shareApplySubmit(result) {
+        const body = result.body;
+        if (result.status === 200 && body?.ok === true && (body.accepted === true || (body.accepted === false && body.reason === "duplicate"))) {
+            shareAccepted(body);
+            return "done";
+        }
+        if (result.status === 401) return "relogin";
+        if (result.status === 429) {
+            shareRateLimited(body);
+        } else if (result.status === 400) {
+            const word = String(body?.error || "");
+            sharePause("data", SHARE_BAD_REQUEST_PAUSE_SECONDS, /^[a-z_]{1,40}$/.test(word) ? word : "error");
+            dlog("share: 400 refused");
+        } else {
+            shareBackoff();
+        }
+        return "done";
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // The requests
+    // ---------------------------------------------------------------------------------------------
+
+    // The only two paths this script uses on the KS War Room server.
+    function shareServerPath(op) {
+        if (op === "session") return "/session";
+        if (op === "submit") return "/intel/submit";
+        throw new Error("Blocked non-allowlisted KS server endpoint");
+    }
+
+    // POST with a JSON body. Returns { status, body, recvMs }; body is null when the answer was not a JSON object. A network
+    // failure is status 0. A page that went hidden or was taken down throws the usual stop error.
+    async function shareServerPost(op, payload, gen) {
+        let response;
+        try {
+            response = await httpPostJson(`${KS_WAR_ROOM_ORIGIN}${shareServerPath(op)}`, payload, gen);
+        } catch (error) {
+            if (isStopError(error)) throw error;
+            return { status: 0, body: null, recvMs: Date.now() };
+        }
+        const recvMs = Date.now();
+        let body = null;
+        try {
+            const parsed = JSON.parse(response.responseText || "");
+            if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) body = parsed;
+        } catch {}
+        return { status: Number(response.status) || 0, body, recvMs };
+    }
+
+    // One of the five numbers out of Torn's answer: a whole number, or an object whose value is one.
+    function shareStatNumber(raw) {
+        const value = raw && typeof raw === "object" ? raw.value : raw;
+        return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= SHARE_STAT_MAX ? value : null;
+    }
+
+    // Reads Torn's answer to /v2/user/battlestats. Returns { kind: "ok", stats } or
+    //   "no_access" (Torn code 16), "unreadable" (an answer that does not hold five good numbers), "later" (anything else:
+    //   no answer, an HTTP error, a Torn error, the page paused Torn requests).
+    function shareReadBattleStats(response) {
+        let payload = null;
+        try { payload = JSON.parse(response.responseText || "null"); } catch {}
+        if (!payload || typeof payload !== "object") return { kind: "later" };
+        if (payload.error !== undefined && payload.error !== null) {
+            const code = Number(typeof payload.error === "object" ? payload.error.code : NaN);
+            if (code === 16) {
+                lastStatusAttemptFailed = false;
+                return { kind: "no_access" };
+            }
+            // Code 5 pauses every Torn request and the dead-key codes stop them: Scout's own handling, nothing is sent.
+            handleTornError(payload);
+            return { kind: "later" };
+        }
+        if (response.status !== 200) return { kind: "later" };
+        lastStatusAttemptFailed = false;
+        const source = payload.battlestats;
+        if (!source || typeof source !== "object") return { kind: "unreadable" };
+        const strength = shareStatNumber(source.strength);
+        const defense = shareStatNumber(source.defense);
+        const speed = shareStatNumber(source.speed);
+        const dexterity = shareStatNumber(source.dexterity);
+        const total = shareStatNumber(source.total);
+        if ([strength, defense, speed, dexterity, total].some(value => value === null)) return { kind: "unreadable" };
+        if (total !== strength + defense + speed + dexterity) return { kind: "unreadable" };
+        return { kind: "ok", stats: { strength, defense, speed, dexterity, total } };
+    }
+
+    async function shareSend() {
+        const epoch = shareEpoch;
+        const gen = generation;
+        const ours = () => epoch === shareEpoch && gen === generation && !destroyed && shareEnabled();
+        const key = getApiKey();
+        let locked = false;
+        try {
+            const hash = await shareKeyHash(key);
+            if (!ours()) return;
+            if (readShareRecord().refusedKeyHash === hash) {
+                updatePanel();
+                return;
+            }
+
+            locked = await shareTakeLock();
+            // Another tab may have sent while this one waited for the lock.
+            if (!locked || !ours() || shareDueIn(shareNowSeconds()) > 0) return;
+
+            // 1) Torn: the member's own battle stats, through Scout's Torn gate (the same floor as every Torn request). The floor
+            // is waited out here, with the lock held, so that this is the next Torn request; 5 ms after the floor is a little
+            // before the status request that waits for the same floor (+ 25 ms). A status request that gets in first moves the
+            // floor: look again, a few times at most.
+            for (let round = 0; round < 4 && ours() && !tornRequestsBlocked() && tornSendWaitMs(false) > 0; round++) {
+                await wait(tornSendWaitMs(false) + 5);
+            }
+            if (!ours() || tornRequestsBlocked()) return;
+            if (tornSendWaitMs(false) > 0) {
+                scheduleShareRetry(tornSendWaitMs(false) + 5);
+                return;
+            }
+            dlog("share: battlestats request");
+            const query = new URLSearchParams({ key, comment: "KingshadeScoutShare" });
+            const response = await tornGet(`${TORN_API_BASE}/v2/user/battlestats?${query}`, gen);
+            const localRecvMs = Date.now();
+            if (!ours()) return;
+            const read = shareReadBattleStats(response);
+            if (read.kind === "no_access") {
+                shareRefuseKey(hash, "no_battlestats");
+                return;
+            }
+            if (read.kind === "unreadable") {
+                sharePause("unreadable", SHARE_INTERVAL_SECONDS);
+                dlog("share: Torn answer could not be read");
+                return;
+            }
+            if (read.kind !== "ok") {
+                if (!tornPaused() && !tornKeyIsRejected()) shareHoldUntilMs = Date.now() + SHARE_CHECK_MS;
+                return;
+            }
+
+            // 2) The sign-in (only when there is no session) and 3) the submit. A 401 on the submit gives ONE new sign-in and ONE
+            // new submit, never more.
+            let session = shareSession && shareSession.hash === hash && Date.now() < shareSession.expiresAtMs ? shareSession : null;
+            for (let attempt = 0; attempt < 2; attempt++) {
+                if (!session) {
+                    if (attempt > 0) {
+                        await wait(SHARE_RELOGIN_WAIT_MS);
+                        if (!ours()) return;
+                    }
+                    const login = await shareServerPost("session", { apiKey: key }, gen);
+                    if (!ours()) return;
+                    session = shareApplyLogin(login, hash);
+                    if (!session) return;
+                }
+                const submit = await shareServerPost("submit", {
+                    session: session.token,
+                    schemaVersion: 1,
+                    kind: "battlestats",
+                    observedAt: Math.floor((localRecvMs + session.clockOffsetMs) / 1000),
+                    payload: read.stats,
+                    client: { name: SHARE_CLIENT_NAME, version: VERSION }
+                }, gen);
+                if (!ours()) return;
+                if (shareApplySubmit(submit) !== "relogin") return;
+                shareSession = null;
+                session = null;
+                if (attempt === 1) shareBackoff();
+            }
+        } catch (error) {
+            // A page that went hidden, was taken down or lost its panel: quiet. Anything else is kept out of the log (no text).
+            if (!isStopError(error)) dlog("share: stopped by an unexpected error");
+        } finally {
+            if (locked) shareReleaseLock();
+            updatePanel();
+        }
     }
 
 
@@ -4483,7 +5122,16 @@
     // Panel: one panel above the first member list
     // ---------------------------------------------------------------------------------------------
 
-    const FOOTER_TEXT = `Reads the faction page you have open, Torn's official API (faction basic) and FFScouter. Requests only while this page is open and focused, and never on a Ranked War list. Never clicks, attacks or navigates for you. Your key, settings, manual values and a short cache stay unencrypted in ${STORE_PLACE}. KS has no server and receives nothing.`;
+    const FOOTER_TEXT_BASE = `Reads the faction page you have open, Torn's official API (faction basic) and FFScouter. Requests only while this page is open and focused, and never on a Ranked War list. Never clicks, attacks or navigates for you. Your key, settings, manual values and a short cache stay unencrypted in ${STORE_PLACE}.`;
+    const FOOTER_SHARE_OFF = "Share with KS is off: KS receives nothing.";
+    const FOOTER_SHARE_ON = "Share with KS is on: every 6 hours your own battle stats (five numbers) go to the KS War Room server, never shown to anyone.";
+
+    // The last sentence follows the switch "Share with KS"; the footer is drawn again when the switch changes.
+    function footerText() {
+        return `${FOOTER_TEXT_BASE} ${shareOnCached ? FOOTER_SHARE_ON : FOOTER_SHARE_OFF}`;
+    }
+
+    const SHARE_EXPLANATION = "When on, KS Scout reads your own battle stats from Torn's API every 6 hours while this page is open and sends only the five numbers (strength, defense, speed, dexterity, total) to the KS War Room server. KS uses them only to turn Fair Fight results into stat estimates for the faction. They are never shown to anyone, inside or outside the faction. To confirm your Torn ID, your key is sent to the KS War Room server when KS Scout signs in (at most once per send); it is never stored or logged there. Turning this off stops all sending.";
 
     const CHIPS = [
         ["all", "All"],
@@ -4510,11 +5158,11 @@
     };
 
     const DISCLOSURE_ITEMS = [
-        ["Data storage", `KS Scout stores the key, settings, manual values, notes, cached FF/EST response data (including estimate/source/spy metadata), status data and travel data locally in ${STORE_PLACE} until cleared or removed. The key is stored unencrypted in ${STORE_PLACE}. FFScouter separately stores/uses registered key data under its own policy.`],
-        ["Data sharing", "Torn API receives the key for faction/basic. FFScouter receives the key for a registration request you explicitly trigger, plus /check-key, /get-stats and /player-flights; visible target IDs are included for stats and flight lookups. KS Scout has no server and its developer receives nothing."],
-        ["Purpose of use", "Register a new key with FFScouter only when you press the registration button; display FF/EST values; check FFScouter registration status/premium entitlement; show estimated flight landing/window/method; map visible faction members; and show faction status/timers, filters and sorting."],
-        ["Key storage & sharing", "KS Scout stores the key locally and sends it over HTTPS only to Torn API and FFScouter. FFScouter key storage/access is governed by its own terms and data policy."],
-        ["Key access level", "Custom key selections: user/basic, battlestats, hof, attacks, personalstats and faction/basic. Limited or Full access is not required."],
+        ["Data storage", `KS Scout stores the key, settings, manual values, notes, cached FF/EST response data (including estimate/source/spy metadata), status data and travel data locally in ${STORE_PLACE} until cleared or removed. The key is stored unencrypted in ${STORE_PLACE}. FFScouter separately stores/uses registered key data under its own policy. With Share with KS on, the KS War Room server (Cloudflare) holds your submitted battle stats until the KS server has fetched them, at most 7 days; the KS server keeps them to compute faction estimates. Nothing is stored on any server while it is off.`],
+        ["Data sharing", "Torn API receives the key for faction/basic and, with Share with KS on, for user/battlestats. FFScouter receives the key for a registration request you explicitly trigger, plus /check-key, /get-stats and /player-flights; visible target IDs are included for stats and flight lookups. With Share with KS on, your own battle stats and Torn ID go to the KS War Room server (ks-war-room-claims.hans-viklund.workers.dev). They are never shown to anyone, inside or outside the faction. With it off, KS receives nothing."],
+        ["Purpose of use", "Register a new key with FFScouter only when you press the registration button; display FF/EST values; check FFScouter registration status/premium entitlement; show estimated flight landing/window/method; map visible faction members; and show faction status/timers, filters and sorting. Share with KS (opt-in, off by default): turn Fair Fight results into stat estimates for the faction."],
+        ["Key storage & sharing", "KS Scout stores the key locally and sends it over HTTPS only to Torn API, FFScouter and, with Share with KS on, the KS War Room server to confirm your Torn ID at sign-in. The KS War Room server never stores or logs the key. FFScouter key storage/access is governed by its own terms and data policy."],
+        ["Key access level", "Custom key selections: user/basic, battlestats, hof, attacks, personalstats and faction/basic. Limited or Full access is not required. Share with KS needs user/battlestats (included in the link below)."],
         ["Active page & automation", "New requests pause whenever Torn is hidden or unfocused, and nothing is requested on a Ranked War list. No attacks, clicks, travel, purchases, crimes or other Torn actions are performed."]
     ];
 
@@ -4555,7 +5203,7 @@
                 <div data-k="settings" hidden></div>
                 <details class="ksui-foot" data-k="foot">
                     <summary>What KS Scout reads and stores</summary>
-                    <div class="kss-foottext">${escapeHtml(FOOTER_TEXT)}</div>
+                    <div class="kss-foottext">${escapeHtml(footerText())}</div>
                 </details>
             </div>
         `;
@@ -4587,6 +5235,10 @@
                     <button type="button" class="kss-btn kss-wide kss-primary" data-act="save">Save &amp; load data</button>
                 </div>
             </details>
+            <div class="ksui-label kss-h">Share with KS</div>
+            <label class="kss-check"><input data-k="shareToggle" type="checkbox"><span class="kss-box"></span><span class="kss-checktext">Share with KS</span></label>
+            <div class="kss-statusline" data-k="sharestatus" role="status"></div>
+            <div class="kss-dl" data-k="shareexplain">${escapeHtml(SHARE_EXPLANATION)}</div>
             <div class="ksui-label kss-h">Display</div>
             <label class="kss-check"><input data-k="showUnknown" type="checkbox"><span class="kss-box"></span><span class="kss-checktext">Show players with no data</span></label>
             <label class="kss-check"><input data-k="colorRows" type="checkbox"><span class="kss-box"></span><span class="kss-checktext">Colour rows by FF</span></label>
@@ -4638,8 +5290,10 @@
         mounted = true;
         connectHeaderListener();
         startUiTick();
+        startShareTimer();
         dlog("panel mounted");
         updatePanel();
+        shareCheck();
         return panelEl;
     }
 
@@ -4776,6 +5430,7 @@
         if (colorRows && colorRows.checked !== settings.colorRows) colorRows.checked = settings.colorRows;
         const namesAsText = $("namesAsText");
         if (namesAsText && namesAsText.checked !== settings.namesAsText) namesAsText.checked = settings.namesAsText;
+        renderShareSettings(panel);
 
         // As long as setup is missing, the key section and the disclosure are open. Done when SETUP arises (the view may
         // have been built while the data was on); after that the user may fold them.
@@ -4880,6 +5535,7 @@
         });
         setIfChanged($("maxFF"), formatMaxFF(settings.maxFF));
         setIfChanged($("soon"), `${settings.soonMinutes} min`);
+        setIfChanged(panel.querySelector(".kss-foottext"), footerText());
     }
 
     function onPanelClick(event) {
@@ -4960,6 +5616,8 @@
         } else if (input.dataset.k === "namesAsText") {
             updateSettings({ namesAsText: input.checked });
             decorate();
+        } else if (input.dataset.k === "shareToggle") {
+            setShareEnabled(input.checked);
         }
     }
 
@@ -5053,6 +5711,7 @@
         clearRendered();
         reconcileDataState({ purgeApiCache: true });
         updatePanel();
+        shareKeyChanged();
     }
 
     // Saves the key and the acceptance, then loads the data. One retry when FFScouter answers HTTP 400.
@@ -5444,6 +6103,7 @@
         }
 
         settings = loadSettings();
+        shareEnabled();
         retireLegacyModules();
         retireLegacyWarTools();
         removeLegacyDom();
