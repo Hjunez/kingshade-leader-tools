@@ -715,7 +715,9 @@
           <dd>Your Torn key and your FFScouter key if you gave one, in this browser's local storage
             on this device, as plain text &mdash; this page does not encrypt them. They stay until
             you press Forget key or clear the browser's site data. The column you last sorted the
-            list by is kept there too. Your choice for Honor bars is kept there as well, once you have
+            list by is kept there too. For the war that is running, the honor number of each player on
+            the other side is kept there as well, and removed when the war is over or when you press
+            Forget key. Your choice for Honor bars is kept there as well, once you have
             pressed that button. Your choice between the dark and the light theme is kept there as
             well, once you have pressed that button. Nothing else &mdash; and not the sign-in slip. Each key has
             its own Forget button above.</dd>
@@ -747,9 +749,13 @@
             To know which bar a player wears, this page reads the honor ID from the same profile call
             it already makes for life: once per target and war, at most ten a minute, never while a
             target is about to leave hospital (3:00 or less left), and only while this page is on
-            screen. The picture itself is loaded straight from <code>www.torn.com</code> by your
-            browser; this page does not copy it, does not save it and sends no page address along with
-            the request. Torn staff have approved this. The Honor bars button above the list switches
+            screen. The honor numbers &mdash; only the number for each player, nothing else about
+            them &mdash; are kept in this browser for the war that is running, so a reload does not
+            read everyone again; they are removed when the war is over, when you press Forget key
+            and when another key is used. The picture itself is loaded straight from
+            <code>www.torn.com</code> by your browser; this page does not copy it, does not save it
+            and sends no page address along with the request. Torn staff have approved this. The
+            Honor bars button above the list switches
             all of it off: no profile call for bars, no pictures, plain names. It is on until you turn
             it off on this device. Where anything is missing &mdash; no honor, a key without profile,
             a picture Torn does not deliver &mdash; the name is shown plain.</dd>
@@ -1560,6 +1566,9 @@
     var targets = null;    // [ { id, name, level, state, until } ]
     var ownNames = null;   // tornId -> name, our own faction, for labelling claim holders
     var stamps = { identity: 0, war: 0, targets: 0, ownNames: 0 };
+    // R24 addition: true when the LAST successful /faction/wars answer said there is no ranked war.
+    // A failed call leaves it as it was - then the page does not know. Only the honor numbers read it.
+    var noWar = false;
     var lastError = '';
     // Kept apart from lastError on purpose: this one carries the path and the
     // Torn code, and it is only ever shown in Advanced.
@@ -1694,7 +1703,7 @@
       }
       stamps.war = Date.now();
       var ranked = wars.ranked;
-      if (!ranked || typeof ranked !== 'object') { war = null; targets = null; return null; }
+      if (!ranked || typeof ranked !== 'object') { war = null; targets = null; noWar = true; return null; }
 
       // Torn's own second when the answer carries one, otherwise the clock this
       // page has bounded (the scripts' normalizeOwnWars). The first time, before
@@ -1716,7 +1725,8 @@
       var opponentId = theirs ? tornId(theirs.id) : '';
       // No war ID or no opponent means no war this page will act on. It never
       // falls back on an older war's ID.
-      if (!warId || !opponentId) { war = null; targets = null; return null; }
+      if (!warId || !opponentId) { war = null; targets = null; noWar = true; return null; }
+      noWar = false;
 
       var start = Number(ranked.start) || 0;
       var end = (ranked.end === null || ranked.end === undefined) ? null : Number(ranked.end);
@@ -1834,6 +1844,7 @@
     return {
       identity: function () { return identity; },
       war: function () { return war; },
+      noWar: function () { return noWar; },
       targets: function () { return targets; },
       nameOf: function (id) { return (ownNames && ownNames[id]) || ''; },
       stamps: function () { return stamps; },
@@ -1850,7 +1861,7 @@
       loadLife: loadLife,
       loadBasic: loadBasic,
       forget: function () {
-        identity = null; war = null; targets = null; ownNames = null;
+        identity = null; war = null; targets = null; ownNames = null; noWar = false;
         stamps = { identity: 0, war: 0, targets: 0, ownNames: 0 };
         lastError = ''; lastDiagnostic = '';
         Flights.forget();
@@ -2100,9 +2111,11 @@
   // =========================================================================
   // HONORS - the honor bar behind a player's name (R22).
   //
-  // Torn staff have approved two things: reading honor_id out of the user profile
-  // in the API, and loading the picture straight from Torn's own address, without
-  // copying or storing it. That is all this block does.
+  // Torn staff have approved three things: reading honor_id out of the user profile
+  // in the API, loading the picture straight from Torn's own address without copying
+  // or storing it, and (R24, 2026-11-04, "That's fine") keeping the honor_id NUMBER of
+  // each player in this member's own browser for the war that is running. That is all
+  // this block does.
   //
   //   - honor_id comes out of the same profile call Life uses (Roster.loadLife),
   //     so it goes through the page's one road to Torn and its 100 a minute
@@ -2110,7 +2123,14 @@
   //   - only while the Honor bars button is on, the page is on screen and the
   //     roster is there; never in the minutes a target is about to leave hospital
   //     (the life readings and the DIBS presses then have all the room)
-  //   - each target once a war; the result lives in memory and nowhere else
+  //   - each target once a war. The result lives in memory, and (R24) the honor ID of
+  //     every target read is also kept in this browser under HONOR_IDS_STORE, so a reload
+  //     does not read the whole roster again. What is kept: the schema version, the war
+  //     ID, the key owner's Torn ID, a time, and per target the number or null (read,
+  //     no bar). Never a key, a picture, a picture address or a name. It is taken in only
+  //     when the version, the war and the owner all match and every number is valid;
+  //     anything else removes it. It is removed when the war is over, on Forget key,
+  //     when another key owner appears and when Torn says the key is no good.
   //   - the picture is asked for once per honor ID per page load, with no referrer
   //
   // Nothing here decides anything about DIBS and nothing here reads CONFIG.
@@ -2122,11 +2142,14 @@
   var HONOR_PAUSE_SECONDS = 180;
   var HONOR_ID_MAX = 999999;
   var HONOR_STORE = 'ks-war-room-honors';
+  var HONOR_IDS_STORE = 'ks-war-room-honor-ids';
+  var HONOR_IDS_SCHEMA = 1;
+  var HONOR_IDS_MAX_ENTRIES = 2000;   // a roster is a few hundred; more than this is not ours
   var HONOR_RETRY_MAX = 3;
 
   var Honors = (function () {
     var on = read(HONOR_STORE) !== 'off';   // on unless this device was told otherwise
-    var outcomes = {};         // targetId -> { honorId or null, fetchedAt, source, schemaVersion }
+    var outcomes = {};         // targetId -> { honorId or null, fetchedAt, source ('torn-profile' | 'stored'), schemaVersion, gaveUp? }
     var failures = {};         // targetId -> readings that failed this war
     var images = {};           // honorId -> loading | ok | refused (kept for the page load)
     var held = {};             // honorId -> the Image that loaded it
@@ -2137,6 +2160,8 @@
     var retryAfter = 0;           // Torn code 5, 9 or 17: leave it alone until then
     var capabilityKey = '';
     var warKey = '';
+    var playerKey = '';        // R24: the Torn ID of the key's owner the values were read for
+    var storedFor = '';        // R24: "war|owner" the kept values were last checked for
     var contextSerial = 0;
 
     // A whole number from 1 to HONOR_ID_MAX, nothing else. It is the only thing that
@@ -2149,11 +2174,15 @@
       return isHonorId(honorId) ? HONOR_IMAGE_BASE + String(honorId) + '/f.png' : '';
     }
 
-    // A new key or a new war is a new question: what was read for the old one is gone.
+    // A new key, a new key owner or a new war is a new question: what was read for the old one
+    // is gone from memory. What is kept in the browser is checked again against the new one
+    // (keepStore), which takes it in or removes it.
     function syncContext() {
       var key = el.apiKey.value.trim();
       var war = Roster.war();
       var warId = war ? war.warId : '';
+      var identity = Roster.identity();
+      var playerId = identity ? identity.playerId : '';
       var changed = false;
       if (key && key !== capabilityKey) {
         capabilityKey = key;
@@ -2166,11 +2195,111 @@
         warKey = warId;
         changed = true;
       }
+      if (playerId && playerId !== playerKey) {
+        playerKey = playerId;
+        changed = true;
+      }
       if (changed) {
         outcomes = {};
         failures = {};
+        storedFor = '';
         contextSerial += 1;
       }
+    }
+
+    // ---- R24: the honor numbers kept in this browser, for the war that is running ----
+
+    function clearStored() { write(HONOR_IDS_STORE, ''); }
+
+    // The kept text as values, or null when it is not exactly ours for this war and this key
+    // owner: the schema version, the war ID, the owner's Torn ID, a time, and for every target a
+    // Torn ID with a valid honor number or null. One thing wrong and all of it is refused.
+    function parseStored(text, warId, playerId) {
+      var data;
+      try { data = JSON.parse(text); } catch (e) { return null; }
+      if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+      if (data.schemaVersion !== HONOR_IDS_SCHEMA || data.warId !== warId || data.playerId !== playerId) return null;
+      if (typeof data.savedAt !== 'number' || !Number.isFinite(data.savedAt) || data.savedAt <= 0) return null;
+      if (!data.ids || typeof data.ids !== 'object' || Array.isArray(data.ids)) return null;
+      var keys = Object.keys(data.ids);
+      if (keys.length > HONOR_IDS_MAX_ENTRIES) return null;
+      var ids = {};
+      for (var i = 0; i < keys.length; i++) {
+        var value = data.ids[keys[i]];
+        if (!/^[0-9]{1,12}$/.test(keys[i])) return null;
+        if (value !== null && !isHonorId(value)) return null;
+        ids[keys[i]] = value;
+      }
+      return { savedAt: data.savedAt, ids: ids };
+    }
+
+    // Every second, from kick(). The first time the war and the key owner are both known (and
+    // again whenever either changes) the kept values are taken in or removed. A war that is over
+    // has no kept values at all.
+    function keepStore() {
+      var war = Roster.war();
+      var identity = Roster.identity();
+      if (!identity) return;
+      if (!war) {
+        // Torn answered, successfully, that no ranked war exists: there is no war to keep numbers for.
+        // A failed answer never gets here (Roster.noWar() stays as it was), so then nothing is removed.
+        if (Roster.noWar()) {
+          var kept = !!read(HONOR_IDS_STORE);
+          if (kept || Object.keys(outcomes).length) contextSerial += 1;
+          if (kept) clearStored();
+          outcomes = {};
+          failures = {};
+          storedFor = '';
+        }
+        return;
+      }
+      var scope = war.warId + '|' + identity.playerId;
+      if (war.state === 'over') {
+        if (read(HONOR_IDS_STORE)) clearStored();
+        storedFor = scope;
+        return;
+      }
+      if (scope === storedFor) return;
+      storedFor = scope;
+      var text = read(HONOR_IDS_STORE);
+      if (!text) return;
+      var parsed = parseStored(text, war.warId, identity.playerId);
+      if (!parsed) { clearStored(); return; }
+      Object.keys(parsed.ids).forEach(function (targetId) {
+        if (outcomes[targetId]) return;
+        outcomes[targetId] = { honorId: parsed.ids[targetId], fetchedAt: parsed.savedAt, source: 'stored', schemaVersion: 1 };
+      });
+      preloadAll();
+    }
+
+    // After a reading was accepted: the whole picture is written again, one write per reading.
+    // Only for the war and the key owner the values were checked for, and never for a war that is
+    // over. A target that gave up after failed readings is not kept (it is read again next time).
+    function persist() {
+      var war = Roster.war();
+      var identity = Roster.identity();
+      if (!war || !identity || war.state === 'over') return;
+      if (warKey !== war.warId || storedFor !== war.warId + '|' + identity.playerId) return;
+      var ids = {};
+      var count = 0;
+      Object.keys(outcomes).forEach(function (targetId) {
+        var outcome = outcomes[targetId];
+        if (outcome.gaveUp) return;
+        ids[targetId] = outcome.honorId;
+        count += 1;
+      });
+      if (!count) return;
+      write(HONOR_IDS_STORE, JSON.stringify({
+        schemaVersion: HONOR_IDS_SCHEMA, warId: war.warId, playerId: identity.playerId, savedAt: Date.now(), ids: ids
+      }));
+    }
+
+    // The picture of every bar that is known, asked for once per honor ID. Only while the button is on.
+    function preloadAll() {
+      if (!on) return;
+      Object.keys(outcomes).forEach(function (targetId) {
+        if (outcomes[targetId].honorId !== null) preload(outcomes[targetId].honorId);
+      });
     }
 
     function targetById(targetId) {
@@ -2235,7 +2364,7 @@
     function failed(targetId) {
       failures[targetId] = (failures[targetId] || 0) + 1;
       if (failures[targetId] >= HONOR_RETRY_MAX) {
-        outcomes[targetId] = { honorId: null, fetchedAt: Date.now(), source: 'torn-profile', schemaVersion: 1 };
+        outcomes[targetId] = { honorId: null, fetchedAt: Date.now(), source: 'torn-profile', schemaVersion: 1, gaveUp: true };
       }
     }
 
@@ -2278,6 +2407,7 @@
           var payload = await Roster.loadLife(id);
           if (!current()) return;
           if (accept(id, payload, startedAt)) {
+            persist();
             var honorId = outcomes[id].honorId;
             if (honorId !== null) {
               preload(honorId);
@@ -2292,10 +2422,12 @@
           if (apiCode === 16) {
             profileMissing = true;
             outcomes = {};
+            clearStored();
             renderTargets();
           } else if (apiCode === 2 || apiCode === 10 || apiCode === 13 || apiCode === 18) {
             keyFailureCode = apiCode;
             outcomes = {};
+            clearStored();
             renderTargets();
           } else if (apiCode === 5 || apiCode === 9 || apiCode === 17) {
             retryAfter = Date.now() + 60000;
@@ -2319,20 +2451,23 @@
       if (step.what === 'off') return 'off on this device';
       if (step.what === 'no-profile') return 'key lacks profile · honor bars off';
       if (step.what === 'rejected') return 'API key rejected · honor bars off';
-      if (step.what === 'paused') return 'paused · a target is about to leave hospital';
       var targets = Roster.targets() || [];
-      var read = 0, shown = 0, bare = 0, refused = 0;
+      var read = 0, stored = 0, shown = 0, bare = 0, refused = 0;
       targets.forEach(function (target) {
         var outcome = outcomes[target.id];
         if (!outcome) return;
         read += 1;
+        if (outcome.source === 'stored') stored += 1;
         if (outcome.honorId === null) { bare += 1; return; }
         if (images[outcome.honorId] === 'ok') shown += 1;
         else if (images[outcome.honorId] === 'refused') refused += 1;
       });
-      var text = 'on · ' + read + ' of ' + targets.length + ' read · ' + shown + ' shown · ' + bare +
+      // R24: "N stored" says how many of the read ones came from this browser, not from Torn this time.
+      var text = 'on · ' + read + ' of ' + targets.length + ' read' + (stored > 0 ? ' · ' + stored + ' stored' : '') +
+        ' · ' + shown + ' shown · ' + bare +
         ' without a bar · ' + refused + (refused === 1 ? ' image' : ' images') + ' refused by Torn';
-      if (step.what === 'spacing') text += ' · next read in ' + Math.ceil(step.wait / 1000) + ' s';
+      if (step.what === 'paused') text += ' · paused, a target is about to leave hospital';
+      else if (step.what === 'spacing') text += ' · next read in ' + Math.ceil(step.wait / 1000) + ' s';
       else if (step.what === 'go') text += ' · next read now';
       else if (step.what === 'done') text += ' · all read';
       else if (step.what === 'busy') text += ' · waiting for a press to finish';
@@ -2347,6 +2482,7 @@
     // Called once a second by the second hand: starts a reading when everything allows it.
     function kick() {
       syncContext();
+      keepStore();
       var step = plan(Date.now());
       if (step.what === 'go') {
         var target = targetById(step.id);
@@ -2362,6 +2498,8 @@
       write(HONOR_STORE, on ? 'on' : 'off');
       contextSerial += 1;
       paint();
+      // R24: turned on again, the pictures of the numbers already known (read this time or kept) are asked for.
+      preloadAll();
       renderTargets();
       updateLine();
     }
@@ -2395,9 +2533,11 @@
       // a key is not a way round the spacing.
       forget: function () {
         outcomes = {}; failures = {};
-        capabilityKey = ''; warKey = '';
+        capabilityKey = ''; warKey = ''; playerKey = ''; storedFor = '';
         profileMissing = false; keyFailureCode = null; retryAfter = 0;
         contextSerial += 1;
+        // R24: the kept numbers go with the key.
+        clearStored();
       }
     };
   })();
