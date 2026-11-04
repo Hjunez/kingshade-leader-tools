@@ -576,6 +576,23 @@
     #targetHost tbody td:nth-child(4) { color: var(--r25-soft); }
   }
 
+  /* ---- R26 (2026-11): the clock in the war line ----
+     Counts down to the start of the war, then counts how long it has run. Set like the score (mono,
+     tabular figures) so the digits do not jitter, and in the page's ink colour so it reads at once
+     (the ink is 13.6:1 on the panel in dark and 16.5:1 in light, well over the 4.5:1 that R25 asks for). On a phone
+     the clock never gives way: it keeps its width and the meta text to its left, which already shortens
+     with an ellipsis, takes whatever room is left - so the row stays one line and never scrolls sideways. */
+  #warPanel { --r26-clock: #14202b; }
+  :root:not([data-theme="light"]) #warPanel { --r26-clock: #e3e9ef; }
+  .warbar .clock {
+    font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 14px; font-weight: 500;
+    color: var(--r26-clock); white-space: nowrap;
+  }
+  .warbar .clock:empty { display: none; }
+  @media (max-width: 700px) {
+    #warPanel .warbar .clock { font-size: 11px; flex: none; overflow: visible; }
+  }
+
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
@@ -788,7 +805,10 @@
             green online, gold idle, grey offline, no dot when Torn did not say or the reading
             is too old. Callable shows only the rows whose Take DIBS button can be pressed, and
             the one you hold; it is kept in memory in this tab and nowhere else. The war line
-            at the top stays in view while you scroll.</dd>
+            at the top stays in view while you scroll. The clock in it counts down to the start of
+            the war and then shows how long the war has run; it is counted with the Torn clock this
+            page has measured, not with this device's own, and says "Start time unknown" until it
+            has one.</dd>
           <dt>Honor bars</dt>
           <dd>Each row can show the player's honor bar behind the name, with the name written on it.
             To know which bar a player wears, this page reads the honor ID from the same profile call
@@ -822,6 +842,7 @@
     <div class="warbar">
       <span class="who" id="warWho">&mdash;</span>
       <span class="meta" id="warMeta"></span>
+      <span class="clock" id="warClock"></span>
       <span class="meta score" id="warScore"></span>
     </div>
   </section>
@@ -1563,7 +1584,7 @@
    'createKey','lifeSaid','aboutServer','advLife','advClock','advWipeNote',
    'ffKey','toggleFfKey','forgetFfKey','ffSaid','ffBar',
    'sessionSaid','sessionState','sessionRetry',
-   'warPanel','warWho','warMeta','warScore',
+   'warPanel','warWho','warMeta','warClock','warScore',
    'targetPanel','targetHint','staleBar','targetHost','callableBtn','honorBtn','advHonors','themeBtn',
    'simBanner','simRealWar','simWireWar','simResetBar','simResetBtn','simResetNote',
    'actionMessage','simResetButtonSize','simResetIdleSize','simResetArmedSize',
@@ -4573,6 +4594,51 @@
     scheduleGateWake();
   }
 
+  // R26. A length of time for the war clock, from whole seconds: "2d 14h 10m" from a day up, "3h 12m 40s"
+  // from an hour up, "09m 05s" under that. Days and a leading hour are written as they are, every other
+  // figure has two digits.
+  function warDuration(seconds) {
+    var two = function (n) { return (n < 10 ? '0' : '') + n; };
+    var d = Math.floor(seconds / 86400);
+    var h = Math.floor((seconds % 86400) / 3600);
+    var m = Math.floor((seconds % 3600) / 60);
+    var s = seconds % 60;
+    if (d >= 1) return d + 'd ' + two(h) + 'h ' + two(m) + 'm';
+    if (h >= 1) return h + 'h ' + two(m) + 'm ' + two(s) + 's';
+    return two(m) + 'm ' + two(s) + 's';
+  }
+
+  // A moment Torn gave as seconds since 1970; anything else (0, a string, a date in the year 1970 or 2100) is not one.
+  function isEpochSeconds(n) { return typeof n === 'number' && Number.isSafeInteger(n) && n > 1e9 && n < 4e9; }
+
+  // R26. The clock in the war line: counts down to the start of the war, then counts how long it has run.
+  // It is counted ONLY on the page's measure of Torn's clock (getTornNowMs), never on this device's own,
+  // and it is a drawing: the DIBS rule reads war.state, which only a reading of the war changes, so
+  // DIBS opens when the page has read that the war is live and not when this clock passes the start.
+  // Without a start Torn gave, or without a measure of Torn's clock, it says so instead of guessing.
+  // Called by renderWar and by the second hand; it asks Torn nothing and keeps nothing.
+  function renderWarClock() {
+    var war = Roster.war();
+    var text = '';
+    if (!el.warPanel.hidden && war) {
+      var start = isEpochSeconds(war.start) ? war.start : 0;
+      if (war.state === 'over') {
+        text = 'Ended' + (start && isEpochSeconds(war.end) && war.end > start
+          ? ' · lasted ' + warDuration(war.end - start) : '');
+      } else if (!start || !tornClockReady()) {
+        text = 'Start time unknown';
+      } else {
+        var untilStartMs = start * 1000 - getTornNowMs();
+        // A war the page has read as live never goes back to "Starts in": the measure sits at the low
+        // edge of Torn's second and may read a moment behind.
+        text = untilStartMs > 0 && war.state !== 'live'
+          ? 'Starts in ' + warDuration(Math.ceil(untilStartMs / 1000))
+          : 'Running ' + warDuration(Math.max(0, Math.floor(-untilStartMs / 1000)));
+      }
+    }
+    if (el.warClock.textContent !== text) el.warClock.textContent = text;
+  }
+
   function renderWar() {
     var identity = Roster.identity();
     var war = Roster.war();
@@ -4589,6 +4655,7 @@
       el.warMeta.textContent = 'Torn reports no ranked war for this faction right now, so there is ' +
         'nothing to call.';
       el.warScore.textContent = '';
+      renderWarClock();
       return;
     }
     el.warWho.textContent = 'vs ' + war.opponentName;
@@ -4598,6 +4665,7 @@
       : (SIM ? 'War is over — this page is simulating instead' : 'War is over — DIBS stays off'))
       + ' · war ' + war.warId;
     el.warScore.textContent = war.ourScore + ' – ' + war.theirScore;
+    renderWarClock();
   }
 
   function renderAdvanced() {
@@ -5446,6 +5514,7 @@
     // Which clock is being counted on can change between two full redraws -
     // a measure thrown away, a new one taken - and the line says so at once.
     el.advClock.textContent = tornClockLabel();
+    renderWarClock();
   }
   function startTargetClock() {
     if (targetClock === null) targetClock = setInterval(secondHand, 1000);
