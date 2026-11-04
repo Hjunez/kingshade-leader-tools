@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Black Market PC
 // @namespace    kingshade.ks-black-market
-// @version      0.4.0
+// @version      0.4.1
 // @description  Travel advisor: the best runs abroad for every item sold abroad, and when to leave Torn to land right after a restock, for members of Politically Incorrect. Reads from the KS Black Market server and, for your cash, travel method and item slots, from the Torn page you have open. Never clicks, navigates or contacts Torn.
 // @author       Kingshade
 // @match        https://www.torn.com/*
@@ -15,15 +15,15 @@
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Black_Market_PC.user.js
 // ==/UserScript==
 /*
- * KS Black Market 0.4.0 (PC) — disclosure
+ * KS Black Market 0.4.1 (PC) — disclosure
  * What it does : your travel advisor. It lists the best runs abroad for every item sold abroad, not only drugs (best
  *                trips, sell abroad, bring home) for the travel method and the number of item slots you pick, strictly
  *                ordered by the profit you can expect per hour of flying. For goods you bring home it also says WHEN to
  *                leave Torn to land right after a restock, and how likely it is that the stock is still there when you
  *                land. Black Market goods come with a profit range (q10 / q50 / q90); goods from an ordinary shop (which
  *                buys back at 75% of its price, a fixed price) come with a certain profit. Four buttons filter the
- *                lists: All, Drugs, Black Market, Shop items. Two more buttons order the lists: Most profit, or Leaving
- *                soonest. Tap a row for the details, including the cash you need (and, when your cash is known, what is
+ *                lists: All, Drugs, Black Market, Shop items. A "Sort:" menu orders the lists: most profit per hour, safest
+ *                landing, leaving soonest, or most per trip. Tap a row for the details, including the cash you need (and, when your cash is known, what is
  *                missing); there you can also star a row (it goes first) or hide it. Goods you bring home that you would buy
  *                in larger numbers than are listed near the price at home are shown apart, as "Thin market".
  *                The numbers (also the restock times) are calculated by the KS server from public price and stock data
@@ -39,7 +39,7 @@
  *                be picked, the flight times to the destination that is picked, the number of inventory slots and how many
  *                are in use. This is saved on your device (ksBm.v1.travel) and used for your travel method, your item
  *                slots (slots minus what is in use) and, when Torn's flight times differ from the table (an event), for
- *                the flight times. It is never sent anywhere. Torn PDA: the Travel Agency reading is verified on PC only.
+ *                the flight times. It is never sent anywhere.
  * Clicks       : none. It never clicks, submits or navigates. Besides what is listed under "Reads", the only thing it looks
  *                for on the page is whether a captcha is VISIBLE; then its own button hides (and nothing is read) until the
  *                captcha is gone. It never touches a captcha.
@@ -53,6 +53,10 @@
  * API key      : your own Torn key at access level Public is enough (no selections needed). It is used only for the
  *                faction membership check. If Torn rejects the key, or it does not belong to the faction, the saved
  *                key is removed and not tried again.
+ *
+ * CHANGELOG 0.4.1
+ * CHANGED      : sorting is now a 'Sort:' menu with four choices: most profit per hour, safest landing,
+ *                leaving soonest and most per trip. Reading the Travel Agency page is now verified on Torn PDA too.
  *
  * CHANGELOG 0.4.0
  * ADDED        : version number, sort by most profit or leaving soonest, cash check from Torn's sidebar, travel method and
@@ -104,7 +108,7 @@
  */
 (function () {
 'use strict';
-var KSBM_VERSION = '0.4.0';
+var KSBM_VERSION = '0.4.1';
 var KSBM_PLATFORM = 'PC';
 
 /* ================= KS Black Market — core (shared by PC and PDA) =================
@@ -160,8 +164,11 @@ var KSBM_CORE = (function () {
   var STEADY_MIN_QTY = 26;           // a STEADY row has at least this many in stock (the server's CANDIDATE_SLOTS)
   var RATE_MAX = 1e9;
   // 0.4.0 (stage 5)
-  var SORTS = ['profit', 'soon'];                                  // the two buttons: the key is what is saved under ksBm.v1.sort
-  var SORT_LABEL = { profit: 'Most profit', soon: 'Leaving soonest' };
+  // 0.4.1: the "Sort:" menu. The key is what is saved under ksBm.v1.sort; the labels are the texts of the four choices, in this order.
+  var SORTS = ['profit', 'safe', 'soon', 'trip'];
+  var SORT_LABEL = { profit: 'Most profit per hour', safe: 'Safest landing', soon: 'Leaving soonest', trip: 'Most per trip' };
+  var SORT_HELP = { profit: 'Sorted by expected profit per hour of flying.', safe: 'The 10 most profitable runs, safest landing first.',
+    soon: 'The 10 most profitable runs, soonest departure first.', trip: 'Sorted by expected profit per trip.' };
   var DEFAULT_SORT = 'profit';
   var THIN_MAX = 5;                  // the group "Thin market" shows at most this many rows (like the group of unknown chances)
   var KEYS_MAX = 200;                // starred and hidden rows: at most this many of each (the oldest one is dropped)
@@ -633,14 +640,18 @@ var KSBM_CORE = (function () {
     var rest = list.filter(function (x) { return !x.starred; }).sort(selectCmp).slice(0, Math.max(0, max - st.length)).sort(orderCmp);
     return st.concat(rest);
   }
+  // Expected profit per trip: the profit (q50) times the chance. null while the chance is not known.
+  function perTrip(x) { return x.chance ? x.basis * x.chance.p : null; }
   // Only runs that would pay (profit per trip above zero) are listed - a list of losses is no advice.
-  // ranked: entries whose chance is known. sort 'profit': strictly by expected profit per hour, the ten best. sort 'soon': the same ten
-  //   best, but the one that leaves soonest first (equal: the most per hour).
+  // ranked: entries whose chance is known. sort 'profit': strictly by expected profit per hour, the ten best. sort 'safe' and 'soon': the same
+  //   ten best (the ten most profitable per hour), but the one with the highest chance (unrounded; equal: the most per hour) / the one that leaves
+  //   soonest first (equal: the most per hour). sort 'trip': the ten with the highest expected profit per trip (equal: the most per hour).
   // unknown: entries whose chance is not known yet (no window, or no restock forecast) that would pay, by profit per trip.
   // thin: imports (and the home leg of trips) where you buy more than is listed near the price at home, by profit per trip.
   // o: { sort, nowS }
   function split(entries, o) {
-    var soon = !!o && o.sort === 'soon';
+    var sort = o && has(SORTS, o.sort) ? o.sort : DEFAULT_SORT;
+    var soon = sort === 'soon';
     var nowS = o && isNum(o.nowS) ? o.nowS : 0;
     var thin = entries.filter(function (x) { return x.thin; });
     var rest = entries.filter(function (x) { return !x.thin; });
@@ -648,17 +659,20 @@ var KSBM_CORE = (function () {
     var rankedAll = rest.filter(function (x) { return paying(x) && x.perHour !== null; });
     if (soon) rankedAll.forEach(function (x) { x.waitMin = waitMin(x, nowS); });
     var bySoon = function (a, b) { return a.waitMin !== b.waitMin ? a.waitMin - b.waitMin : byPerHour(a, b); };
+    var bySafe = function (a, b) { return a.chance.p !== b.chance.p ? b.chance.p - a.chance.p : byPerHour(a, b); };
+    var byTrip = function (a, b) { var x = perTrip(a), y = perTrip(b); return x !== y ? y - x : byPerHour(a, b); };
+    var order = sort === 'soon' ? bySoon : (sort === 'safe' ? bySafe : (sort === 'trip' ? byTrip : byPerHour));
     return {
-      ranked: pick(rankedAll, byPerHour, soon ? bySoon : byPerHour, LIST_MAX),
+      ranked: pick(rankedAll, sort === 'trip' ? byTrip : byPerHour, order, LIST_MAX),
       unknown: pick(rest.filter(function (x) { return paying(x) && x.perHour === null; }), byBasis, byBasis, UNKNOWN_MAX),
       thin: pick(thin.filter(paying), byBasis, byBasis, THIN_MAX)
     };
   }
 
   // The three lists of the panel for a latest.json, a method, a number of item slots and a filter. nowS = server time now.
-  // prefs (optional): { sort: 'profit' | 'soon', starred: [keys], hidden: [keys] }
+  // prefs (optional): { sort: 'profit' | 'safe' | 'soon' | 'trip', starred: [keys], hidden: [keys] }
   function advise(latest, method, n, flt, nowS, prefs) {
-    var sort = prefs && prefs.sort === 'soon' ? 'soon' : 'profit';
+    var sort = prefs && has(SORTS, prefs.sort) ? prefs.sort : DEFAULT_SORT;
     var starred = keySet(prefs && prefs.starred);
     var hidden = keySet(prefs && prefs.hidden);
     var all = evaluateAll(latest, method, n, flt, hidden);
@@ -678,14 +692,18 @@ var KSBM_CORE = (function () {
   var NO_RANGE_EXPORT = 'Not enough price history yet, so no range or chance.';
   var NO_RANGE_IMPORT = 'No price range yet (price history too short)';
   var UNKNOWN_GROUP_TITLE = 'Not enough history yet';
-  var LEGEND = 'Per hour = expected profit per hour of flying, after the 5% Item Market fee. Tap a row for details.';
+  // The line under the lists: what the chosen sort does, and always "Tap a row for details." last.
+  var TAP_HINT = 'Tap a row for details.';
+  function legendFor(sort) { return SORT_HELP[validSort(sort)] + ' ' + TAP_HINT; }
 
   // The two lines of a compact row. group: 'ranked' (the big number is expected profit per hour), 'unknown' (the chance is not known
   // yet; the big number is the profit per trip, which is what that group is sorted by) or 'thin' (you buy more than is listed near the
   // price at home; the big number is the profit per trip). cash: what you have, from Torn's sidebar, or null when it is not known.
-  function rowView(en, nowS, group, cash) {
+  // sort: the big number of a ranked row follows it: "/h" for per hour, safest landing and leaving soonest, "/trip" (expected profit per trip) for
+  // "Most per trip".
+  function rowView(en, nowS, group, cash, sort) {
     var left = en.kind === 'trip' ? en.name : en.name + (en.kind === 'export' ? ' → ' : ' ← ') + countryName(en.country);
-    var big = group === 'ranked' ? fmtPerHour(en.perHour) : fmtSignedCompact(en.basis) + '/trip';
+    var big = group === 'ranked' ? (sort === 'trip' ? fmtSignedCompact(perTrip(en)) + '/trip' : fmtPerHour(en.perHour)) : fmtSignedCompact(en.basis) + '/trip';
     var mark = en.needsStock && en.stockKnown ? timeMark(en.advice, nowS) : null;       // only when the chance of stock is known
     var parts = [];
     if (mark) parts.push(mark.text);
@@ -792,7 +810,8 @@ var KSBM_CORE = (function () {
   function validGroup(g) { return has(GROUPS, g) ? g : DEFAULT_GROUP; }
 
   function validTab(t) { return has(TABS, t) ? t : DEFAULT_TAB; }
-  function validSort(v) { return has(SORTS, v) ? v : DEFAULT_SORT; }
+  // A saved value of 0.4.0 or earlier: "soonest" is "soon"; anything that is not one of the four is "profit".
+  function validSort(v) { return v === 'soonest' ? 'soon' : (has(SORTS, v) ? v : DEFAULT_SORT); }
   function validMode(v) { return has(MODES, v) ? v : DEFAULT_MODE; }
   // The cash from Torn's sidebar (the data-money attribute): a whole number of at least 0, otherwise not known.
   function cleanCash(v) { return isInt(v) && v >= 0 && v <= MAX_MONEY ? v : null; }
@@ -1020,7 +1039,7 @@ var KSBM_CORE = (function () {
     timeMark: timeMark, chooseFromCurve: chooseFromCurve, chanceOf: chanceOf, sanitizeRestock: sanitizeRestock,
     clockOffsetS: clockOffsetS, serverNowS: serverNowS, fmtTct: fmtTct, fmtChance: fmtChance, fmtPerHour: fmtPerHour, fmtSellRate: fmtSellRate,
     LIST_MAX: LIST_MAX, UNKNOWN_MAX: UNKNOWN_MAX, HIDE_P: HIDE_P, SURE_P: SURE_P,
-    rowView: rowView, detailLines: detailLines, LEGEND: LEGEND, UNKNOWN_GROUP_TITLE: UNKNOWN_GROUP_TITLE, FIXED_PROFIT: FIXED_PROFIT,
+    rowView: rowView, detailLines: detailLines, legendFor: legendFor, SORT_HELP: SORT_HELP, perTrip: perTrip, UNKNOWN_GROUP_TITLE: UNKNOWN_GROUP_TITLE, FIXED_PROFIT: FIXED_PROFIT,
     FIXED_LOSS: FIXED_LOSS,
     clampSeats: clampSeats, validMethod: validMethod, buildView: buildView,
     NO_DATA_TEXT: NO_DATA_TEXT, fmtSigned: fmtSigned, fmtSignedCompact: fmtSignedCompact,
@@ -1495,9 +1514,8 @@ var KSBM_UI = (function () {
     '.tabs{display:none;gap:4px;margin:8px 0 2px;border-bottom:1px solid #333}.tabs.show{display:flex}',
     '.tabs button{flex:1;background:none;color:#aaa;border:0;border-bottom:3px solid transparent;padding:7px 4px;font-size:13px;cursor:pointer}',
     '.tabs button.on{color:#fff;font-weight:700;border-bottom-color:#8fd16f}',
-    '.sorts{display:none;gap:6px;margin:6px 0 0;align-items:center}.sorts.show{display:flex}',
-    '.sorts button{background:#2a2a2a;color:#ccc;border:1px solid #555;border-radius:13px;padding:3px 10px;font-size:12px;cursor:pointer}',
-    '.sorts button.on{background:#2f3f2b;border-color:#8fd16f;color:#fff;font-weight:700}',
+    '.sorts{display:none;gap:8px;margin:8px 0 0;align-items:center}.sorts.show{display:flex}.sorts label{color:#bbb;font-weight:700}',
+    '.sorts select{flex:1;min-width:0;height:40px;background:#262626;color:#eee;border:1px solid #555;border-radius:6px;padding:0 8px;font-size:14px}',
     '.row{padding:7px 2px;border-top:1px solid #2c2c2c;cursor:pointer}.row:first-child{border-top:0}',
     '.starbadge{display:inline-block;margin-left:6px;padding:0 5px;border-radius:3px;font-size:10.5px;font-weight:700;background:#5a4514;color:#f3dca3;vertical-align:1px}',
     '.acts{display:flex;gap:6px;margin:6px 0 2px}.acts button{background:#2a2a2a;color:#ddd;border:1px solid #555;border-radius:4px;padding:3px 10px;font-size:12px;cursor:pointer}',
@@ -1515,7 +1533,7 @@ var KSBM_UI = (function () {
     '.legend{margin-top:8px}',
     '.pda .bm{width:44px;height:44px;border-radius:22px}.pda button.btn{padding:8px 12px}.pda .close{font-size:26px;padding:0 8px}',
     '.pda .filters button{padding:10px 14px}.pda .tabs button{padding:11px 2px}.pda .row{padding:10px 2px}',
-    '.pda .sorts button{padding:8px 12px}.pda .acts button{padding:8px 12px}'
+    '.pda .sorts select{height:44px;font-size:15px}.pda .acts button{padding:8px 12px}'
   ].join('');
 
   function h(tag, cls, text) {
@@ -1536,7 +1554,6 @@ var KSBM_UI = (function () {
   var PRIVACY = 'Your key is sent only to the KS Black Market server, which checks with Torn that you are in Politically Incorrect. The server does not store it. A Public key is enough. This script never contacts Torn.';
   var NOTE = 'Measurement, not advice. Prices abroad change about every 5 minutes.';
   var EMPTY_TEXT = 'Nothing pays right now.';
-  var PDA_PAGE_NOTE = 'Reading the Travel Agency page is verified on PC only.';
   var THIN_TITLE = 'Thin market';
 
   /* cb: { onToggle(open), onSaveKey(text), onRemoveKey(), onMethod(m), onSeats(n), onGroup(g), onTab(t), onSort(s), onUseTorn(),
@@ -1601,12 +1618,11 @@ var KSBM_UI = (function () {
     var useTorn = h('button', 'btn sec', 'Use Torn\'s values');
     useTorn.type = 'button';
     var travelField = add(h('div', 'field'), travelNote, useTorn);
-    var pdaNote = platform === 'PDA' ? h('div', 'note', PDA_PAGE_NOTE) : null;
     var hiddenNote = h('span', 'note');
     var showAll = h('button', 'btn sec', 'Show all');
     showAll.type = 'button';
     var hiddenField = add(h('div', 'field'), hiddenNote, showAll);
-    add(settings, summary, versionNote, f1, f1b, travelField, pdaNote, f2, f3, f3b, hiddenField, discl);
+    add(settings, summary, versionNote, f1, f1b, travelField, f2, f3, f3b, hiddenField, discl);
 
     // ---- the filter above the tabs: All / Drugs / Black Market / Shop items
     var filters = h('div', 'filters');
@@ -1638,23 +1654,18 @@ var KSBM_UI = (function () {
       tabs.appendChild(b);
     });
 
-    // ---- how the lists are ordered: Most profit / Leaving soonest (all three tabs)
+    // ---- how the lists are ordered: one row, "Sort:" and a menu with four choices (all three tabs)
     var sorts = h('div', 'sorts');
-    sorts.setAttribute('role', 'group');
-    sorts.setAttribute('aria-label', 'Sort');
-    var sortBtns = {};
-    C.SORTS.forEach(function (k) {
-      var b = h('button', null, C.SORT_LABEL[k]);
-      b.type = 'button';
-      b.setAttribute('data-sort', k);
-      b.setAttribute('aria-pressed', 'false');
-      b.addEventListener('click', function () { cb.onSort(k); });
-      sortBtns[k] = b;
-      sorts.appendChild(b);
-    });
+    var sortLabel = h('label', null, 'Sort:');
+    sortLabel.setAttribute('for', 'ks-bm-sort');
+    var sortSel = h('select');
+    sortSel.id = 'ks-bm-sort';
+    C.SORTS.forEach(function (k) { var o = h('option', null, C.SORT_LABEL[k]); o.value = k; sortSel.appendChild(o); });
+    sortSel.addEventListener('change', function () { cb.onSort(sortSel.value); });
+    add(sorts, sortLabel, sortSel);
 
     var lists = h('div', 'lists');
-    var legend = h('div', 'note legend', C.LEGEND);
+    var legend = h('div', 'note legend', C.legendFor(C.DEFAULT_SORT));
     var foot = h('div', 'foot', NOTE);
     add(panel, head, meta, msg, settings, filters, tabs, sorts, lists, legend, foot);
     add(wrap, panel, btn);
@@ -1689,8 +1700,8 @@ var KSBM_UI = (function () {
       m.span.textContent = mark.text;
     }
 
-    function renderRow(en, group, nowS, cash) {
-      var rv = C.rowView(en, nowS, group, cash);
+    function renderRow(en, group, nowS, cash, sortKey) {
+      var rv = C.rowView(en, nowS, group, cash, sortKey);
       var r = h('div', 'row');
       r.setAttribute('role', 'button');
       r.setAttribute('tabindex', '0');
@@ -1733,20 +1744,20 @@ var KSBM_UI = (function () {
       return r;
     }
 
-    function renderList(list, nowS, cash) {
+    function renderList(list, nowS, cash, sortKey) {
       var s = h('div', 'list');
       if (!list.ranked.length && !list.unknown.length && !list.thin.length) s.appendChild(h('div', 'empty', EMPTY_TEXT));
-      list.ranked.forEach(function (en) { s.appendChild(renderRow(en, 'ranked', nowS, cash)); });
+      list.ranked.forEach(function (en) { s.appendChild(renderRow(en, 'ranked', nowS, cash, sortKey)); });
       if (list.unknown.length) {
         var g = h('div', 'unknown-group');
         g.appendChild(h('h3', null, C.UNKNOWN_GROUP_TITLE));
-        list.unknown.forEach(function (en) { g.appendChild(renderRow(en, 'unknown', nowS, cash)); });
+        list.unknown.forEach(function (en) { g.appendChild(renderRow(en, 'unknown', nowS, cash, sortKey)); });
         s.appendChild(g);
       }
       if (list.thin.length) {
         var t = h('div', 'thin-group');
         t.appendChild(h('h3', null, THIN_TITLE));
-        list.thin.forEach(function (en) { t.appendChild(renderRow(en, 'thin', nowS, cash)); });
+        list.thin.forEach(function (en) { t.appendChild(renderRow(en, 'thin', nowS, cash, sortKey)); });
         s.appendChild(t);
       }
       return s;
@@ -1783,11 +1794,8 @@ var KSBM_UI = (function () {
       filters.classList.toggle('show', ok);
       tabs.classList.toggle('show', ok);
       sorts.classList.toggle('show', ok);
-      C.SORTS.forEach(function (k) {
-        var on = k === view.sort;
-        sortBtns[k].classList.toggle('on', on);
-        sortBtns[k].setAttribute('aria-pressed', on ? 'true' : 'false');
-      });
+      sortSel.value = view.sort;
+      legend.textContent = C.legendFor(view.sort);
       C.GROUPS.forEach(function (g) {
         var on = g === view.group;
         filterBtns[g].classList.toggle('on', on);
@@ -1803,7 +1811,7 @@ var KSBM_UI = (function () {
       rowEls = [];
       markEls = [];
       if (ok) {
-        lists.appendChild(renderList(view.lists[view.tab], view.nowS, view.cash));
+        lists.appendChild(renderList(view.lists[view.tab], view.nowS, view.cash, view.sort));
         setOpenRow(rowEls.some(function (r) { return r.key === openKey; }) ? openKey : null);
       } else {
         openKey = null;
