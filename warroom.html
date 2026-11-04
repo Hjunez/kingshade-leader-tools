@@ -531,6 +531,51 @@
     #targetHost tbody td:nth-child(6) .dibs { font-size: 11px; }
   }
 
+  /* ---- R25 (2026-11): contrast in the target list ----
+     Level, the status, the DIBS words and notes, and the Attack / Take DIBS boxes were set in the page's
+     faint and muted greys and in outlines that melt into a row tinted in its FF colour. Measured on the
+     middle of the row, where the tint is strongest: the DIBS word 1.80, the status 2.32, the button outline
+     1.06 (dark); 1.95, 4.62 and 1.21 (light). The goal is 4.5:1 for text and 3:1 for a box's edge.
+     Only colours change, and only inside #targetHost, through tokens of their own: the page's --faint,
+     --muted, --good, --warn, --bad and --line-strong are left alone, because the FF cells, the online
+     dot, the headers and every panel above the list still use them. Nothing here moves a box: no size,
+     padding, border width or font changes, so the row height and the width of the list are as before.
+     The plate behind a box that cannot be pressed is translucent, never a fill: a callable Take DIBS stays
+     the one filled box on the row (orange, or pink for low life). */
+  #targetHost {
+    --r25-ink: #14202b; --r25-soft: #435260;
+    --r25-good: #0f5a41; --r25-warn: #6b4803; --r25-bad: #8c241f;
+    --r25-plate: rgba(255, 255, 255, .5); --r25-edge: #566879;
+    --r25-press-edge: #7f3b1a; --r25-low-edge: #a8246a;
+  }
+  :root:not([data-theme="light"]) #targetHost {
+    --r25-ink: #e3e9ef; --r25-soft: #cbd6e0;
+    --r25-good: #8fe3c0; --r25-warn: #f2cd73; --r25-bad: #ffbab2;
+    --r25-plate: rgba(0, 0, 0, .38); --r25-edge: #a6b5c3;
+    --r25-press-edge: #f0a06f; --r25-low-edge: #ff8fc2;
+  }
+  /* Level, and every cell of a row the board cannot answer for. The Torn ID under the name stays faint. */
+  #targetHost td.tid, #targetHost tbody tr.blocked td { color: var(--r25-soft); }
+  /* Status: Okay, Hospital and Jail in readable versions of their own colours; the rest, and the landing time, in the soft grey. */
+  #targetHost .pill.good { color: var(--r25-good); }
+  #targetHost .pill.warn { color: var(--r25-warn); }
+  #targetHost .pill.bad { color: var(--r25-bad); }
+  #targetHost .pill:not(.good):not(.warn):not(.bad):not(.travel), #targetHost .pill .eta { color: var(--r25-soft); }
+  /* DIBS: the state word and the note under it. */
+  #targetHost .dibs .left, #targetHost .dibs .when, #targetHost .dibs.locked, #targetHost .dibs.free { color: var(--r25-soft); }
+  #targetHost .dibs.offline { color: var(--r25-bad); }
+  #targetHost .dibs.unknown { color: var(--r25-warn); }
+  /* Attack and a Take DIBS that cannot be pressed: a box with a clear edge and readable text. Attack is the brighter of the two. */
+  #targetHost a.btn.attack { background: var(--r25-plate); border-color: var(--r25-edge); color: var(--r25-ink); }
+  #targetHost .btn[disabled], #targetHost .btn[disabled]:hover { background: var(--r25-plate); border-color: var(--r25-edge); color: var(--r25-soft); }
+  /* A Take DIBS that can be pressed, and the Release button on a row this member holds, keep their fill; only the edge is made clear on every row tint. */
+  #targetHost .btn.primary:not([disabled]), #targetHost button.btn:not(.lowhp):not([disabled]) { border-color: var(--r25-press-edge); }
+  #targetHost .btn.lowhp:not([disabled]), #targetHost .btn.lowhp:not([disabled]):hover { border-color: var(--r25-low-edge); }
+  /* On a phone the EST figure sits under FF in the muted grey. */
+  @media (max-width: 700px) {
+    #targetHost tbody td:nth-child(4) { color: var(--r25-soft); }
+  }
+
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
