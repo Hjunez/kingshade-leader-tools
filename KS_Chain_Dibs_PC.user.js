@@ -1,9 +1,11 @@
 // ==UserScript==
 // @name         KS Chain Dibs PC
 // @namespace    kingshade.torn.chaindibs
-// @version      0.2.0
-// @description  A small floating window with your faction chain: timer, the queue for the next hit, and the Im here rule so the chain does not break. When anybody may hit, FREE HIT links to a free target.
+// @version      0.3.0
+// @description  A small floating window with your faction chain: timer, the queue for the next hit, and the Im here rule so the chain does not break. Only the member who made the hit leaves the queue. When anybody may hit, FREE HIT links to a free target.
 // @author       Kingshade
+// @downloadURL  https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Chain_Dibs_PC.user.js
+// @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Chain_Dibs_PC.user.js
 // @match        https://www.torn.com/*
 // @run-at       document-idle
 // @noframes
@@ -18,8 +20,13 @@
 // ==/UserScript==
 
 /*
- * KS Chain Dibs PC 0.2.0
+ * KS Chain Dibs PC 0.3.0
  *
+ * 0.3.0  CHANGED: everybody stays in the queue. Only the member who made
+ *        the hit leaves it (the script reads your own attacks to see it).
+ *        ADDED: "Rejoin after my hit" puts you last in the queue again.
+ *        New key link (adds user attacks and bars). Updates now come from
+ *        GitHub.
  * 0.2.0  ADDED: FREE HIT target. When anybody may hit, FREE HIT becomes a
  *        link to the first target on the faction list that is Okay.
  *        New key link (adds user basic).
@@ -32,8 +39,10 @@
  * keeps a queue of members for the next hit. The rule is "Im here": everybody
  * in the queue presses Im here, and 1:30 before the chain breaks the first
  * confirmed member gets the hit (GET READY, then HIT NOW at 1:00). From 0:30
- * anybody may hit. The KS server decides with its own clock; this window only
- * shows it.
+ * anybody may hit. Nobody is taken out of the queue by the rule: only the
+ * member who made a hit leaves it, and his own copy of this script tells the
+ * server so. The KS server decides with its own clock; this window only shows
+ * it.
  *
  * Network (and nothing else):
  *  - api.torn.com, every 3 s while Watch is on and only from ONE open tab:
@@ -63,16 +72,32 @@
  *    key.
  *  - The FREE HIT target is a plain link. YOU click it yourself; the script
  *    never clicks, never opens a page and never navigates.
+ *  - api.torn.com /v2/user/attacks (your OWN outgoing attacks, limited key),
+ *    only from ONE open tab, only while Watch is on and only when you stand
+ *    in the queue: when the chain moves on one or more hits, the script looks
+ *    at your last attacks to see whether YOU made that hit. If one of them
+ *    has the new hit number, only that fact goes to the KS server (the chain
+ *    ID, the hit number, when the attack ended, and your Rejoin choice). Your
+ *    attacks are not stored or sent anywhere else. No hit found: it asks
+ *    again after 2 seconds, at most 3 more times for that hit. One such call
+ *    at a time, at most 10 in any 60 seconds. Error 5 pauses these calls for
+ *    30 seconds, together with the other Torn calls. Error 16 stops only
+ *    these calls until a new key is saved and shows the key link. Neither
+ *    ever stops Watch or removes the key. With the calls above this tab stays
+ *    at about 65 Torn calls a minute or fewer (Torn allows 100).
  *
  * Stored in Tampermonkey on this PC: your API key, the window position, Watch
- * on/off, the faction member names (refreshed every 10 minutes) and the shared
- * state between your open Torn tabs (with the FREE HIT target: a Torn ID and
- * a name). Nothing is shared with anybody else except what the KS server
- * shows the faction: the queue and the FREE HIT list (Torn IDs). The list can
- * only be changed by the Torn IDs the server names (the Targets button).
+ * on/off, your Rejoin choice, the faction member names (refreshed every 10
+ * minutes) and the shared state between your open Torn tabs (with the FREE
+ * HIT target: a Torn ID and a name). Nothing is shared with anybody else
+ * except what the KS server shows the faction: the queue and the FREE HIT
+ * list (Torn IDs). The list can only be changed by the Torn IDs the server
+ * names (the Targets button).
  *
- * Key access level: Public. Watch turns itself off after 15 minutes without an
- * active chain. No sound in this version.
+ * Key access level: Limited (custom key: user basic, attacks and bars, faction
+ * chain and members; bars is in the key for a later version, no call to it is
+ * made in this one). Watch turns itself off after
+ * 15 minutes without an active chain. No sound in this version.
  */
 
 (function () {
@@ -82,7 +107,7 @@
   if (window[INSTANCE_KEY]) return;
   window[INSTANCE_KEY] = true;
 
-  var VERSION = '0.2.0';
+  var VERSION = '0.3.0';
 
   // The ONE place the server address lives.
   var SERVER_BASE = 'https://ks-war-room-claims-staging.hans-viklund.workers.dev';
@@ -90,9 +115,10 @@
   var TORN_CHAIN_URL = 'https://api.torn.com/v2/faction/chain';
   var TORN_MEMBERS_URL = 'https://api.torn.com/v2/faction/members';
   var TORN_USER_URL = 'https://api.torn.com/v2/user/';
+  var TORN_ATTACKS_URL = 'https://api.torn.com/v2/user/attacks';
   var ATTACK_URL = 'https://www.torn.com/page.php?sid=attack&user2ID=';
   var COMMENT = 'KSChainDibs';
-  var KEY_URL = 'https://www.torn.com/preferences.php#tab=api?step=addNewKey&title=KS%20Chain%20Dibs&user=basic&faction=chain,members';
+  var KEY_URL = 'https://www.torn.com/preferences.php#tab=api?step=addNewKey&title=KS%20Chain%20Dibs&user=basic,attacks,bars&faction=chain,members';
 
   var STORE = 'ksChainDibs.v1.';
   var K_API = STORE + 'apiKey';
@@ -104,6 +130,7 @@
   var K_NAMES = STORE + 'names';
   var K_DEBUG = STORE + 'debug';
   var K_KICK = STORE + 'kick';
+  var K_REJOIN = STORE + 'rejoin';
 
   var POLL_MS = 3000;
   var HEARTBEAT_MS = 2000;
@@ -146,6 +173,17 @@
   var FREE_RETRY_MS = 1000;            // the 60 s window is full: look again after this
   var TARGETS_MAX = 10;
 
+  // Who made the hit (leader tab only). The member's own attacks are read to see
+  // whether he made the hit that moved the chain on.
+  var HIT_LOOKBACK_S = 600;            // only attacks from the last 10 minutes
+  var HIT_LIMIT = 10;                  // the last 10 outgoing attacks
+  var HIT_RETRY_MS = 2000;             // no hit found: ask again after this
+  var HIT_MAX_RETRIES = 3;             // ... at most this many more times for each new hit
+  var HIT_BUSY_MS = 250;               // an older call is still on its way: look again after this
+  var HIT_SEEN_FRESH_MS = 30000;       // a leader that takes over trusts the shared turn only if it is this fresh
+  var HIT_WINDOW_MS = 60000;
+  var HIT_WINDOW_MAX = 10;            // at most this many attacks calls in any 60 s: 20 chain + 18 extra + 15 status + 10 attacks + names = 65 or fewer
+
   // The same bands the server uses (seconds before the chain breaks).
   var CONFIRM_FROM_MS = 120000;
   var RESOLVE_AT_MS = 90000;
@@ -168,10 +206,10 @@
 
   var TOS_ROWS = [
     ['Data Storage', 'The KS server keeps the chain queue (Torn IDs, join time, Im here) and the latest chain reading, deleted 12 hours after the last change, and the free hit list (Torn IDs of targets set by the faction leader) until the leader changes it.'],
-    ['Data Sharing', 'Faction members who use KS Chain Dibs see the queue and the free hit list. Nobody outside the faction.'],
+    ['Data Sharing', 'Faction members who use KS Chain Dibs see the queue and the free hit list. Nobody outside the faction. Your own attacks are read only to see if you made the chain hit; only that fact is sent to the KS server.'],
     ['Purpose of Use', 'Coordinate who takes the next chain hit so the chain does not break, and point to a free target when anybody may hit.'],
     ['Key Storage & Sharing', 'Stored only in Tampermonkey on this PC. Sent to api.torn.com, and once per sign-in to the KS server to confirm your Torn ID and faction. The KS server never stores it.'],
-    ['Key Access Level', 'Public.']
+    ['Key Access Level', 'Limited (custom key: user basic, attacks and bars, faction chain and members).']
   ];
 
   // ------------------------------------------------------------ state
@@ -206,6 +244,14 @@
   // running, when the next one is due, and which list the last check used.
   var freeCtl = { turn: null, gen: 0, busy: false, nextAt: 0, listSig: '', keyWasBad: false };
   var statusTimes = [];       // when the status calls were made (the last 60 s)
+  // Who made the hit, leader tab only. hitSeen = the newest turn this tab has
+  // seen. hitCtl = the hit being looked for: { gen, chainId, low, high, tries,
+  // inflight }. low..high are the hit numbers that moved the chain on.
+  var hitSeen = null;
+  var hitCtl = null;
+  var hitGen = 0;
+  var hitTimer = null;
+  var attackTimes = [];       // when the attacks calls were made (the last 60 s)
   var targetsOpen = false;    // the Targets panel is unfolded
   var tornPausedUntil = 0;
   var samples = [];
@@ -289,7 +335,7 @@
 
   var STATUSES = { live: 1, stale: 1, inactive: 1, no_reading: 1 };
   var PHASES = { waiting: 1, confirm: 1, get_ready: 1, hit_now: 1, no_confirmed: 1, free_hit: 1, ended: 1 };
-  var ACTIONS = { joined: 1, already_in_queue: 1, queue_full: 1, left: 1, not_in_queue: 1, confirmed: 1, already_confirmed: 1, turn_resolved: 1, no_turn: 1, targets_set: 1 };
+  var ACTIONS = { joined: 1, already_in_queue: 1, queue_full: 1, left: 1, not_in_queue: 1, confirmed: 1, already_confirmed: 1, turn_resolved: 1, no_turn: 1, targets_set: 1, hit_removed: 1, hit_rejoined: 1, hit_ignored: 1 };
 
   // Everything from the server is checked before it is shown. null = unusable.
   function cleanSnap(j) {
@@ -376,6 +422,7 @@
       note: cur.note || '',
       freeHit: freeHit,
       freeKeyBad: cur.freeKeyBad === true,
+      hitKeyBad: cur.hitKeyBad === true,
       at: Date.now()
     };
     var keys = Object.keys(patch);
@@ -461,9 +508,15 @@
     isLeader = flag;
     dbg(flag ? 'this tab is the leader' : 'this tab is a follower');
     if (flag) {
+      // A leader that takes over carries on from the turn the shared state shows
+      // (if that is fresh), so a hit made just before the switch is still noticed.
+      var fresh = shared && shared.snapAt && Date.now() - shared.snapAt < HIT_SEEN_FRESH_MS;
+      var seenTurn = (fresh && shared.snap && shared.snap.turn) ? shared.snap.turn : null;
+      hitSeen = seenTurn ? { chainId: seenTurn.chainId, current: seenTurn.current } : null;
       startPoll();
     } else {
       stopPoll();
+      hitSeen = null;
       freeAbort(false);
     }
   }
@@ -524,6 +577,7 @@
     if (timers.ui) { window.clearInterval(timers.ui); timers.ui = null; }
     if (timers.leader) { window.clearInterval(timers.leader); timers.leader = null; }
     stopPoll();
+    hitSeen = null;
     detachBar();
   }
 
@@ -539,6 +593,7 @@
     if (extraTimer) { window.clearTimeout(extraTimer); extraTimer = null; }
     kickState = null;
     pendingExtra = false;
+    hitAbort();
   }
 
   // ------------------------------------------------------------ Torn's chain bar (read only)
@@ -851,7 +906,7 @@
     fetchChain(key, function (reading) {
       chainCall('state', reading, function (r, j) {
         var snap = takeAnswer(r, j, true);
-        if (snap) afterSnap(snap);
+        if (snap) { afterSnap(snap); hitWatch(snap); }
         cycleBusy = false;
         maybeNames(key);
         afterCycle(snap);
@@ -1098,6 +1153,145 @@
     return res;
   }
 
+  // ------------------------------------------------------------ who made the hit (leader tab only)
+
+  var attacksBusy = false;    // one attacks call at a time, whatever hit it belongs to
+
+  function attacksInWindow() {
+    var now = Date.now();
+    while (attackTimes.length > 0 && attackTimes[0] <= now - HIT_WINDOW_MS) attackTimes.shift();
+    return attackTimes.length;
+  }
+
+  function getRejoin() {
+    return gmGet(K_REJOIN, false) === true;
+  }
+
+  // Forgets the hit being looked for. An answer that is still on its way is not
+  // believed when it comes.
+  function hitAbort() {
+    hitGen += 1;
+    hitCtl = null;
+    if (hitTimer) { window.clearTimeout(hitTimer); hitTimer = null; }
+  }
+
+  // Called with every answer the 3 s rhythm gets. A new turn in the same chain
+  // while this member stands in the queue: has HE made the hit that moved the
+  // chain on? Nothing else is looked at.
+  function hitWatch(snap) {
+    // He is not in the queue (any more): nothing is looked for.
+    if (!snap.you.inQueue && hitCtl) hitAbort();
+    var turn = snap.turn;
+    if (!turn) return;
+    var seen = hitSeen;
+    if (!seen || seen.chainId !== turn.chainId) {
+      // The first look, or another chain: there is nothing to compare with.
+      hitSeen = { chainId: turn.chainId, current: turn.current };
+      if (seen) hitAbort();
+      return;
+    }
+    if (turn.current <= seen.current) return;   // not a new turn (an older answer never moves it back)
+    hitSeen = { chainId: turn.chainId, current: turn.current };
+    if (!snap.you.inQueue || getKey() === '') return;
+    hitNewTurn(turn.chainId, seen.current, turn.current);
+  }
+
+  // The hit numbers prev+1 .. cur moved the chain on. If an earlier hit of the
+  // same chain is still being looked for, the search keeps its lowest number
+  // and starts its tries again.
+  function hitNewTurn(chainId, prev, cur) {
+    if (hitTimer) { window.clearTimeout(hitTimer); hitTimer = null; }
+    hitGen += 1;
+    if (hitCtl && hitCtl.chainId === chainId) {
+      hitCtl.high = cur;
+      hitCtl.tries = 0;
+      hitCtl.gen = hitGen;
+    } else {
+      hitCtl = { gen: hitGen, chainId: chainId, low: prev + 1, high: cur, tries: 0 };
+    }
+    hitTry();
+  }
+
+  // One look at the member's own last attacks. The first call goes at once, the
+  // next ones 2 s apart, at most 3 more. At most 10 calls in any 60 s, one at a
+  // time. A try that cannot be made (Torn asked us to wait, the 60 s limit is
+  // used up) counts as a try.
+  function hitTry() {
+    hitTimer = null;
+    var ctl = hitCtl;
+    if (!ctl || !isLeader || !watchOn || !running) return;
+    var key = getKey();
+    if (!key || (shared && shared.hitKeyBad === true)) { hitCtl = null; return; }
+    // He is not in the queue (he left by hand): no call, not even a retry.
+    var seenSnap = (shared && shared.snap) ? shared.snap : null;
+    if (seenSnap && !seenSnap.you.inQueue) { hitCtl = null; return; }
+    if (attacksBusy) { hitTimer = window.setTimeout(hitTry, HIT_BUSY_MS); return; }
+    ctl.tries += 1;
+    var gen = ctl.gen;
+    if (Date.now() < tornPausedUntil || attacksInWindow() >= HIT_WINDOW_MAX) { hitMiss(ctl); return; }
+
+    attackTimes.push(Date.now());
+    attacksBusy = true;
+    var nowS = Math.floor(Date.now() / 1000);
+    var url = TORN_ATTACKS_URL + '?filters=outgoing&sort=DESC&limit=' + HIT_LIMIT + '&from=' + (nowS - HIT_LOOKBACK_S) +
+      '&timestamp=' + nowS + '&comment=' + COMMENT;
+    tornGet(url, key, function (r) {
+      attacksBusy = false;
+      // An answer for a hit that has been replaced, or from a tab that is no longer the leader, is not believed.
+      if (hitCtl !== ctl || ctl.gen !== gen || !isLeader || !watchOn || !running) return;
+      var j = (r.kind === 'http') ? parseJson(r.text) : null;
+      if (j && typeof j === 'object' && j.error) {
+        // These calls never stop Watch and never remove the key. 5 waits 30 s,
+        // 16 means the key lacks the attacks part; anything else is a miss.
+        var code = (j.error && isInt(j.error.code)) ? j.error.code : 0;
+        if (code === 5) {
+          tornPausedUntil = Date.now() + TORN_PAUSE_MS;
+          publish({ torn: { kind: 'paused', until: tornPausedUntil, msg: 'Torn asked us to wait' } });
+        } else if (code === 16) {
+          hitCtl = null;
+          publish({ hitKeyBad: true });
+          return;
+        }
+        hitMiss(ctl);
+        return;
+      }
+      var found = (j && typeof j === 'object') ? findMyHit(j, ctl) : null;
+      if (!found) { hitMiss(ctl); return; }
+      hitCtl = null;
+      reportHit(ctl.chainId, found);
+    });
+  }
+
+  function hitMiss(ctl) {
+    if (hitCtl !== ctl) return;
+    if (ctl.tries > HIT_MAX_RETRIES) { hitCtl = null; return; }
+    hitTimer = window.setTimeout(hitTry, HIT_RETRY_MS);
+  }
+
+  // The newest attack of the member's that carries a hit number from low to high.
+  // Anything that is not a whole number is no hit at all.
+  function findMyHit(j, ctl) {
+    var list = Array.isArray(j.attacks) ? j.attacks : [];
+    var best = null;
+    for (var i = 0; i < list.length; i++) {
+      var a = list[i];
+      if (!a || typeof a !== 'object') continue;
+      if (!isInt(a.chain) || a.chain < ctl.low || a.chain > ctl.high) continue;
+      if (!isInt(a.ended) || a.ended <= 0) continue;
+      if (best === null || a.chain > best.chain) best = { chain: a.chain, ended: a.ended };
+    }
+    return best;
+  }
+
+  // Tells the server "I made hit N". Only this fact goes; nothing else about the attack.
+  function reportHit(chainId, hit) {
+    chainCall('hit', null, function (r, j) {
+      var snap = takeAnswer(r, j, false);
+      if (!snap) { setLocalMsg('KS server not reached. Your hit was not reported.'); return; }
+      if (snap.action && ACTION_TEXT[snap.action]) setLocalMsg(ACTION_TEXT[snap.action]);
+    }, { hit: { chainId: chainId, current: hit.chain, endedAt: hit.ended }, rejoin: getRejoin() });
+  }
+
   // ------------------------------------------------------------ names
 
   function loadNames() {
@@ -1148,7 +1342,9 @@
     queue_full: 'The queue is full.',
     turn_resolved: 'Too late: this turn is already decided.',
     no_turn: 'No turn yet. Try again in a moment.',
-    not_in_queue: 'Join the queue first.'
+    not_in_queue: 'Join the queue first.',
+    hit_removed: 'You hit - you left the queue.',
+    hit_rejoined: 'You hit - you are last in the queue again.'
   };
 
   function press(op) {
@@ -1264,6 +1460,7 @@
       session = null;
       setLocalMsg('Key removed.');
     }), 'forget');
+    ui.rejoinBtn = mark(makeButton('Rejoin after my hit: OFF', '#4a4f57', '#ffffff', onRejoinClick), 'rejoin');
     ui.targetsBtn = mark(makeButton('Targets', '#6a4fb3', '#ffffff', onTargetsClick), 'targetsbtn');
     ui.targets = buildTargetsPanel();
 
@@ -1277,6 +1474,7 @@
     ui.body.appendChild(ui.watchBtn);
     ui.body.appendChild(ui.joinBtn);
     ui.body.appendChild(ui.leaveBtn);
+    ui.body.appendChild(ui.rejoinBtn);
     ui.body.appendChild(ui.hereBtn);
     ui.body.appendChild(ui.forgetBtn);
     ui.body.appendChild(ui.targetsBtn);
@@ -1295,7 +1493,7 @@
   function buildKeyPanel() {
     var wrap = mark(el('div'), 'keypanel');
     css(wrap, 'all:initial;display:none;margin-top:4px;color:#cfcfcf;font:11px/14px Arial,Helvetica,sans-serif;');
-    var intro = el('div', 'Create a key (public access), paste it here and save it. These are the terms of use:');
+    var intro = el('div', 'Create a key (limited access), paste it here and save it. These are the terms of use:');
     css(intro, 'all:initial;display:block;margin-bottom:4px;color:#cfcfcf;font:11px/14px Arial,Helvetica,sans-serif;');
     wrap.appendChild(intro);
 
@@ -1334,8 +1532,9 @@
       loginFails = 0;
       loginBlockedUntil = 0;
       input.value = '';
-      // A new key: the FREE HIT target may be asked for again.
+      // A new key: the FREE HIT target and the hit lookup may be asked for again.
       if (shared && shared.freeKeyBad) publish({ freeKeyBad: false });
+      if (shared && shared.hitKeyBad) publish({ hitKeyBad: false });
       setLocalMsg('Key saved.');
       if (watchOn) { loadNames(); if (isLeader) cycle(); }
     }), 'keysave');
@@ -1406,6 +1605,12 @@
     }, { targets: list });
   }
 
+  // The choice lives in Tampermonkey on this PC, not on the server.
+  function onRejoinClick() {
+    gmSet(K_REJOIN, !getRejoin());
+    render();
+  }
+
   function onWatchClick() {
     if (watchOn) setWatch(false, '');
     else { publish({ note: '' }); setWatch(true); }
@@ -1463,6 +1668,7 @@
       msgs.push(sh.torn.msg);
     }
     if (sh && sh.freeKeyBad === true) msgs.push('Free hit target needs a new key - use the key link');
+    if (sh && sh.hitKeyBad === true) msgs.push('Queue needs a new key - use the key link');
     if (sh && sh.note) msgs.push(sh.note);
     if (localMsg && now < localMsgUntil) msgs.push(localMsg);
     d.msg = msgs.join(' ');
@@ -1554,12 +1760,13 @@
     }
     var ownerId = (d.showOwner && snap.turn) ? snap.turn.ownerId : null;
     var shown = Math.min(QUEUE_SHOWN, snap.queue.length);
-    for (var i = 0; i < shown; i++) {
-      var q = snap.queue[i];
+    // One row: place, name, a green tick when confirmed. The hitter is yellow and bold.
+    function addRow(index) {
+      var q = snap.queue[index];
       var row = mark(el('div'), 'qrow');
       css(row, 'all:initial;display:flex;justify-content:space-between;color:#e6e6e6;font:13px/18px Arial,Helvetica,sans-serif;');
       var isOwner = ownerId !== null && q.tornId === ownerId;
-      var label = mark(el('span', (i + 1) + '. ' + nameOf(q.tornId) + (isOwner ? ' (hitter)' : '')), 'qname');
+      var label = mark(el('span', (index + 1) + '. ' + nameOf(q.tornId) + (isOwner ? ' (hitter)' : '')), 'qname');
       css(label, 'all:initial;color:' + (isOwner ? '#ffd84d' : '#e6e6e6') + ';font:' + (isOwner ? 'bold ' : '') + '13px/18px Arial,Helvetica,sans-serif;');
       var tick = el('span', q.confirmed ? '\u2713' : '');
       mark(tick, 'qtick');
@@ -1568,10 +1775,26 @@
       row.appendChild(tick);
       ui.queue.appendChild(row);
     }
-    if (snap.queue.length > shown) {
-      var more = snap.queue.length - shown;
+    for (var i = 0; i < shown; i++) addRow(i);
+    // The hitter stands behind the first three (unconfirmed members ahead of him
+    // stay in the queue): he gets a row of his own after them, and is not counted in "+N more".
+    var hidden = snap.queue.length - shown;
+    var ownerIndex = -1;
+    if (ownerId !== null) {
+      for (var k = shown; k < snap.queue.length; k++) {
+        if (snap.queue[k].tornId === ownerId) { ownerIndex = k; break; }
+      }
+    }
+    if (ownerIndex >= 0) {
+      addRow(ownerIndex);
+      hidden -= 1;
+    }
+    if (hidden > 0) {
+      var more = hidden;
       var text = '+' + more + ' more';
-      if (snap.you.inQueue && snap.you.position !== null && snap.you.position > shown) text += ' (you: #' + snap.you.position + ')';
+      var myPlace = (snap.you.inQueue && snap.you.position !== null) ? snap.you.position : null;
+      // "you" is only added when he is hidden himself and is not the hitter shown above.
+      if (myPlace !== null && myPlace > shown && myPlace !== ownerIndex + 1) text += ' (you: #' + myPlace + ')';
       var m = mark(el('div', text), 'qmore');
       css(m, 'all:initial;display:block;color:#9aa0a6;font:12px/16px Arial,Helvetica,sans-serif;');
       ui.queue.appendChild(m);
@@ -1604,6 +1827,7 @@
       show(ui.keyPanel.wrap, false);
       show(ui.joinBtn, false);
       show(ui.leaveBtn, false);
+      show(ui.rejoinBtn, false);
       show(ui.hereBtn, false);
       show(ui.forgetBtn, hasKey);
       show(ui.freeLink, false);
@@ -1641,7 +1865,7 @@
 
     // The key panel (with the key link) is also there when the free hit target
     // needs a new key.
-    show(ui.keyPanel.wrap, !hasKey || (shared && shared.freeKeyBad === true));
+    show(ui.keyPanel.wrap, !hasKey || (shared && (shared.freeKeyBad === true || shared.hitKeyBad === true)));
     show(ui.forgetBtn, false);
     show(ui.watchBtn, true);
 
@@ -1661,6 +1885,16 @@
     show(ui.leaveBtn, hasKey && inQ);
     ui.joinBtn.disabled = !connected;
     ui.leaveBtn.disabled = !connected;
+
+    // Rejoin after my hit: a choice kept on this PC. Shown with a key and Watch on.
+    show(ui.rejoinBtn, hasKey);
+    if (hasKey) {
+      var rejoinOn = getRejoin();
+      var rejoinText = 'Rejoin after my hit: ' + (rejoinOn ? 'ON' : 'OFF');
+      if (ui.rejoinBtn.textContent !== rejoinText) ui.rejoinBtn.textContent = rejoinText;
+      ui.rejoinBtn.style.background = rejoinOn ? '#2e8b57' : '#4a4f57';
+      ui.rejoinBtn.setAttribute('data-rejoin', rejoinOn ? 'on' : 'off');
+    }
 
     // Im here: only for a member in the queue, and it blinks 2:00-1:30 for the
     // first one in the queue who has not pressed it.
