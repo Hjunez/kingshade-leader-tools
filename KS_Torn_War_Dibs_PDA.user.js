@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PDA
 // @namespace    kingshade.torn
-// @version      1.5.193
+// @version      1.5.194
 // @description  Roster-local PDA presentation with v1.5.145 authority and shared-claim safety.
 // @author       Kingshade
 // @match        https://www.torn.com/factions.php*
@@ -15,6 +15,44 @@
 // ==/UserScript==
 
 /*
+ * 1.5.194 (2026-11-04): a hospital time of 48 hours or more is shown as a
+ * time. ONE MAIN CHANGE, display and Status sorting only. Name, namespace,
+ * update address and every storage name are those of 1.5.193.
+ * FIXED
+ *   - A target in hospital for 48 hours or more (maxHospitalSeconds) showed "?"
+ *     on the DIBS button although Torn gives a valid release time (a real
+ *     case: "OD on xan 2d 20h" showed "? PREWAR" in 1.5.191). The button now
+ *     shows the time, for example "2d 20h 0m", like War Room.
+ * CHANGED
+ *   - New longHospitalSeconds(row): seconds left when Torn's API status says
+ *     hospital, the status is fresh (same rule as every other status read), the
+ *     release time is valid and at least maxHospitalSeconds away. Otherwise
+ *     null. It is used for display and for Status sorting only.
+ *   - A target the decision engine reads as UNKNOWN "hospital-timer-unverifiable"
+ *     and that has such a time is drawn like a locked target with more than
+ *     2:00 left: the time, the LOCKED colour, the word LOCKED underneath. Before
+ *     the war (PREWAR) and in VIEW the button keeps its own word and shows the
+ *     time instead of "?". With no such time the button reads "?" as before.
+ *   - Status sorting (Torn's Status header active): such a target is sorted in
+ *     the hospital group by its real time, after every shorter hospital time.
+ *     A hospital target without any release time stays last in that group.
+ * NOT CHANGED
+ *   - The decision engine, the claim path, the server and every DIBS rule
+ *     (2:00 gate, FF 2.00-3.40, low life 4.50) are untouched. The target is
+ *     still UNKNOWN for a decision and a claim; the button is disabled and a
+ *     tap does nothing. hospitalRemainingSeconds, computeHospitalSeconds and
+ *     maxHospitalSeconds (48 h) are untouched.
+ * KNOWN ISSUES
+ *   - None new. No timer is computed from a release time, so no delay can pass
+ *     the browser's 2 147 483 647 ms limit.
+ * VERIFICATION
+ *   - Synthetic only (Chromium against stand-in Torn and KS servers). On the
+ *     phone: a target in hospital for more than 48 hours shows its time on the
+ *     DIBS button, not "?".
+ * Everything else is unchanged from 1.5.193: type=2, Share with KS, the FF
+ * circle and stats mark, the requests for the war, the clock and the panel. No
+ * new request, no new storage, nothing new written into Torn's page.
+ *
  * 1.5.193 (2026-11-03): your own war page also opens as type=2. ONE MAIN
  * CHANGE. Name, namespace, update address and every storage name are those of
  * 1.5.192.
@@ -543,8 +581,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs",
-    version: "1.5.193",
-    instanceKey: "__ksTornWarDibsPdaV15193Test",
+    version: "1.5.194",
+    instanceKey: "__ksTornWarDibsPdaV15194Test",
     layerId: "ks-twd-pda-layer",
     rowHostPrefix: "ks-twd-pda-row-",
     panelId: "ks-twd-pda-panel",
@@ -4758,9 +4796,33 @@
   // reads as "attack now", the one direction this must never fail in. The
   // decision engine already classifies seconds === null as UNKNOWN; only the
   // cell was lying.
-  function hospitalCountdownText(hospitalState) {
+  function hospitalCountdownText(hospitalState, longSeconds = null) {
     if (!hospitalState || hospitalState.isHospital !== true) return "";
-    return formatCountdown(hospitalState.seconds) || "?";
+    // 1.5.194: no readable time for the decision, but Torn gave a release time
+    // of maxHospitalSeconds or more: show that time instead of "?".
+    return formatCountdown(hospitalState.seconds) ||
+      (hospitalState.seconds === null ? formatCountdown(longSeconds) : "") ||
+      "?";
+  }
+
+  // 1.5.194: DISPLAY AND STATUS SORTING ONLY. Never used by the decision engine,
+  // a claim or a timer. Seconds left when Torn's API status says the target is
+  // in hospital, the status is fresh (tornStatusForTarget applies the same
+  // freshness rule as every other read), the release time is a valid timestamp
+  // and at least CONFIG.maxHospitalSeconds away -- exactly the case
+  // hospitalRemainingSeconds answers null for. Otherwise null.
+  function longHospitalSeconds(row) {
+    const apiStatus = tornStatusForTarget(row?.id);
+    if (!apiStatus) return null;
+    const hospital =
+      isHospitalStatusValue(apiStatus.state) ||
+      isHospitalStatusValue(apiStatus.description) ||
+      isHospitalStatusValue(apiStatus.details);
+    if (!hospital) return null;
+    const until = Number(apiStatus.until);
+    if (!Number.isFinite(until) || until <= 0) return null;
+    const remaining = Math.ceil(until - getTornNowMs() / 1000);
+    return Number.isFinite(remaining) && remaining >= CONFIG.maxHospitalSeconds ? remaining : null;
   }
 
   function visibleHospitalEvidence(row) {
@@ -6830,8 +6892,13 @@
       label.textContent = "BLOCKED"; sub.textContent = "VERIFYING"; return;
     }
 
-    button.className = decision.reason === "rw-not-started" || decision.reason === "rw-phase-unverifiable" ? "prewar" : decision.state;
-    button.dataset.state = decision.state;
+    // 1.5.194: UNKNOWN only because the hospital time is 48 h or more is shown as
+    // a locked target. The decision itself is unchanged; the button stays disabled.
+    const longHospital = context.longHospital === true &&
+      decision.state === TARGET_STATE.UNKNOWN && decision.reason === "hospital-timer-unverifiable";
+    button.className = longHospital ? TARGET_STATE.LOCKED
+      : decision.reason === "rw-not-started" || decision.reason === "rw-phase-unverifiable" ? "prewar" : decision.state;
+    button.dataset.state = longHospital ? TARGET_STATE.LOCKED : decision.state;
     label.textContent = "DIBS";
     // The number is what the caller reads, so it leads. The word underneath
     // says why the number is not actionable yet.
@@ -6859,6 +6926,7 @@
       sub.textContent = `FF${Number(decision.fairFight).toFixed(2)}`;
       return;
     }
+    if (longHospital) { sub.textContent = "LOCKED"; return; }
     if (decision.state === TARGET_STATE.UNKNOWN) { sub.textContent = "UNKNOWN"; return; }
     if (decision.state === TARGET_STATE.UNAVAILABLE) { sub.textContent = ""; return; }
     sub.textContent = "LOCKED";
@@ -6946,8 +7014,13 @@
         ambiguousOwnServerClaims
       )
     });
+    // 1.5.194: a release time of 48 h or more, for display only (see longHospitalSeconds).
+    const longSeconds = hospitalState.isHospital === true && hospitalState.seconds === null
+      ? longHospitalSeconds(resolved)
+      : null;
     updateDibsControl(host, decision, sharedClaimForTarget(resolved.id), {
-      countdown: hospitalCountdownText(hospitalState)
+      countdown: hospitalCountdownText(hospitalState, longSeconds),
+      longHospital: Number.isFinite(longSeconds)
     });
     const dibs = host.querySelector(`[data-role='dibs']`);
     setNativeStatusHidden(binding, dibs instanceof HTMLElement && dibs.style.visibility !== "hidden");
@@ -7038,8 +7111,12 @@
     const rowView = resolved || { row: entry.row, li: entry.row, statusDiv, id: entry.targetId };
     const hospital = computeHospitalSeconds(rowView);
     if (hospital?.isHospital === true) {
-      return Number.isFinite(hospital.seconds)
-        ? { group: ROSTER_GROUP.HOSPITAL, seconds: hospital.seconds }
+      if (Number.isFinite(hospital.seconds)) return { group: ROSTER_GROUP.HOSPITAL, seconds: hospital.seconds };
+      // 1.5.194: a release time of 48 h or more sorts by its real time, after
+      // every shorter hospital time. No release time at all stays unknown.
+      const longSeconds = longHospitalSeconds(rowView);
+      return Number.isFinite(longSeconds)
+        ? { group: ROSTER_GROUP.HOSPITAL, seconds: longSeconds }
         : { group: ROSTER_GROUP.HOSPITAL_UNKNOWN, seconds: 0 };
     }
     if (hospital?.source === "torn-api-expired") return { group: ROSTER_GROUP.OKAY, seconds: 0 };
