@@ -593,6 +593,34 @@
     #warPanel .warbar .clock { font-size: 11px; flex: none; overflow: visible; }
   }
 
+  /* ---- R29 (2026-11): lead target in the war line ----
+     "Lead 1,234 / 5,900": how far ahead of the other faction we are (Behind when they lead) over the lead
+     Torn asks for, as on Torn's own war page. We ahead is the page's good colour, they ahead its warning
+     colour, level and before the war the clock's colour; the page's own tokens give 5.4:1 or better on the
+     panel in both themes, so no tokens of their own are needed. On a wide screen a 80 x 4 px bar under the
+     text shows lead / target. On a phone the meta text (already cut to "War...") gives way and the lead takes
+     its place with no bar; the clock and the score keep their width, so the row stays one line. */
+  #warLead {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--body); font-variant-numeric: tabular-nums; font-size: 14px; font-weight: 600;
+    color: var(--r26-clock); white-space: nowrap;
+  }
+  #warLead.ahead { color: var(--good); }
+  #warLead.behind { color: var(--warn); }
+  #warLead .lbar { flex: none; display: block; width: 80px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+  #warLead .lfill { display: block; height: 100%; width: 0; background: currentColor; }
+  #warLead.nobar .lbar { display: none; }
+  @media (max-width: 700px) {
+    #warPanel.lead-on .warbar #warMeta { display: none; }
+    #warPanel.lead-on .warbar { gap: 5px; padding-left: 8px; padding-right: 8px; }
+    #warPanel .warbar #warLead { display: block; order: 1; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
+    #warPanel .warbar #warLead .lbar { display: none; }
+    #warPanel.lead-on .warbar .clock { order: 2; }
+    #warPanel.lead-on .warbar .score { order: 3; }
+    #warPanel.lead-on .warbar .who { flex-shrink: 10000; min-width: 28px; }
+  }
+  #warPanel .warbar #warLead[hidden] { display: none; }
+
   /* ---- R27 (2026-11): the Filters button and the sort and filter panel ----
      The panel sits straight under the head of the list and is closed on every page load. It only hides
      rows and picks the sort; the table is drawn as before. Its colours are tokens of their own, as in R25:
@@ -878,7 +906,11 @@
             at the top stays in view while you scroll. The clock in it counts down to the start of
             the war and then shows how long the war has run; it is counted with the Torn clock this
             page has measured, not with this device's own, and says "Start time unknown" until it
-            has one.</dd>
+            has one. Beside the score, Lead is how many points we are ahead of the other faction
+            (Behind when they are ahead) and the figure after the slash is the lead Torn asks for
+            to win the war; before the war it shows the target alone. The target is read from Torn
+            with the score, so both are updated every two minutes, and nothing is shown when Torn
+            did not give them.</dd>
           <dt>Filters</dt>
           <dd>The Filters button opens a panel with the sort (the same choice as the column headings;
             Last action with the arrow up puts the most recent first), the activity and the status you
@@ -924,6 +956,7 @@
       <span class="meta" id="warMeta"></span>
       <span class="clock" id="warClock"></span>
       <span class="meta score" id="warScore"></span>
+      <span id="warLead" hidden><span class="lt"></span><span class="lbar" aria-hidden="true"><span class="lfill"></span></span></span>
     </div>
   </section>
 
@@ -1733,7 +1766,7 @@
    'createKey','lifeSaid','aboutServer','advLife','advClock','advWipeNote',
    'ffKey','toggleFfKey','forgetFfKey','ffSaid','ffBar',
    'sessionSaid','sessionState','sessionRetry',
-   'warPanel','warWho','warMeta','warClock','warScore',
+   'warPanel','warWho','warMeta','warClock','warScore','warLead',
    'targetPanel','targetHint','staleBar','targetHost','callableBtn','honorBtn','advHonors','themeBtn',
    'filterBtn','filterPanel','fSort','fDir','fDirNote','fShowing','fHidden','fPaused','fReset',
    'simBanner','simRealWar','simWireWar','simResetBar','simResetBtn','simResetNote',
@@ -1951,6 +1984,14 @@
       if (winner !== null || (end !== null && end > 0 && now >= end)) state = 'over';
       else if (start && now < start) state = 'prewar';
 
+      // R29. The score target Torn reports (a whole number above 0, else null) and whether both sides' scores
+      // are real numbers: the lead in the war line is only drawn from a target and scores that are known.
+      var targetRaw = ranked.target;
+      var target = (typeof targetRaw === 'number' && Number.isSafeInteger(targetRaw) && targetRaw > 0) ? targetRaw : null;
+      var scoreKnown = function (side) {
+        return !!side && typeof side.score === 'number' && Number.isFinite(side.score) && side.score >= 0;
+      };
+
       var changedWar = !war || war.warId !== warId;
       war = {
         warId: warId,
@@ -1959,6 +2000,8 @@
         ourName: text(ours && ours.name) || 'us',
         ourScore: Number(ours && ours.score) || 0,
         theirScore: Number(theirs && theirs.score) || 0,
+        target: target,
+        scoresKnown: scoreKnown(ours) && scoreKnown(theirs),
         start: start,
         end: end,
         state: state
@@ -5375,6 +5418,39 @@
     if (el.warClock.textContent !== text) el.warClock.textContent = text;
   }
 
+  // R29. 1234567 -> "1,234,567", as Torn writes its numbers. Whole, non-negative figures only.
+  function groupDigits(n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+
+  // R29. The lead in the war line. Before the war: "Target 5,900". Live or over: "Lead 1,234 / 5,900", or
+  // "Behind 1,234 / 5,900" when they lead, with a bar (wide screens only) filled to lead / target. Without a
+  // target, or without a real score for both sides, the span is empty and hidden - never a guessed figure.
+  // Called by renderWar after every reading of the war; it asks Torn nothing and keeps nothing.
+  function renderWarLead(war) {
+    var label = '', side = '', title = '', pct = 0, bar = false;
+    if (!el.warPanel.hidden && war && war.target) {
+      title = 'Lead needed to win: ' + groupDigits(war.target) + '. Read from Torn every ' + (WAR_POLL_MS / 60000) + ' minutes.';
+      if (war.state === 'prewar') {
+        label = 'Target ' + groupDigits(war.target);
+        side = 'even';
+      } else if (war.scoresKnown) {
+        var lead = Math.round(war.ourScore - war.theirScore);
+        label = (lead < 0 ? 'Behind ' : 'Lead ') + groupDigits(Math.abs(lead)) + ' / ' + groupDigits(war.target);
+        side = lead > 0 ? 'ahead' : (lead < 0 ? 'behind' : 'even');
+        pct = lead > 0 ? Math.min(lead / war.target, 1) * 100 : 0;
+        bar = true;
+      }
+    }
+    var parts = el.warLead.children;
+    if (parts[0].textContent !== label) parts[0].textContent = label;
+    var fill = parts[1].firstElementChild;
+    var width = bar ? pct.toFixed(2) + '%' : '0%';
+    if (fill.style.width !== width) fill.style.width = width;
+    el.warLead.className = label ? side + (bar ? '' : ' nobar') : '';
+    if (label) el.warLead.setAttribute('title', title); else el.warLead.removeAttribute('title');
+    el.warLead.hidden = !label;
+    el.warPanel.classList.toggle('lead-on', !!label);
+  }
+
   function renderWar() {
     var identity = Roster.identity();
     var war = Roster.war();
@@ -5392,6 +5468,7 @@
         'nothing to call.';
       el.warScore.textContent = '';
       renderWarClock();
+      renderWarLead(null);
       return;
     }
     el.warWho.textContent = 'vs ' + war.opponentName;
@@ -5402,6 +5479,7 @@
       + ' · war ' + war.warId;
     el.warScore.textContent = war.ourScore + ' – ' + war.theirScore;
     renderWarClock();
+    renderWarLead(war);
   }
 
   function renderAdvanced() {
