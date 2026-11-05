@@ -814,7 +814,9 @@
             the scripts show and write the same board. Every request is a
             POST and carries the signed slip in its body: never in a web address, never in a header.
             It is sent the war ID, a target's Torn ID, and the target's hospital end time as Torn
-            reported it. <strong>It is never sent your Torn key</strong> after the sign-in, and
+            reported it. Every 30 seconds, while the page is on screen, it is also asked for the landing
+            windows (see Landing time); that request carries the slip and the name of the view, nothing
+            else. <strong>It is never sent your Torn key</strong> after the sign-in, and
             never your FFScouter key.</dd>
           <dt>Who a claim belongs to</dt>
           <dd>The server takes your Torn ID from the signed slip, not from anything this page puts
@@ -858,13 +860,16 @@
             nothing until you press it yourself &mdash; your browser then opens Torn in a new
             tab.</dd>
           <dt>Landing time</dt>
-          <dd>For a player who is travelling, the row says about how long is left before the
-            plane lands, for example ~1h 54m. It is worked out on this device from the roster
-            reading the page already does: the country and the plane type in Torn's status, a
-            table of flight times per country and plane, and the moment this page saw the
-            player leave &mdash; or, if it did not see that, the player's last action as Torn
-            reports it. Nothing is asked of Torn for it and nothing is stored. It is an
-            estimate, marked ~, and it is shown only when everything it needs is known.</dd>
+          <dd>For a player who is travelling, the row says when the plane lands. When the KS server
+            has the flight, the row shows the landing window it worked out, for example 48&ndash;52m
+            (no ~); a ? means the plane may be the slower one and a later window follows. The server's
+            data must be under 5 minutes old; otherwise, and for anyone the server does not have, the
+            page falls back to its own estimate, marked ~, for example ~1h 54m. That one is worked out
+            on this device from the roster reading the page already does: the country and the plane
+            type in Torn's status, a table of flight times per country and plane, and the moment this
+            page saw the player leave &mdash; or, if it did not see that, the player's last action as
+            Torn reports it. The window is information only and never changes who can take DIBS.
+            Nothing is asked of Torn for it and nothing is stored in this browser.</dd>
           <dt>Dot, Callable and the war line</dt>
           <dd>The dot before a name is the player's activity from the same roster reading:
             green online, gold idle, grey offline, no dot when Torn did not say or the reading
@@ -1022,6 +1027,7 @@
         <dt>Your Torn ID</dt><dd id="advMe" class="tid"></dd>
         <dt>Claim board</dt><dd id="advClaims" class="tid"></dd>
         <dt>Roster</dt><dd id="advRoster" class="tid"></dd>
+        <dt>Landing windows</dt><dd id="advLanding" class="tid"></dd>
         <dt>FF and EST</dt><dd id="advFf" class="tid"></dd>
         <dt>Life</dt><dd id="advLife" class="tid"></dd>
         <dt>Honor bars</dt><dd id="advHonors" class="tid"></dd>
@@ -1732,7 +1738,7 @@
    'filterBtn','filterPanel','fSort','fDir','fDirNote','fShowing','fHidden','fPaused','fReset',
    'simBanner','simRealWar','simWireWar','simResetBar','simResetBtn','simResetNote',
    'actionMessage','simResetButtonSize','simResetIdleSize','simResetArmedSize',
-   'advServer','advWar','advMe','advClaims','advRoster','advFf','advError','advRaw']
+   'advServer','advWar','advMe','advClaims','advRoster','advLanding','advFf','advError','advRaw']
     .forEach(function (id) { el[id] = document.getElementById(id); });
 
   function read(store) { try { return localStorage.getItem(store) || ''; } catch (e) { return ''; } }
@@ -3621,12 +3627,319 @@
       return left === null ? Infinity : landingAt(target);
     }
 
-    return { update: update, leftSeconds: leftSeconds, order: order, forget: function () { departures.clear(); } };
+    // R28. Read only, for the guard in LandingView: how and when the page took the take-off for this
+    // flight - { source: 'observed' | 'last-action', at } in Torn's seconds - or null.
+    function takeoff(target) {
+      if (target.state !== 'Traveling') return null;
+      var flight = departures.get(target.id);
+      if (!flight || flight.sig !== signature(target)) return null;
+      var seconds = travelFlightSeconds(target);
+      if (seconds === null) return null;
+      settle(flight, seconds);   // as landingAt does: puts a take-off that was waiting for the clock on it
+      return flight.at === null ? null : { source: flight.source, at: flight.at };
+    }
+
+    return { update: update, leftSeconds: leftSeconds, order: order, takeoff: takeoff, forget: function () { departures.clear(); } };
   })();
+
+  // ------------------------------------------------- R28: landing windows from the KS server
+  //
+  // The KS server (ks-server) works out a landing WINDOW for every player who is travelling in
+  // the factions it follows, and publishes it to the War Room worker every 30 seconds as the view
+  // "landing". This page reads that view with its own sign-in slip (POST /views/get; no Torn key
+  // is involved and Torn is asked for nothing), and where the server has the flight the row shows
+  // the window, for example 48–52m. Everywhere else the page's own estimate from R14 (marked ~)
+  // is shown as before. The window is information only: it is not read by the DIBS rules.
+  //
+  // Everything the server says is untrusted: the answer is checked before it is used, text from it
+  // is never put into the page as HTML, and nothing is stored in this browser - the data lives in
+  // memory until the key is forgotten, the key owner changes or the war or its opponent does.
+  var LANDING_VIEW_NAME = 'landing';
+  var LANDING_SCHEMA = 1;
+  var LANDING_POLL_MS = 30000;          // one reading every 30 seconds, from tick()
+  var LANDING_READ_STALE_MS = 60000;    // 2 x the poll: an older reading is not used
+  var LANDING_DATA_MAX_AGE_S = 300;     // the server's last answer from Torn for the opponent, in Torn's seconds
+  var LANDING_FUTURE_SLACK_S = 120;     // a "last answer" further ahead of Torn's clock than this is nonsense
+  var LANDING_TAKEOFF_SLACK_S = 60;     // see the take-off guard in pick()
+  var LANDING_MAX_WINDOWS = 4;
+  var LANDING_MAX_FLIGHT_S = 21600;     // no window is wider than 6 hours
+  var LANDING_METHODS = ['Standard', 'Airstrip', 'WLT', 'Business'];
+  var LANDING_RETRY_DEFAULT_S = 60;
+
+  var LandingView = (function () {
+    var heldContext = '';     // who read for which war and opponent; anything else empties everything
+    var epoch = 0;            // bumped when emptied: an answer that was asked before is thrown away
+    var data = null;          // { polledAt, readAt (stopwatch), readWall, players: id -> record }
+    var last = { kind: 'none', reason: '', version: 0 };   // none | ok | unknown | offline | update
+    var lastAttempt = null;   // stopwatch time the last reading started, or null
+    var retryUntil = 0;       // stopwatch time before which nothing is asked (429)
+    var reading = false;
+
+    function stopwatch() { return performance.now(); }
+
+    // Who the reading is for. Empty when there is no war: then nothing is read and nothing is held.
+    function contextOf() {
+      var identity = Roster.identity();
+      var war = Roster.war();
+      return (identity && war) ? identity.playerId + '|' + war.warId + '|' + war.opponentId : '';
+    }
+
+    function empty() {
+      epoch += 1;
+      data = null;
+      last = { kind: 'none', reason: '', version: 0 };
+      lastAttempt = null;
+      retryUntil = 0;
+    }
+
+    function sync() {
+      var now = contextOf();
+      if (now !== heldContext) { heldContext = now; empty(); }
+    }
+
+    function safeInt(value) { return typeof value === 'number' && Number.isSafeInteger(value); }
+    function isObject(value) { return !!value && typeof value === 'object' && !Array.isArray(value); }
+
+    // One player's record as the page keeps it, or null: anything that breaks a rule is ignored and
+    // the row keeps its own estimate. The windows are put in time order here - the server lists an
+    // airliner's windows by plane method (Standard first), which is the later one.
+    function recordOf(raw) {
+      if (!isObject(raw)) return null;
+      if (raw.direction !== 'OUT' && raw.direction !== 'HOME') return null;
+      if (typeof raw.country !== 'string') return null;
+      var country = travelCountryOf(raw.country);
+      if (!country) return null;
+      if (!safeInt(raw.departedTo) || raw.departedTo <= 0) return null;
+      if (!Array.isArray(raw.windows) || raw.windows.length < 1 || raw.windows.length > LANDING_MAX_WINDOWS) return null;
+      var windows = [];
+      for (var i = 0; i < raw.windows.length; i++) {
+        var w = raw.windows[i];
+        if (!isObject(w) || !safeInt(w.from) || !safeInt(w.to) || w.from <= 0 || w.from >= w.to) return null;
+        if (w.to - w.from > LANDING_MAX_FLIGHT_S) return null;
+        if (LANDING_METHODS.indexOf(w.method) === -1) return null;
+        windows.push({ from: w.from, to: w.to });
+      }
+      windows.sort(function (x, y) { return x.to - y.to || x.from - y.from; });
+      return { direction: raw.direction, country: country, departedTo: raw.departedTo, windows: windows };
+    }
+
+    // The answer of /views/get for 'landing', checked. Sets `last` and `data`.
+    function take(body) {
+      var view = body && body.views && typeof body.views === 'object' ? body.views[LANDING_VIEW_NAME] : undefined;
+      if (view === null) {
+        var why = body.missing && body.missing[LANDING_VIEW_NAME];
+        data = null;
+        last = { kind: 'unknown', reason: why === 'dropped' ? 'dropped' : 'not published', version: 0 };
+        return;
+      }
+      if (!isObject(view) || !safeInt(view.schemaVersion)) {
+        data = null; last = { kind: 'unknown', reason: 'server error', version: 0 };
+        return;
+      }
+      if (view.schemaVersion !== LANDING_SCHEMA) {
+        data = null; last = { kind: 'update', reason: '', version: view.schemaVersion };
+        return;
+      }
+      var payload = view.payload;
+      if (!isObject(payload) || !isObject(payload.factions)) {
+        data = null; last = { kind: 'unknown', reason: 'server error', version: 0 };
+        return;
+      }
+      if (payload.model !== 'M1') {
+        data = null; last = { kind: 'unknown', reason: 'unknown model', version: 0 };
+        return;
+      }
+      var war = Roster.war();
+      var opponent = Object.prototype.hasOwnProperty.call(payload.factions, war.opponentId) ? payload.factions[war.opponentId] : undefined;
+      if (opponent === undefined) {
+        data = null; last = { kind: 'unknown', reason: 'opponent not tracked', version: 0 };
+        return;
+      }
+      if (!isObject(opponent) || !safeInt(opponent.polledAt) || opponent.polledAt <= 0 || !isObject(opponent.players)) {
+        data = null; last = { kind: 'unknown', reason: 'server error', version: 0 };
+        return;
+      }
+      var players = Object.create(null);
+      Object.keys(opponent.players).forEach(function (id) {
+        if (!/^[1-9][0-9]{0,11}$/.test(id)) return;
+        var record = recordOf(opponent.players[id]);
+        if (record) players[id] = record;
+      });
+      data = { polledAt: opponent.polledAt, readAt: stopwatch(), readWall: Date.now(), players: players };
+      last = { kind: 'ok', reason: '', version: 0 };
+    }
+
+    async function readOnce(retrying) {
+      var asked = epoch;
+      var slip = await Session.ensure();
+      sync();
+      if (asked !== epoch) return;
+      if (!slip) { last = { kind: 'unknown', reason: 'not signed in', version: 0 }; return; }
+      var response;
+      try {
+        response = await fetch(CLAIM_SERVER + '/views/get', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session: slip, names: [LANDING_VIEW_NAME] })
+        });
+      } catch (networkFailure) {
+        sync();
+        if (asked === epoch) last = { kind: 'offline', reason: '', version: 0 };
+        return;
+      }
+      var body = null;
+      try { body = await response.json(); } catch (e) { body = null; }
+      sync();
+      if (asked !== epoch) return;   // emptied while the answer was on its way: it is not for this page any more
+      // serverTime in this answer is deliberately NOT given to the Torn clock: it is in seconds
+      // and the clock's reserve is measured on the claim board's answers.
+      if (response.status === 200 && isObject(body) && body.ok === true) { take(body); return; }
+      if (response.status === 401) {
+        if (!retrying && isObject(body) && body.reason === 'expired') {
+          // It ran out while we were asking. One fresh slip, one more try - as the claim board does.
+          Session.forget();
+          if (await Session.signIn()) return readOnce(true);
+        }
+        last = { kind: 'unknown', reason: 'not signed in', version: 0 };
+        return;
+      }
+      if (response.status === 429) {
+        var wait = isObject(body) ? body.retryAfterSeconds : NaN;
+        if (!safeInt(wait) || wait < 1 || wait > 300) wait = LANDING_RETRY_DEFAULT_S;
+        retryUntil = stopwatch() + wait * 1000;
+        last = { kind: 'unknown', reason: 'rate limited', version: 0 };
+        return;
+      }
+      last = { kind: 'unknown', reason: 'server error', version: 0 };
+    }
+
+    // Called from tick() (every CLAIM_POLL_MS). Reads when it is due; never waits for anything.
+    function kick() {
+      sync();
+      if (heldContext === '' || document.hidden || !Session.signedIn() || reading) return;
+      var now = stopwatch();
+      if (now < retryUntil) return;
+      // Due when it would be overdue before the next tick is half way (as the roster is).
+      if (lastAttempt !== null && now - lastAttempt + CLAIM_POLL_MS / 2 < LANDING_POLL_MS) return;
+      reading = true;
+      lastAttempt = now;
+      var started = epoch;
+      readOnce(false).catch(function () {
+        if (started === epoch) last = { kind: 'unknown', reason: 'server error', version: 0 };
+      }).then(function () {
+        reading = false;
+        // The rows and the line are drawn again at once; the second hand only writes text. The sign-in
+        // box too: a slip that ran out was replaced on the way and the box must not stay on CHECKING.
+        sessionRender();
+        renderTargets();
+        renderAdvanced();
+      });
+    }
+
+    // Is the held answer young enough to be used (rule d)? Then the Torn second it is judged on, else null.
+    function usableNow() {
+      if (!data || !tornClockReady()) return null;
+      if (stopwatch() - data.readAt > LANDING_READ_STALE_MS) return null;
+      var now = getTornNowMs() / 1000;
+      var age = now - data.polledAt;
+      if (age > LANDING_DATA_MAX_AGE_S || age < -LANDING_FUTURE_SLACK_S) return null;
+      return now;
+    }
+
+    // The window the row shows, or null (then the page's own estimate is shown). All of a-f.
+    function pick(target) {
+      sync();
+      var trip = travelOf(target);                                           // a
+      if (!trip || trip.state !== 'Traveling' || !trip.where) return null;
+      var now = usableNow();                                                 // d
+      if (now === null) return null;
+      var record = data.players[target.id];                                  // b: only the opponent's own faction was kept
+      if (!record) return null;
+      if (trip.dir !== (record.direction === 'OUT' ? 'to' : 'from')) return null;   // c
+      if (trip.where !== record.country) return null;
+      var took = Flights.takeoff(target);                                    // e
+      if (took && took.source === 'observed' && took.at - record.departedTo > LANDING_TAKEOFF_SLACK_S) return null;
+      for (var i = 0; i < record.windows.length; i++) {                      // f
+        if (record.windows[i].to >= now) {
+          return { now: now, from: record.windows[i].from, to: record.windows[i].to, later: i < record.windows.length - 1 };
+        }
+      }
+      return null;
+    }
+
+    function clock(minutes) {
+      if (minutes < 60) return minutes + 'm';
+      var rest = minutes % 60;
+      return Math.floor(minutes / 60) + 'h' + (rest < 10 ? '0' : '') + rest;
+    }
+
+    // "48–52m", "58m–1h04", "1h05–1h12", "now–4m"; a "?" when a later window follows. '' = none.
+    function etaText(target) {
+      var shown = pick(target);
+      if (!shown) return '';
+      var upper = Math.ceil((shown.to - shown.now) / 60);
+      var lower = shown.from <= shown.now ? 0 : Math.max(0, Math.floor((shown.from - shown.now) / 60));
+      var text;
+      if (shown.from <= shown.now) text = 'now–' + clock(upper);
+      else if (lower < 60 && upper < 60) text = lower + '–' + upper + 'm';
+      else text = clock(lower) + '–' + clock(upper);
+      return text + (shown.later ? '?' : '');
+    }
+
+    // For the sort: when the shown window opens, in Torn's seconds, or null.
+    function opensAt(target) {
+      var shown = pick(target);
+      return shown ? shown.from : null;
+    }
+
+    function ageText(seconds) {
+      var s = Math.max(0, Math.floor(seconds));
+      return s >= 120 ? Math.floor(s / 60) + 'm' : s + ' s';
+    }
+
+    // The Advanced line.
+    function line() {
+      sync();
+      if (!Roster.war()) return 'no war loaded';
+      var tail = ' · showing estimates (~)';
+      if (last.kind === 'none') return 'CHECKING · not read yet' + tail;
+      if (last.kind === 'offline') return 'OFFLINE · server not reached' + tail;
+      if (last.kind === 'update') return 'UPDATE NEEDED · view version ' + last.version + tail;
+      if (last.kind === 'unknown') {
+        var reason = last.reason;
+        if (reason === 'rate limited') reason = 'rate limited, retry in ' + Math.max(0, Math.ceil((retryUntil - stopwatch()) / 1000)) + ' s';
+        return 'UNKNOWN · ' + reason + tail;
+      }
+      if (usableNow() !== null) {
+        return 'KS server · data ' + Math.max(0, Math.floor(getTornNowMs() / 1000 - data.polledAt)) + ' s old · read ' +
+          new Date(data.readWall).toLocaleTimeString();
+      }
+      var age = 'unknown';
+      if (data && tornClockReady()) {
+        var polledAge = getTornNowMs() / 1000 - data.polledAt;
+        if (polledAge > LANDING_DATA_MAX_AGE_S) age = ageText(polledAge);
+        else if (polledAge >= -LANDING_FUTURE_SLACK_S) age = ageText((stopwatch() - data.readAt) / 1000);
+      }
+      return 'STALE · data ' + age + ' old · showing estimates (~)';
+    }
+
+    return { kick: kick, etaText: etaText, opensAt: opensAt, line: line, forget: function () { heldContext = ''; empty(); } };
+  })();
+
+  // The Status sort inside Traveling (R14, R28): the flight that lands first comes first. The server's
+  // window counts by when it opens, the page's own estimate by when it lands; both are absolute
+  // moments, so the order does not move as the minutes count down. No time at all is last.
+  function landingOrder(target) {
+    var opens = LandingView.opensAt(target);
+    return opens === null ? Flights.order(target) : opens;
+  }
 
   // "~1h 54m" over an hour, "~23m" under it; '' when there is no time to give.
   // Rounded up, like the hospital time: never less than the wait there is.
   function travelEtaText(target) {
+    // R28: where the KS server has the flight, its window ("48–52m", no ~); else this estimate.
+    var served = LandingView.etaText(target);
+    if (served !== '') return served;
     var left = Flights.leftSeconds(target);
     if (left === null) return '';
     var minutes = Math.ceil(left / 60);
@@ -3948,11 +4261,11 @@
           return outA === outB ? 0 : (outA < outB ? -1 : 1);
         }
         if (a.state === 'Jail' || a.state === 'Federal') return (a.until || 0) - (b.until || 0);
-        // Inside Traveling (R14): the one that lands first comes first, a flight
+        // Inside Traveling (R14, R28): the one that lands first comes first, a flight
         // with no time to give last. The landing is an absolute moment, so this
         // order does not churn as the minutes count down.
         if (a.state === 'Traveling') {
-          var landsA = Flights.order(a), landsB = Flights.order(b);
+          var landsA = landingOrder(a), landsB = landingOrder(b);
           return landsA === landsB ? 0 : (landsA < landsB ? -1 : 1);
         }
         return 0;
@@ -5110,6 +5423,7 @@
       ? (Roster.targets() || []).length + ' rows · read ' +
         new Date(Roster.stamps().targets).toLocaleTimeString()
       : 'not loaded';
+    el.advLanding.textContent = LandingView.line();
     el.advFf.textContent = ffAdvancedLine();
     el.advLife.textContent = Life.statusLine();
     el.advHonors.textContent = Honors.line();
@@ -5778,6 +6092,8 @@
         }
       }
     }
+    // R28: the landing windows, when a reading is due. Not awaited: it never holds up the board.
+    LandingView.kick();
     await pollClaims();
     // This member's own claim first: if its target has come online or is back
     // in hospital it is let go, and the board is read again so that what
@@ -5852,6 +6168,8 @@
     Life.forget();
     // The honor IDs were read with that key as well.
     Honors.forget();
+    // R28: what the KS server said about the landings goes with the key too.
+    LandingView.forget();
     // The sign-in was made from that key. It goes with it.
     Session.forget();
     Claims.drop();
@@ -5937,6 +6255,7 @@
     // Which clock is being counted on can change between two full redraws -
     // a measure thrown away, a new one taken - and the line says so at once.
     el.advClock.textContent = tornClockLabel();
+    el.advLanding.textContent = LandingView.line();
     renderWarClock();
   }
   function startTargetClock() {
