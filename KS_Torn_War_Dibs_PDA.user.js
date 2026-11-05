@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PDA
 // @namespace    kingshade.torn
-// @version      1.5.194
+// @version      1.5.195
 // @description  Roster-local PDA presentation with v1.5.145 authority and shared-claim safety.
 // @author       Kingshade
 // @match        https://www.torn.com/factions.php*
@@ -15,6 +15,53 @@
 // ==/UserScript==
 
 /*
+ * 1.5.195 (2026-11-05): a Filters panel with sorting and filters on FF, stats,
+ * activity, status and last action, like War Room's and FFScouter's. ONE MAIN
+ * CHANGE, presentation only. Name, namespace, update address and every
+ * existing storage name are those of 1.5.194.
+ * ADDED
+ *   - A "Filters" (or "Filters (N)") button beside Settings opens a section:
+ *     Sort (Default order, FF, EST, Level, Status, DIBS, Last action, with a
+ *     direction button), Activity (Online, Idle, Offline), Status (Okay,
+ *     Hospital, Out soon (<=10m), Jail, Abroad, Traveling, Fedded), FF range,
+ *     Stats range (750k, 200m, 1.5b, 2t), Last action in minutes, "Showing X of
+ *     Y" and Reset filters. A bad value gets a red edge and "Not a number" and
+ *     that limit is not used. The section is closed after every page load.
+ *   - Sorting is a CSS order on the rows, as the Status sort already was: the
+ *     rows are never moved in the page. Default order is exactly 1.5.194: KS
+ *     orders only while Torn's own Status header is active. Any other choice
+ *     orders the rows by that choice whatever Torn's header says. A target with
+ *     no value is last in both directions; equal values go by Torn ID. KS never
+ *     taps Torn's headers. If the member taps one of them while a KS choice is
+ *     active, the choice goes back to Default order (shown in the panel as
+ *     "Sort: Default order (Torn header used)") so a tap on Torn's header always
+ *     does something, as since 1.5.182.
+ *   - A filter only hides rows (an attribute on the row and one CSS rule in a
+ *     style element KS owns; no inline style on Torn's rows). A hidden row has no
+ *     DIBS button. Your own claim is never hidden. Everything is still read and
+ *     updated for hidden rows. Out soon is a hospital time of 10 minutes or
+ *     less on Torn's clock. When FF is not available (no key, FFScouter does
+ *     not answer, or no answer newer than the FF age limit) the FF and Stats
+ *     limits are paused and the panel says so; the list is never emptied
+ *     because FFScouter is away.
+ *   - New storage: ks_torn_war_dibs_pda_sort_v1 ("<choice>:<asc|desc>", written
+ *     when the member changes the sort) and ks_torn_war_dibs_pda_filters_v1
+ *     (schemaVersion 1; the checked boxes and the limits as typed; written when a
+ *     filter changes, removed by Reset filters). Unreadable values mean the
+ *     default. No Torn data, no key, is stored.
+ *   - About: a short paragraph on Filters.
+ * KNOWN ISSUES
+ *   - Visible columns are not part of this version.
+ *   - The DIBS sort reads the state the DIBS buttons were last drawn in; rows
+ *     far outside the screen are drawn less often.
+ * VERIFICATION
+ *   - Synthetic only (Chromium against stand-in Torn and KS servers). On the
+ *     phone: open Filters, choose FF 2 to 3.4 and see the rows change; tap
+ *     Torn's Status header and see the sort go back to Default order.
+ * Everything else is unchanged from 1.5.194: DIBS, its rules and limits, type=2,
+ * the 48 hour display, Share with KS, the FF circle and stats mark, the requests
+ * for the war, the clock and the panel. No new request.
+ *
  * 1.5.194 (2026-11-04): a hospital time of 48 hours or more is shown as a
  * time. ONE MAIN CHANGE, display and Status sorting only. Name, namespace,
  * update address and every storage name are those of 1.5.193.
@@ -581,11 +628,14 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs",
-    version: "1.5.194",
-    instanceKey: "__ksTornWarDibsPdaV15194Test",
+    version: "1.5.195",
+    instanceKey: "__ksTornWarDibsPdaV15195Test",
     layerId: "ks-twd-pda-layer",
     rowHostPrefix: "ks-twd-pda-row-",
     panelId: "ks-twd-pda-panel",
+    // 1.5.195: the sort choice and the filters (Filters panel). Nothing else new.
+    sortStorageKey: "ks_torn_war_dibs_pda_sort_v1",
+    filtersStorageKey: "ks_torn_war_dibs_pda_filters_v1",
     ownClaimStorageKey: "ks_torn_war_dibs_bridge_own_claim_v1",
     claimQuarantineStorageKey: "ks_torn_war_dibs_bridge_claim_quarantine_v1",
     claimStorageProbeKey: "ks_torn_war_dibs_pda_claim_storage_probe_v1",
@@ -5601,6 +5651,8 @@
   // layer is rebuilt against a genuinely new root (see ensurePresentationLayer).
   let settingsExpanded = false;
   let aboutExpanded = false;
+  // 1.5.195: the Filters section, same rule: memory only, closed on every load.
+  let filtersExpanded = false;
 
 
   function demoActive() {
@@ -5662,7 +5714,10 @@
     "forget-torn",
     "settings-toggle",
     "about-toggle",
-    "share-toggle"
+    "share-toggle",
+    "filters-toggle",
+    "sort-dir",
+    "filters-reset"
   ]);
   let ownedPresentationLayer = null;
   let inlinePanelHost = null;
@@ -5967,6 +6022,12 @@
     // Settings but never out of this panel, and focusout bubbles. A lock that
     // was held back while the field had focus is applied when it loses it.
     panel.addEventListener("focusout", handleCredentialInputFocusOut);
+    // 1.5.195: the Filters section. The select and the boxes report "change";
+    // the limit fields report "input" on every key. Delegated from the panel
+    // node like everything above, so one listener each on a node KS owns.
+    panel.addEventListener("change", handleFilterPanelChange);
+    panel.addEventListener("input", handleFilterPanelInput);
+    fillFilterFields(panelShadow);
   }
 
   function handlePanelControl(role, event) {
@@ -6015,6 +6076,21 @@
         registerTrustedInteraction();
         shareToggle();
         return;
+      case "filters-toggle":
+        registerTrustedInteraction();
+        filtersExpanded = !filtersExpanded;
+        updatePanel();
+        // The section pushes the list down or pulls it up: measure the rows again.
+        schedulePresentationFrame({ layout: true });
+        return;
+      case "sort-dir":
+        registerTrustedInteraction();
+        flipSortDirection();
+        return;
+      case "filters-reset":
+        registerTrustedInteraction();
+        resetRosterFilters();
+        return;
       default:
     }
   }
@@ -6035,6 +6111,7 @@
       // A genuinely new root is a remount: Settings/About never survive one.
       settingsExpanded = false;
       aboutExpanded = false;
+      filtersExpanded = false;
     }
     let layer = presentationLayer();
     if (layer?.shadowRoot) {
@@ -6147,13 +6224,99 @@
         .about-panel.open { display:block; }
         .danger-zone { margin-top:6px; padding-top:6px; border-top:1px solid rgba(148,163,184,.18); }
         .danger-zone-label { color:#fca5a5; font:750 7px/1.3 system-ui,sans-serif; text-transform:uppercase; letter-spacing:.04em; margin-bottom:5px; }
-        @media (max-width:520px) { .status-grid { grid-template-columns:1fr; } .panel { padding-left:8px; padding-right:8px; } }
+        /* 1.5.195: the Filters section. Own colours: text 4.5:1 and edges 3:1 or more
+           against the panel (#0f172a), controls at least 40 px high. Hidden unless open. */
+        .filters-panel { display:none; margin-top:7px; padding-top:2px; border-top:1px solid rgba(148,163,184,.18); color:#e2e8f0; font:600 12px/1.3 system-ui,sans-serif; }
+        .filters-panel.open { display:block; }
+        .filters-panel .frow { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; margin-top:8px; }
+        .filters-panel .fname { flex:0 0 78px; color:#f1f5f9; font:750 12px/1.2 system-ui,sans-serif; }
+        .filters-panel .fsel { flex:1 1 130px; min-width:0; height:40px; box-sizing:border-box; padding:0 8px; border:1px solid #8aa0b8; border-radius:6px; background:#111827; color:#f8fafc; font:700 13px/1 system-ui,sans-serif; }
+        .filters-panel .fbtn { display:inline-flex; align-items:center; justify-content:center; min-width:44px; min-height:40px; padding:0 12px; border:1px solid #8aa0b8; border-radius:6px; background:rgba(2,6,23,.5); color:#e2e8f0; font:700 13px/1.1 system-ui,sans-serif; touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
+        .filters-panel .fbtn:hover { color:#fff; text-decoration:none; }
+        .filters-panel .fbtn:active { background:rgba(56,189,248,.22); border-color:#38bdf8; }
+        .filters-panel .fbtn:disabled { opacity:1; color:#8e9db0; border-style:dashed; }
+        .filters-panel .fcheck { display:inline-flex; align-items:center; gap:7px; min-height:40px; padding:0 6px 0 0; color:#e2e8f0; font:650 13px/1.2 system-ui,sans-serif; cursor:pointer; }
+        .filters-panel .fcheck input { appearance:none; -webkit-appearance:none; flex:0 0 22px; width:22px; height:22px; margin:0; box-sizing:border-box; border:2px solid #8aa0b8; border-radius:5px; background:#111827; display:inline-grid; place-content:center; }
+        .filters-panel .fcheck input:checked { background:#2563eb; border-color:#bfdbfe; }
+        .filters-panel .fcheck input:checked::after { content:""; width:6px; height:11px; margin-top:-2px; border:solid #fff; border-width:0 2px 2px 0; transform:rotate(45deg); }
+        .filters-panel .frange { display:flex; flex:1 1 200px; gap:8px; min-width:0; }
+        .filters-panel .ffield { flex:1 1 0; min-width:0; display:flex; flex-direction:column; }
+        .filters-panel .finput { width:100%; min-width:0; height:40px; box-sizing:border-box; padding:0 8px; border:1px solid #8aa0b8; border-radius:6px; background:#111827; color:#f8fafc; font:700 13px/1 system-ui,sans-serif; outline:none; }
+        .filters-panel .finput::placeholder { color:#a3b1c2; opacity:1; font-weight:600; }
+        .filters-panel .finput:focus { border-color:#7dd3fc; }
+        .filters-panel .finput.bad { border-color:#f87171; box-shadow:0 0 0 1px #f87171; }
+        .filters-panel .ferr { margin-top:2px; color:#fca5a5; font:700 11px/1.2 system-ui,sans-serif; }
+        .filters-panel .ferr[hidden] { display:none; }
+        .filters-panel .fsum { justify-content:space-between; }
+        .filters-panel .fshow { color:#f1f5f9; font:750 13px/1.2 system-ui,sans-serif; }
+        .filters-panel .fnote { margin-top:6px; color:#b4c0d0; font:650 12px/1.35 system-ui,sans-serif; }
+        .filters-panel .fnote[hidden] { display:none; }
+        @media (max-width:520px) { .status-grid { grid-template-columns:1fr; } .panel { padding-left:8px; padding-right:8px; } .filters-panel .fname { flex-basis:100%; } }
       </style>
       <div data-role="row-surface"></div>
       <div class="panel" data-role="panel" id="${SCRIPT.panelId}">
         <div class="top"><span class="brand">KS Torn War Dibs</span><span class="version">v${SCRIPT.version}</span></div>
         <div class="status-item summary-item" data-role="summary-item"><span class="dot"></span><span class="status" data-role="summary-status">Loading…</span></div>
-        <div class="controls"><button type="button" data-role="settings-toggle" aria-expanded="false">Settings</button></div>
+        <div class="controls"><button type="button" data-role="settings-toggle" aria-expanded="false">Settings</button><button type="button" data-role="filters-toggle" aria-expanded="false" aria-controls="ksf-panel">Filters</button></div>
+        <div class="filters-panel" data-role="filters-panel" id="ksf-panel">
+          <div class="frow">
+            <label class="fname" for="ksf-sort">Sort</label>
+            <select id="ksf-sort" class="fsel" data-role="f-sort">
+              <option value="default">Default order</option>
+              <option value="ff">FF</option>
+              <option value="est">EST</option>
+              <option value="level">Level</option>
+              <option value="status">Status</option>
+              <option value="dibs">DIBS</option>
+              <option value="lastaction">Last action</option>
+            </select>
+            <button type="button" class="fbtn fdir" data-role="sort-dir" aria-label="Sort direction" disabled>▲</button>
+          </div>
+          <div class="fnote" data-role="sort-note" hidden></div>
+          <div class="frow" role="group" aria-labelledby="ksf-act">
+            <span class="fname" id="ksf-act">Activity</span>
+            <label class="fcheck"><input type="checkbox" data-group="activity" value="online"><span>Online</span></label>
+            <label class="fcheck"><input type="checkbox" data-group="activity" value="idle"><span>Idle</span></label>
+            <label class="fcheck"><input type="checkbox" data-group="activity" value="offline"><span>Offline</span></label>
+          </div>
+          <div class="frow" role="group" aria-labelledby="ksf-st">
+            <span class="fname" id="ksf-st">Status</span>
+            <label class="fcheck"><input type="checkbox" data-group="status" value="okay"><span>Okay</span></label>
+            <label class="fcheck"><input type="checkbox" data-group="status" value="hospital"><span>Hospital</span></label>
+            <label class="fcheck"><input type="checkbox" data-group="status" value="outsoon"><span>Out soon (&le;10m)</span></label>
+            <label class="fcheck"><input type="checkbox" data-group="status" value="jail"><span>Jail</span></label>
+            <label class="fcheck"><input type="checkbox" data-group="status" value="abroad"><span>Abroad</span></label>
+            <label class="fcheck"><input type="checkbox" data-group="status" value="traveling"><span>Traveling</span></label>
+            <label class="fcheck"><input type="checkbox" data-group="status" value="fedded"><span>Fedded</span></label>
+          </div>
+          <div class="frow" role="group" aria-labelledby="ksf-ff">
+            <span class="fname" id="ksf-ff">FF range</span>
+            <span class="frange">
+              <span class="ffield"><input type="text" class="finput" inputmode="decimal" maxlength="16" autocomplete="off" placeholder="min" aria-label="FF range, minimum" data-bound="ff" data-end="min"><span class="ferr" hidden>Not a number</span></span>
+              <span class="ffield"><input type="text" class="finput" inputmode="decimal" maxlength="16" autocomplete="off" placeholder="max" aria-label="FF range, maximum" data-bound="ff" data-end="max"><span class="ferr" hidden>Not a number</span></span>
+            </span>
+          </div>
+          <div class="frow" role="group" aria-labelledby="ksf-es">
+            <span class="fname" id="ksf-es">Stats range</span>
+            <span class="frange">
+              <span class="ffield"><input type="text" class="finput" inputmode="text" maxlength="16" autocomplete="off" placeholder="min, e.g. 750k" aria-label="Stats range, minimum" data-bound="est" data-end="min"><span class="ferr" hidden>Not a number</span></span>
+              <span class="ffield"><input type="text" class="finput" inputmode="text" maxlength="16" autocomplete="off" placeholder="max, e.g. 1.5b" aria-label="Stats range, maximum" data-bound="est" data-end="max"><span class="ferr" hidden>Not a number</span></span>
+            </span>
+          </div>
+          <div class="frow" role="group" aria-labelledby="ksf-la">
+            <span class="fname" id="ksf-la">Last action</span>
+            <span class="frange">
+              <span class="ffield"><input type="text" class="finput" inputmode="numeric" maxlength="16" autocomplete="off" placeholder="min, minutes ago" aria-label="Last action, minimum minutes ago" data-bound="last" data-end="min"><span class="ferr" hidden>Not a number</span></span>
+              <span class="ffield"><input type="text" class="finput" inputmode="numeric" maxlength="16" autocomplete="off" placeholder="max, minutes ago" aria-label="Last action, maximum minutes ago" data-bound="last" data-end="max"><span class="ferr" hidden>Not a number</span></span>
+            </span>
+          </div>
+          <div class="frow fsum">
+            <span class="fshow" data-role="f-showing" role="status">Showing 0 of 0</span>
+            <button type="button" class="fbtn" data-role="filters-reset">Reset filters</button>
+          </div>
+          <div class="fnote" data-role="f-hidden" hidden></div>
+          <div class="fnote" data-role="f-paused" hidden></div>
+        </div>
         <div class="controls" data-role="key-breakout" hidden></div>
         <div class="settings-panel" data-role="settings-panel">
           <div class="status-grid">
@@ -6188,6 +6351,8 @@
               <strong>KS War Room (shared DIBS):</strong> claim/release data is shared with faction members through the KS War Room server (ks-war-room-claims.hans-viklund.workers.dev). Signing in returns a temporary sign-in token that is kept only in this page's memory and is never stored. Sent to the server: that token, the war ID, the target's Torn ID and the target's hospital end time. Calls: sign in, read the claim board (every 2.5 s on your own war page), claim, release, and a report when a claimed target is back in hospital. Kept on the server: target ID, the claimer's Torn ID, claim time and hospital end time, removed once the war has been untouched for 12 hours.
               <br>
               <strong>Share with KS (opt-in, off by default):</strong> when on, your own battle stats (strength, defense, speed, dexterity, total) and your Torn ID go to the KS War Room server every 6 hours. The server holds them until the KS server has fetched them (at most 7 days); the KS server keeps them to compute stat estimates for the faction. They are never shown to anyone, inside or outside the faction. Nothing is sent or stored on any server while it is off.
+              <br>
+              <strong>Filters:</strong> the Filters section sorts and hides rows of the war list on this page only. A filter only hides rows: nothing is sent, nothing is asked of Torn or FFScouter for it, and your own DIBS is never hidden. Out soon means 10 minutes or less in hospital. FF and Stats limits are paused while FF is not available, so the list is never emptied because FFScouter is away. Default order follows Torn's own column headers; a tap on one of Torn's headers takes you back to Default order. Only your choices (the sort and the filter values) are kept in this browser, under ks_torn_war_dibs_pda_sort_v1 and ks_torn_war_dibs_pda_filters_v1; Reset filters removes the filters.
               <br>
               Data Storage: Temporary (&lt; 1 day) · Data Sharing: Faction · Purpose of Use: Competitive advantage · Key Storage &amp; Sharing: Not stored/shared · Key Access Level: Public
               <br>
@@ -6329,6 +6494,8 @@
     lastPresentationDataSignature = "";
     lastPresentationFairFightAt = 0;
     restoreRosterOrder();
+    clearRosterFilter();
+    rosterFilterVisibilityChanged = false;
     rosterFirstSeen.clear();
     rosterFirstSeenNext = 0;
     retireAllBindings();
@@ -7140,23 +7307,553 @@
     sortedRosterListPrevious = null;
   }
 
-  // Returns true when anything visible moved, so the caller re-measures rows.
+  // ---------------------------------------------------------------------------
+  // 1.5.195: the Filters panel. The sort choice and the filters.
+  //
+  // Presentation only. Nothing in this block sends a request, moves a row in the
+  // page, taps one of Torn's headers or touches a decision, a claim or a limit.
+  // A sort is a CSS order on the rows (as the Status sort is since 1.5.181); a
+  // filter is one attribute on the row and one CSS rule in a style element KS
+  // owns. Both are taken away again in removePresentationLayer.
+  // ---------------------------------------------------------------------------
+  const KS_SORT_IDS = Object.freeze(["default", "ff", "est", "level", "status", "dibs", "lastaction"]);
+  const FILTER_ACTIVITY_KEYS = Object.freeze(["online", "idle", "offline"]);
+  const FILTER_STATUS_KEYS = Object.freeze(["okay", "hospital", "outsoon", "jail", "abroad", "traveling", "fedded"]);
+  const FILTER_RANGE_KEYS = Object.freeze(["ff", "est", "last"]);
+  const FILTER_RANGE_NAME = Object.freeze({ ff: "FF", est: "EST", last: "last action" });
+  // Out soon: hospital with this many seconds or fewer left on Torn's clock.
+  const FILTER_OUT_SOON_SECONDS = 600;
+  const FILTER_TEXT_MAX = 16;
+  const ROSTER_HIDDEN_ATTRIBUTE = "data-ks-wd-hidden";
+  const ROSTER_FILTER_STYLE_ID = "ks-twd-pda-filter-style";
+
+  function readStoredSort() {
+    try {
+      const parts = String(localStorage.getItem(SCRIPT.sortStorageKey) || "").split(":");
+      if (parts.length === 2 && KS_SORT_IDS.includes(parts[0]) && (parts[1] === "asc" || parts[1] === "desc")) {
+        return { id: parts[0], dir: parts[1] };
+      }
+    } catch {}
+    return { id: "default", dir: "asc" };
+  }
+
+  function defaultRosterFilters() {
+    return {
+      activity: [...FILTER_ACTIVITY_KEYS],
+      status: [...FILTER_STATUS_KEYS],
+      ff: { min: "", max: "" },
+      est: { min: "", max: "" },
+      last: { min: "", max: "" }
+    };
+  }
+
+  // Anything that does not read back whole is the default (everything shown),
+  // with no message and no rewrite until the member changes a filter.
+  function readStoredFilters() {
+    try {
+      const raw = localStorage.getItem(SCRIPT.filtersStorageKey);
+      if (!raw) return defaultRosterFilters();
+      const data = JSON.parse(raw);
+      if (!isPlainRecord(data) || data.schemaVersion !== 1) return defaultRosterFilters();
+      const known = new Set(["schemaVersion", "activity", "status", "ff", "est", "last"]);
+      if (Object.keys(data).some(key => !known.has(key))) return defaultRosterFilters();
+      const subset = (list, valid) => {
+        if (!Array.isArray(list) || list.some(key => !valid.includes(key))) throw new Error("list");
+        return valid.filter(key => list.includes(key));
+      };
+      const bounds = box => {
+        if (
+          !isPlainRecord(box) || Object.keys(box).length !== 2 ||
+          typeof box.min !== "string" || typeof box.max !== "string" ||
+          box.min.length > FILTER_TEXT_MAX || box.max.length > FILTER_TEXT_MAX
+        ) throw new Error("bounds");
+        return { min: box.min, max: box.max };
+      };
+      return {
+        activity: subset(data.activity, FILTER_ACTIVITY_KEYS),
+        status: subset(data.status, FILTER_STATUS_KEYS),
+        ff: bounds(data.ff),
+        est: bounds(data.est),
+        last: bounds(data.last)
+      };
+    } catch {
+      return defaultRosterFilters();
+    }
+  }
+
+  // The KS sort choice: "default" is exactly the 1.5.194 behaviour (KS orders
+  // only while Torn's own Status header is active).
+  let ksSort = readStoredSort();
+  // Torn's header (column and direction) when the KS choice was made; null = take
+  // it at the next drawing. A different header later means the member tapped one.
+  let ksSortTornSignature = null;
+  // The panel says "(Torn header used)" after a tap on Torn's header took the choice back.
+  let ksSortTornUsed = false;
+  let rosterFilters = readStoredFilters();
+  // Rows the filter hides now (attribute set), the style element, and the counts the panel shows.
+  const hiddenRosterRows = new Set();
+  let rosterFilterStyle = null;
+  let rosterFilterVisibilityChanged = false;
+  let rosterFilterStats = { shown: 0, total: 0, hiddenFor: { ff: 0, est: 0, last: 0 }, paused: false };
+
+  function writeStoredSort() {
+    try { localStorage.setItem(SCRIPT.sortStorageKey, `${ksSort.id}:${ksSort.dir}`); } catch {}
+  }
+
+  function saveRosterFilters() {
+    try {
+      localStorage.setItem(SCRIPT.filtersStorageKey, JSON.stringify({
+        schemaVersion: 1,
+        activity: rosterFilters.activity,
+        status: rosterFilters.status,
+        ff: rosterFilters.ff,
+        est: rosterFilters.est,
+        last: rosterFilters.last
+      }));
+    } catch {}
+  }
+
+  // One limit as the member typed it. null: empty, no limit. false: not a number,
+  // the limit is not used. FF: 2, 3.4, .5 (a comma works as the decimal mark).
+  // Stats: the same with k, m, b or t after it (750k, 200m, 1.5b, 2T). Last action: whole minutes.
+  function parseFilterBound(kind, raw) {
+    const text = String(raw ?? "").replace(/\s+/g, "");
+    if (text === "") return null;
+    if (kind === "last") return /^\d{1,7}$/.test(text) ? Number(text) : false;
+    const match = text.match(kind === "est" ? /^(\d+(?:[.,]\d+)?|[.,]\d+)([kmbt])?$/i : /^(\d+(?:[.,]\d+)?|[.,]\d+)()$/);
+    if (!match) return false;
+    const scale = { k: 1e3, m: 1e6, b: 1e9, t: 1e12 }[(match[2] || "").toLowerCase()] || 1;
+    const value = Number(match[1].replace(",", ".")) * scale;
+    return Number.isFinite(value) ? value : false;
+  }
+
+  function filterRangeOf(kind) {
+    return { min: parseFilterBound(kind, rosterFilters[kind].min), max: parseFilterBound(kind, rosterFilters[kind].max) };
+  }
+  const filterIsLimit = bound => typeof bound === "number";
+  const filterRangeIsSet = range => filterIsLimit(range.min) || filterIsLimit(range.max);
+  const filterInRange = (value, range) =>
+    (!filterIsLimit(range.min) || value >= range.min) && (!filterIsLimit(range.max) || value <= range.max);
+
+  // How many filters differ from "everything shown": Activity, Status, FF range,
+  // Stats range and Last action, one each. The sort does not count; a limit that is
+  // not a number does not count.
+  function rosterFilterCount() {
+    let count = 0;
+    if (rosterFilters.activity.length < FILTER_ACTIVITY_KEYS.length) count += 1;
+    if (rosterFilters.status.length < FILTER_STATUS_KEYS.length) count += 1;
+    for (const kind of FILTER_RANGE_KEYS) if (filterRangeIsSet(filterRangeOf(kind))) count += 1;
+    return count;
+  }
+
+  // FF is available when a key is set and FFScouter has answered within
+  // CONFIG.fairFightMaxAgeMs (any target in that answer, also one it knew
+  // nothing about). Not available: no FF key, no answer yet (FFScouter or the
+  // network is away, for example a VPN on the phone), or every answer older than
+  // the age limit. The FF and Stats limits are then paused.
+  function ffAvailableForFilter() {
+    if (!sharedApiKey) return false;
+    const now = nowMs();
+    for (const entry of fairFightStats.values()) {
+      if (Number.isFinite(entry?.fetchedAt) && now - entry.fetchedAt <= CONFIG.fairFightMaxAgeMs) return true;
+    }
+    return false;
+  }
+
+  function rosterFilterContext() {
+    const ranges = { ff: filterRangeOf("ff"), est: filterRangeOf("est"), last: filterRangeOf("last") };
+    const own = currentOwnClaim();
+    return {
+      nowS: getTornNowMs() / 1000,
+      ranges,
+      activityOn: rosterFilters.activity.length < FILTER_ACTIVITY_KEYS.length,
+      statusOn: rosterFilters.status.length < FILTER_STATUS_KEYS.length,
+      rangesOn: FILTER_RANGE_KEYS.some(kind => filterRangeIsSet(ranges[kind])),
+      ffUsable: ffAvailableForFilter(),
+      ownTargetId: own?.targetId ? String(own.targetId) : ""
+    };
+  }
+
+  // The row's status for the filter: the same sources, in the same order, as
+  // rosterSortKey -- the hospital state first, then Torn's fresh API state, then
+  // the words in Torn's own Status cell. key null = unknown.
+  function rosterStatusFacts(entry) {
+    const resolved = entry.binding ? cachedResolvedBinding(entry.binding) : null;
+    const statusDiv = resolved?.statusDiv instanceof HTMLElement
+      ? resolved.statusDiv
+      : (entry.anchors?.status instanceof HTMLElement ? entry.anchors.status : entry.row);
+    const rowView = resolved || { row: entry.row, li: entry.row, statusDiv, id: entry.targetId };
+    const hospital = computeHospitalSeconds(rowView);
+    if (hospital?.isHospital === true) {
+      return { key: "hospital", outSoon: Number.isFinite(hospital.seconds) && hospital.seconds <= FILTER_OUT_SOON_SECONDS };
+    }
+    if (hospital?.source === "torn-api-expired") return { key: "okay", outSoon: false };
+    const apiState = normalizeText(tornStatusForTarget(entry.targetId)?.state);
+    const text = (apiState || normalizeText(statusDiv?.textContent)).toLowerCase();
+    let key = null;
+    if (text.startsWith("okay")) key = "okay";
+    else if (text.includes("jail")) key = "jail";
+    else if (text.includes("federal") || text.includes("fedded")) key = "fedded";
+    else if (text.includes("abroad")) key = "abroad";
+    else if (text.includes("travel")) key = "traveling";
+    return { key, outSoon: false };
+  }
+
+  // pass: the row stays. other: it passes everything except the ranges whose value
+  // is missing. missing: those ranges (they are counted in "N hidden: no ...").
+  function rosterFilterVerdict(entry, ctx) {
+    let other = true;
+    const missing = [];
+    const status = tornStatusForTarget(entry.targetId);
+    if (ctx.activityOn) {
+      const activity = status?.activity || null;
+      if (!activity || !rosterFilters.activity.includes(activity)) other = false;
+    }
+    if (ctx.statusOn) {
+      const facts = rosterStatusFacts(entry);
+      const matches = rosterFilters.status.some(key => (key === "outsoon" ? facts.outSoon : facts.key === key));
+      if (!matches) other = false;
+    }
+    const check = (kind, value) => {
+      if (!filterRangeIsSet(ctx.ranges[kind])) return;
+      if (value === null) missing.push(kind);
+      else if (!filterInRange(value, ctx.ranges[kind])) other = false;
+    };
+    if (ctx.ffUsable) {
+      const stats = scoutStatsForTarget(entry.targetId);
+      check("ff", Number.isFinite(stats?.fairFight) ? Number(stats.fairFight) : null);
+      check("est", Number.isFinite(stats?.bsEstimate) ? Number(stats.bsEstimate) : null);
+    }
+    const lastAction = status?.activityTimestamp;
+    check("last", Number.isInteger(lastAction) && lastAction > 0 ? Math.floor(Math.max(0, ctx.nowS - lastAction) / 60) : null);
+    return { pass: other && missing.length === 0, other, missing };
+  }
+
+  function ensureRosterFilterStyle() {
+    if (rosterFilterStyle instanceof HTMLElement && rosterFilterStyle.isConnected) return;
+    document.getElementById(ROSTER_FILTER_STYLE_ID)?.remove();
+    const style = document.createElement("style");
+    style.id = ROSTER_FILTER_STYLE_ID;
+    style.textContent = `li.enemy[${ROSTER_HIDDEN_ATTRIBUTE}="1"] { display: none !important; }`;
+    (document.head || document.documentElement).appendChild(style);
+    rosterFilterStyle = style;
+  }
+
+  function removeRosterFilterStyle() {
+    if (rosterFilterStyle instanceof HTMLElement) rosterFilterStyle.remove();
+    rosterFilterStyle = null;
+  }
+
+  // Takes the filter's marks off the page: the attribute on every row it hid and the
+  // style element. Returns true when a row was showing nothing before.
+  function clearRosterFilter() {
+    const had = hiddenRosterRows.size > 0;
+    for (const row of hiddenRosterRows) {
+      if (row instanceof HTMLElement) row.removeAttribute(ROSTER_HIDDEN_ATTRIBUTE);
+    }
+    hiddenRosterRows.clear();
+    removeRosterFilterStyle();
+    if (had) rosterFilterVisibilityChanged = true;
+    return had;
+  }
+
+  // Hides or shows rows to match the filters and counts what the panel reports.
+  // Your own claim is never hidden (it counts as shown). Returns true when a row
+  // changed between hidden and shown.
+  function applyRosterFilter(entries) {
+    const ctx = rosterFilterContext();
+    const stats = {
+      shown: 0,
+      total: entries.length,
+      hiddenFor: { ff: 0, est: 0, last: 0 },
+      paused: !ctx.ffUsable && (filterRangeIsSet(ctx.ranges.ff) || filterRangeIsSet(ctx.ranges.est))
+    };
+    let changed = false;
+    if (!ctx.activityOn && !ctx.statusOn && !ctx.rangesOn) {
+      changed = clearRosterFilter();
+      stats.shown = entries.length;
+    } else {
+      const stillHidden = new Set();
+      for (const entry of entries) {
+        const verdict = rosterFilterVerdict(entry, ctx);
+        const own = ctx.ownTargetId !== "" && entry.targetId === ctx.ownTargetId;
+        if (verdict.pass || own) {
+          stats.shown += 1;
+          if (hiddenRosterRows.delete(entry.row)) {
+            entry.row.removeAttribute(ROSTER_HIDDEN_ATTRIBUTE);
+            changed = true;
+          }
+          continue;
+        }
+        if (verdict.other) for (const kind of verdict.missing) stats.hiddenFor[kind] += 1;
+        stillHidden.add(entry.row);
+        if (!hiddenRosterRows.has(entry.row) || entry.row.getAttribute(ROSTER_HIDDEN_ATTRIBUTE) !== "1") {
+          ensureRosterFilterStyle();
+          entry.row.setAttribute(ROSTER_HIDDEN_ATTRIBUTE, "1");
+          hiddenRosterRows.add(entry.row);
+          changed = true;
+        }
+      }
+      // A row that left the page (Torn drew the list again) is only forgotten.
+      for (const row of [...hiddenRosterRows]) {
+        if (stillHidden.has(row)) continue;
+        if (row instanceof HTMLElement) row.removeAttribute(ROSTER_HIDDEN_ATTRIBUTE);
+        hiddenRosterRows.delete(row);
+        changed = true;
+      }
+      if (hiddenRosterRows.size === 0) removeRosterFilterStyle();
+    }
+    if (changed) rosterFilterVisibilityChanged = true;
+    rosterFilterStats = stats;
+    paintFilterStats(presentationShadow());
+    return changed;
+  }
+
+  // Torn's own sort header for this list as a short text: the active column and its
+  // direction, or "off". Read only; KS never taps it.
+  function tornHeaderSignature(list) {
+    if (!(list instanceof HTMLElement)) return "off";
+    let active = null;
+    const header = list.previousElementSibling;
+    if (header instanceof HTMLElement) active = header.querySelector("[class*='activeIcon']");
+    if (!active) {
+      active = [...(list.parentElement?.querySelectorAll("[class*='activeIcon']") || [])]
+        .find(node => !list.contains(node)) || null;
+    }
+    if (!(active instanceof HTMLElement)) return "off";
+    const column = active.closest("[class*='tab___']") || active.parentElement;
+    // The column is named by the first well-known word in its classes, so a class that
+    // comes and goes on the column (a hover or focus class) is not read as a tap.
+    const classes = column instanceof HTMLElement ? String(column.className).split(/\s+/).map(token => token.replace(/___\S*$/, "")).filter(Boolean) : [];
+    const name = ["member", "level", "score", "points", "status", "attack"].find(word => classes.includes(word)) ||
+      [...new Set(classes)].sort().join(" ");
+    const direction = /asc___/.test(active.className) ? "asc" : (/desc___/.test(active.className) ? "desc" : "");
+    return `${name}|${direction}`;
+  }
+
+  // 1.5.182 fixed a lock: a sort KS kept in force made a tap on Torn's header do
+  // nothing. So a KS choice never outlives a tap on one of Torn's headers: when
+  // Torn's active column or direction differs from the one seen when the choice
+  // was made, the choice goes back to Default order (and is saved so).
+  function noteTornHeaderForKsSort(list) {
+    if (ksSort.id === "default") { ksSortTornSignature = null; return false; }
+    const signature = tornHeaderSignature(list);
+    if (ksSortTornSignature === null) { ksSortTornSignature = signature; return false; }
+    if (signature === ksSortTornSignature) return false;
+    ksSort = { id: "default", dir: "asc" };
+    ksSortTornSignature = null;
+    ksSortTornUsed = true;
+    writeStoredSort();
+    return true;
+  }
+
+  // The state the row's DIBS button was last drawn in (read, not recomputed):
+  // 1 can be taken now, 2 your own claim, 3 somebody else's claim, 4 everything else.
+  function dibsSortRank(entry) {
+    const button = entry.binding?.host?.querySelector?.("[data-role='dibs']");
+    if (!(button instanceof HTMLElement) || button.style.visibility === "hidden") return 4;
+    const state = button.dataset.state;
+    if (state === "claimed" || state === "cleanup") return 2;
+    if (state === "shared") return 3;
+    if (state === TARGET_STATE.READY && button.dataset.ready === "true") return 1;
+    return 4;
+  }
+
+  // The value a KS sort orders by, smaller first; null = no value (last in both directions).
+  function ksSortValue(id, entry) {
+    switch (id) {
+      case "ff": {
+        const value = scoutStatsForTarget(entry.targetId)?.fairFight;
+        return Number.isFinite(value) ? Number(value) : null;
+      }
+      case "est": {
+        const value = scoutStatsForTarget(entry.targetId)?.bsEstimate;
+        return Number.isFinite(value) ? Number(value) : null;
+      }
+      case "level": {
+        const cell = entry.anchors?.level;
+        const match = cell instanceof HTMLElement ? /\d[\d,]*/.exec(normalizeText(cell.textContent)) : null;
+        const value = match ? Number(match[0].replace(/,/g, "")) : NaN;
+        return Number.isFinite(value) ? value : null;
+      }
+      case "dibs": return dibsSortRank(entry);
+      case "lastaction": {
+        // Up (asc) is the most recent action first.
+        const stamp = tornStatusForTarget(entry.targetId)?.activityTimestamp;
+        return Number.isInteger(stamp) && stamp > 0 ? -stamp : null;
+      }
+      default: return null;
+    }
+  }
+
+  function afterRosterChoiceChanged() {
+    updateFilterControls(presentationShadow());
+    schedulePresentationFrame({ layout: true });
+  }
+
+  function chooseRosterSort(id) {
+    if (!KS_SORT_IDS.includes(id) || id === ksSort.id) return;
+    ksSort = { id, dir: "asc" };
+    ksSortTornSignature = null;
+    ksSortTornUsed = false;
+    writeStoredSort();
+    afterRosterChoiceChanged();
+  }
+
+  function flipSortDirection() {
+    if (ksSort.id === "default") return;
+    ksSort = { id: ksSort.id, dir: ksSort.dir === "asc" ? "desc" : "asc" };
+    writeStoredSort();
+    afterRosterChoiceChanged();
+  }
+
+  function resetRosterFilters() {
+    rosterFilters = defaultRosterFilters();
+    try { localStorage.removeItem(SCRIPT.filtersStorageKey); } catch {}
+    fillFilterFields(presentationShadow());
+    afterRosterChoiceChanged();
+  }
+
+  function handleFilterPanelChange(event) {
+    const node = event.target;
+    if (!(node instanceof HTMLElement)) return;
+    if (node.dataset.role === "f-sort") { chooseRosterSort(node.value); return; }
+    const group = node.dataset.group;
+    if (!(node instanceof HTMLInputElement) || (group !== "activity" && group !== "status")) return;
+    const valid = group === "activity" ? FILTER_ACTIVITY_KEYS : FILTER_STATUS_KEYS;
+    const root = node.getRootNode();
+    rosterFilters[group] = valid.filter(key => {
+      const box = root.querySelector(`input[data-group="${group}"][value="${key}"]`);
+      return box instanceof HTMLInputElement && box.checked;
+    });
+    saveRosterFilters();
+    afterRosterChoiceChanged();
+  }
+
+  function handleFilterPanelInput(event) {
+    const field = event.target;
+    if (!(field instanceof HTMLInputElement)) return;
+    const kind = field.dataset.bound;
+    const end = field.dataset.end;
+    if (!FILTER_RANGE_KEYS.includes(kind) || (end !== "min" && end !== "max")) return;
+    rosterFilters[kind][end] = field.value.trim().slice(0, FILTER_TEXT_MAX);
+    saveRosterFilters();
+    afterRosterChoiceChanged();
+  }
+
+  // The boxes and fields show what rosterFilters holds. Run when the panel is
+  // bound and by Reset; never while typing (a refill would take the cursor away).
+  function fillFilterFields(shadow) {
+    if (!shadow) return;
+    shadow.querySelectorAll("input[type='checkbox'][data-group]").forEach(box => {
+      const list = rosterFilters[box.dataset.group];
+      box.checked = Array.isArray(list) && list.includes(box.value);
+    });
+    shadow.querySelectorAll("input[data-bound]").forEach(field => {
+      field.value = rosterFilters[field.dataset.bound]?.[field.dataset.end] ?? "";
+    });
+  }
+
+  // The lines that come from a drawing: how many rows are shown, how many are hidden
+  // for want of a value in a range that is set, and whether the FF limits are paused.
+  // Returns true when a line appeared, changed or went away (the section's height may have changed).
+  function paintFilterStats(shadow) {
+    if (!shadow) return false;
+    let changed = false;
+    const $ = role => shadow.querySelector(`[data-role='${role}']`);
+    const stats = rosterFilterStats;
+    const showing = $("f-showing");
+    const showingText = `Showing ${stats.shown} of ${stats.total}`;
+    if (showing && showing.textContent !== showingText) { showing.textContent = showingText; changed = true; }
+    const hiddenNote = $("f-hidden");
+    if (hiddenNote) {
+      const text = FILTER_RANGE_KEYS
+        .filter(kind => stats.hiddenFor[kind] > 0)
+        .map(kind => `${stats.hiddenFor[kind]} hidden: no ${FILTER_RANGE_NAME[kind]}`)
+        .join(" · ");
+      if (hiddenNote.textContent !== text) { hiddenNote.textContent = text; changed = true; }
+      if (hiddenNote.hidden !== (text === "")) { hiddenNote.hidden = text === ""; changed = true; }
+    }
+    const paused = $("f-paused");
+    if (paused) {
+      const text = stats.paused ? "FF filter paused: FF not available" : "";
+      if (paused.textContent !== text) { paused.textContent = text; changed = true; }
+      if (paused.hidden !== !stats.paused) { paused.hidden = !stats.paused; changed = true; }
+    }
+    return changed;
+  }
+
+  // The parts of the section that do not wait for a drawing: the button and its
+  // count, open or closed, the sort, the red edge on a limit that is not a number.
+  // inFrame: called inside a drawing, before the rows are measured, so no extra drawing is asked for.
+  function updateFilterControls(shadow, { inFrame = false } = {}) {
+    if (!shadow) return;
+    let heightChanged = false;
+    const $ = role => shadow.querySelector(`[data-role='${role}']`);
+    const count = rosterFilterCount();
+    const toggle = $("filters-toggle");
+    if (toggle) {
+      const text = count > 0 ? `Filters (${count})` : "Filters";
+      if (toggle.textContent !== text) toggle.textContent = text;
+      toggle.setAttribute("aria-expanded", String(filtersExpanded));
+    }
+    $("filters-panel")?.classList.toggle("open", filtersExpanded);
+    const select = $("f-sort");
+    if (select && select.value !== ksSort.id) select.value = ksSort.id;
+    const direction = $("sort-dir");
+    if (direction) {
+      const text = ksSort.id !== "default" && ksSort.dir === "desc" ? "▼" : "▲";
+      if (direction.textContent !== text) direction.textContent = text;
+      direction.disabled = ksSort.id === "default";
+      direction.setAttribute("aria-label", `Sort direction: ${ksSort.dir === "desc" ? "descending" : "ascending"}`);
+    }
+    const note = $("sort-note");
+    if (note) {
+      let text = "";
+      if (ksSort.id === "default" && ksSortTornUsed) text = "Sort: Default order (Torn header used)";
+      else if (ksSort.id === "lastaction") text = ksSort.dir === "asc" ? "Last action: most recent first" : "Last action: oldest first";
+      if (note.textContent !== text) { note.textContent = text; heightChanged = true; }
+      if (note.hidden !== (text === "")) { note.hidden = text === ""; heightChanged = true; }
+    }
+    shadow.querySelectorAll("input[data-bound]").forEach(field => {
+      const bad = parseFilterBound(field.dataset.bound, field.value) === false;
+      field.classList.toggle("bad", bad);
+      field.setAttribute("aria-invalid", bad ? "true" : "false");
+      const message = field.nextElementSibling;
+      if (message instanceof HTMLElement && message.hidden === bad) { message.hidden = !bad; heightChanged = true; }
+    });
+    if (paintFilterStats(shadow)) heightChanged = true;
+    // An open section that grew or shrank moves the list: measure the rows again.
+    if (heightChanged && filtersExpanded && !inFrame) schedulePresentationFrame({ layout: true });
+  }
+
+  // Returns true when anything visible moved or was hidden or shown, so the caller re-measures rows.
   function syncRosterOrder() {
     const entries = [...rowRegistry.values()].filter(entry => entry.row instanceof HTMLElement && entry.row.isConnected);
     const list = entries[0]?.row.parentElement || null;
     if (!(list instanceof HTMLElement) || !entries.every(entry => entry.row.parentElement === list)) {
       const had = sortedRosterList !== null || sortedRosterRows.size > 0;
       restoreRosterOrder();
-      return had;
+      const hid = clearRosterFilter();
+      rosterFilterStats = { shown: 0, total: 0, hiddenFor: { ff: 0, est: 0, last: 0 }, paused: false };
+      paintFilterStats(presentationShadow());
+      return had || hid;
     }
+    // The panel says so before the rows are measured (the note is one more line of height).
+    if (noteTornHeaderForKsSort(list)) updateFilterControls(presentationShadow(), { inFrame: true });
+    const ks = ksSort.id === "default" ? null : ksSort;
     const mode = rosterSortMode(list);
-    if (mode === "off") {
+    const filterChanged = applyRosterFilter(entries);
+    if (!ks && mode === "off") {
       const had = sortedRosterList !== null || sortedRosterRows.size > 0;
       restoreRosterOrder();
-      return had;
+      return had || filterChanged;
     }
-    const rank = ROSTER_GROUP_RANK[mode];
-    let changed = false;
+    // Status, from KS or from Torn's header, uses the key and the ranks of 1.5.194.
+    // Every other KS choice orders by its value.
+    const byValue = ks !== null && ks.id !== "status";
+    const rank = byValue ? null : ROSTER_GROUP_RANK[ks ? ks.dir : mode];
+    let changed = filterChanged;
     if (sortedRosterList !== list) {
       restoreRosterOrder();
       sortedRosterList = list;
@@ -7169,15 +7866,35 @@
       if (!rosterFirstSeen.has(targetId)) rosterFirstSeen.set(targetId, rosterFirstSeenNext++);
       return rosterFirstSeen.get(targetId);
     };
-    const keyed = entries.map(entry => ({ row: entry.row, seq: seq(entry.targetId), ...rosterSortKey(entry) }));
+    const keyed = byValue
+      ? entries.map(entry => ({
+        row: entry.row, seq: seq(entry.targetId), tid: Number(entry.targetId), unbound: false, value: ksSortValue(ks.id, entry)
+      }))
+      : entries.map(entry => ({ row: entry.row, seq: seq(entry.targetId), ...rosterSortKey(entry) }));
     const registered = new Set(entries.map(entry => entry.row));
     let unboundIndex = 0;
     for (const child of list.children) {
       if (child instanceof HTMLElement && child.tagName === "LI" && !registered.has(child)) {
-        keyed.push({ row: child, seq: 1e9 + unboundIndex++, group: ROSTER_GROUP.UNBOUND, seconds: 0 });
+        keyed.push(byValue
+          ? { row: child, seq: 1e9 + unboundIndex++, tid: Infinity, unbound: true, value: null }
+          : { row: child, seq: 1e9 + unboundIndex++, group: ROSTER_GROUP.UNBOUND, seconds: 0 });
       }
     }
-    keyed.sort((a, b) => rank[a.group] - rank[b.group] || a.seconds - b.seconds || a.seq - b.seq);
+    if (byValue) {
+      // No value is last in both directions; equal values go by Torn ID; rows KS
+      // does not own (UNBOUND) are last, as with the Status order.
+      const sign = ks.dir === "desc" ? -1 : 1;
+      keyed.sort((a, b) => {
+        if (a.unbound !== b.unbound) return a.unbound ? 1 : -1;
+        if (a.unbound) return a.seq - b.seq;
+        if (a.value === null && b.value === null) return a.tid - b.tid;
+        if (a.value === null) return 1;
+        if (b.value === null) return -1;
+        return (a.value - b.value) * sign || a.tid - b.tid;
+      });
+    } else {
+      keyed.sort((a, b) => rank[a.group] - rank[b.group] || a.seconds - b.seconds || a.seq - b.seq);
+    }
     const seen = new Set();
     keyed.forEach((item, index) => {
       const value = String(index + 1);
@@ -7200,17 +7917,25 @@
   function performPresentationFrame() {
     presentationFrameHandle = null;
     let needsLayout = presentationFrameNeedsLayout;
-    const needsRender = presentationFrameNeedsRender;
-    const renderAll = presentationFrameRenderAll;
+    let needsRender = presentationFrameNeedsRender;
+    let renderAll = presentationFrameRenderAll;
     presentationFrameNeedsLayout = false;
     presentationFrameNeedsRender = false;
     presentationFrameRenderAll = false;
     if (!runtimeActive || !bridgeMounted || !isRuntimeEligible()) return;
     const layer = presentationLayer();
     if (!layer) return;
-    // Order first, then measure in the same frame: no paint with a button on
-    // the wrong row.
+    // Order and filter first, then measure in the same frame: no paint with a
+    // button on the wrong row, none on a hidden one.
     if (syncRosterOrder()) needsLayout = true;
+    if (rosterFilterVisibilityChanged) {
+      // A row went from hidden to shown (or back): draw every button again now,
+      // not at the next intersection report, so a shown row never carries an old state.
+      rosterFilterVisibilityChanged = false;
+      needsLayout = true;
+      needsRender = true;
+      renderAll = true;
+    }
     let measurements = [];
     if (needsLayout) {
       const layerRect = layer.getBoundingClientRect();
@@ -7551,6 +8276,7 @@
     if (aboutPanel) aboutPanel.classList.toggle("open", aboutExpanded);
     const aboutToggle = $("about-toggle");
     if (aboutToggle) aboutToggle.setAttribute("aria-expanded", String(aboutExpanded));
+    updateFilterControls(shadow);
   }
 
   async function runFfCredentialMutation(mutation) {
