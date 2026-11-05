@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PC
 // @namespace    kingshade.torn
-// @version      1.1.17
+// @version      1.1.18
 // @downloadURL  https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @description  PC TEST: DIBS as a native roster column beside Torn's Attack cell; FF and Est from FFScouter's get-stats API. War Stuff Enhanced is detected and shown read-only; it never blocks.
@@ -17,6 +17,46 @@
 // ==/UserScript==
 
 /*
+ * KS Torn War Dibs PC v1.1.18 (2026-11-04) -- a hospital time of 48 hours or
+ * more is shown as a time. ONE MAIN CHANGE, display and Status sorting only.
+ * Name, namespace, update address and every storage name are those of 1.1.17.
+ * FIXED
+ *   - A target in hospital for 48 hours or more (maxHospitalSeconds) showed
+ *     "HOSP?" on the DIBS button (and "HOSP" in VIEW) although Torn gives a valid
+ *     release time. The button now shows the time, for example "2d20h", like
+ *     War Room.
+ * CHANGED
+ *   - New longHospitalSeconds(targetId): seconds left when Torn's API status says
+ *     hospital, the status is fresh (the same rule and the same batches as every
+ *     other status read, VIEW included), the release time is valid and at least
+ *     maxHospitalSeconds away. Otherwise null. It is used for display and for
+ *     Status sorting only.
+ *   - A target the decision engine reads as UNKNOWN "hospital-timer-unverifiable"
+ *     and that has such a time is drawn like a locked target with more than
+ *     2:00 left: the time in the cell, the locked colour, HOSP underneath and
+ *     the same tooltip. Before the war (PREWAR) the line under PREWAR shows the
+ *     time instead of "HOSP". In VIEW the cell shows the time instead of "HOSP".
+ *     With no such time the button reads "HOSP?" as before.
+ *   - Status sorting (Torn's Status header active): such a target is sorted in
+ *     the hospital group by its real time, after every shorter hospital time. A
+ *     hospital target without any release time stays last in that group.
+ * NOT CHANGED
+ *   - The decision engine, the claim path, the server and every DIBS rule (2:00
+ *     gate, FF 2.00-3.40, low life 4.50) are untouched. The target is still
+ *     UNKNOWN for a decision and a claim; the button is disabled and a click does
+ *     nothing. hospitalRemainingSeconds, computeHospitalSeconds and
+ *     maxHospitalSeconds (48 h) are untouched.
+ * KNOWN ISSUES
+ *   - None new. No timer is computed from a release time, so no delay can pass
+ *     the browser's 2 147 483 647 ms limit.
+ * VERIFICATION
+ *   - Synthetic only (Chromium against stand-in Torn and KS servers). In Chrome:
+ *     a target in hospital for more than 48 hours shows its time on the DIBS
+ *     button, not "HOSP?".
+ * Everything else is unchanged from 1.1.17: type=2, DIBS, its rules and limits,
+ * Share with KS, the requests for the war, the clock and the panel. No new
+ * request, no new storage, nothing new written into Torn's page.
+ *
  * KS Torn War Dibs PC v1.1.17 (2026-11-03) -- your own war page also opens as
  * type=2. ONE MAIN CHANGE. Name, namespace, update address and every storage
  * name are those of 1.1.16.
@@ -691,8 +731,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs PC",
-    version: "1.1.17",
-    instanceKey: "__ksTornWarDibsPcV1117",
+    version: "1.1.18",
+    instanceKey: "__ksTornWarDibsPcV1118",
     rowHostPrefix: "ks-twd-wse-row-v010-",
     rosterStyleId: "ks-twd-wse-roster-style-v010",
     panelId: "ks-twd-wse-panel",
@@ -4191,6 +4231,27 @@
     return visibleHospitalEvidence(row);
   }
 
+  // 1.1.18: DISPLAY AND STATUS SORTING ONLY. Never used by the decision engine,
+  // a claim or a timer. Seconds left when Torn's API status says the target is
+  // in hospital, the status is fresh (rosterApiStatus applies the same freshness
+  // rule and the same batch as the cell: the opponent batch, in VIEW the merged
+  // members batch), the release time is a valid timestamp and at least
+  // CONFIG.maxHospitalSeconds away -- exactly the case hospitalRemainingSeconds
+  // answers null for. Otherwise null.
+  function longHospitalSeconds(targetId) {
+    const apiStatus = rosterApiStatus(targetId);
+    if (!apiStatus) return null;
+    const hospital =
+      isHospitalStatusValue(apiStatus.state) ||
+      isHospitalStatusValue(apiStatus.description) ||
+      isHospitalStatusValue(apiStatus.details);
+    if (!hospital) return null;
+    const until = Number(apiStatus.until);
+    if (!Number.isFinite(until) || until <= 0) return null;
+    const remaining = Math.ceil(until - getTornNowMs() / 1000);
+    return Number.isFinite(remaining) && remaining >= CONFIG.maxHospitalSeconds ? remaining : null;
+  }
+
   // ---------------------------------------------------------------------------
   // Ranked War countdown reader restored from the PDA-verified v1.5.88 baseline.
   // It handles Torn-generated ::before/::after content and split DD:HH:MM:SS nodes.
@@ -5700,8 +5761,12 @@
     const apiHospital = viewHospital?.reason === "member-not-in-fetched-rosters" ? null : viewHospital;
     const hospital = apiHospital || computeHospitalSeconds(binding);
     if (hospital?.isHospital === true) {
-      return Number.isFinite(hospital.seconds)
-        ? { group: ROSTER_GROUP.HOSPITAL, seconds: hospital.seconds }
+      if (Number.isFinite(hospital.seconds)) return { group: ROSTER_GROUP.HOSPITAL, seconds: hospital.seconds };
+      // 1.1.18: a release time of 48 h or more sorts by its real time, after
+      // every shorter hospital time. No release time at all stays unknown.
+      const longSeconds = longHospitalSeconds(binding.targetId);
+      return Number.isFinite(longSeconds)
+        ? { group: ROSTER_GROUP.HOSPITAL, seconds: longSeconds }
         : { group: ROSTER_GROUP.HOSPITAL_UNKNOWN, seconds: 0 };
     }
     const api = rosterApiStatus(binding.targetId);
@@ -5906,7 +5971,7 @@
     return binding;
   }
 
-  function rowPresentationDescriptor(playerId, decision, sharedClaim) {
+  function rowPresentationDescriptor(playerId, decision, sharedClaim, longSeconds = null) {
     const own = currentOwnClaim();
     if (viewOnlyMode()) {
       return { relevant: true, label: "VIEW", className: "unavailable" };
@@ -5945,6 +6010,8 @@
     }
     if (decision?.state === TARGET_STATE.UNKNOWN) {
       if (decision.reason === "hospital-timer-unverifiable") {
+        // 1.1.18: a release time of 48 h or more is shown as a locked target's time.
+        if (Number.isFinite(longSeconds)) return { relevant: true, label: formatCellCountdown(longSeconds), className: "locked" };
         return { relevant: true, label: "HOSP?" };
       }
       if (decision.reason === "fair-fight-unverifiable") {
@@ -5966,7 +6033,15 @@
     if (!button || !label || !sub || !decision) return;
     const playerId = String(binding?.targetId || "");
     const own = currentOwnClaim();
-    const presentation = rowPresentationDescriptor(playerId, decision, sharedClaim);
+    // 1.1.18: a release time of 48 h or more, for display only (see
+    // longHospitalSeconds). Looked up only where it can change what is shown.
+    const longSeconds = !Number.isFinite(decision.seconds) &&
+      (decision.reason === "hospital-timer-unverifiable" || decision.prewarHospital === true)
+      ? longHospitalSeconds(playerId)
+      : null;
+    const longHospital = decision.state === TARGET_STATE.UNKNOWN &&
+      decision.reason === "hospital-timer-unverifiable" && Number.isFinite(longSeconds);
+    const presentation = rowPresentationDescriptor(playerId, decision, sharedClaim, longSeconds);
     host.dataset.ksTwdPresentationRelevant = presentation.relevant ? "true" : "false";
     button.dataset.compactLabel = presentation.label;
     button.setAttribute("aria-label", presentation.label ? `DIBS ${presentation.label}` : "DIBS hidden");
@@ -5986,7 +6061,13 @@
       // itself as a fallback for the day Torn starts rendering it.
       const apiHospital = viewHospitalForTarget(binding.targetId);
       const hospital = apiHospital || computeHospitalSeconds(binding);
-      const countdown = hospital.isHospital ? formatCellCountdown(hospital.seconds) : "";
+      // 1.1.18: no readable time but Torn gave a release time of 48 h or more.
+      const viewLongSeconds = hospital.isHospital && !Number.isFinite(hospital.seconds)
+        ? longHospitalSeconds(binding.targetId)
+        : null;
+      const countdown = hospital.isHospital
+        ? formatCellCountdown(Number.isFinite(hospital.seconds) ? hospital.seconds : viewLongSeconds)
+        : "";
       const reason = apiHospital?.reason || "no-torn-data";
       button.className = "unavailable";
       button.dataset.state = "view";
@@ -6043,7 +6124,7 @@
       (decision.reason === "rw-not-started" || decision.reason === "rw-phase-unverifiable"
         ? "prewar"
         : decision.state);
-    button.dataset.state = decision.state;
+    button.dataset.state = longHospital ? TARGET_STATE.LOCKED : decision.state;
     label.textContent = presentation.label || "DIBS";
 
     if (decision.state === TARGET_STATE.BLOCKED) { button.disabled = true; label.textContent = "BLOCKED"; sub.textContent = own?.claimerName || "ACTIVE"; return; }
@@ -6094,7 +6175,7 @@
         } else if (!decision.prewarHospital) {
           sub.textContent = "";
         } else {
-          sub.textContent = "HOSP";
+          sub.textContent = formatCountdown(longSeconds) || "HOSP";
         }
 
         button.dataset.ksTitle = decision.reason === "rw-not-started"
@@ -6111,6 +6192,11 @@
           button.dataset.ksTitle = `In hospital; the countdown is in the cell. DIBS unlocks at ${formatCellCountdown(CONFIG.gateSeconds)} remaining.`;
         }
       }
+      return;
+    }
+    if (longHospital) {
+      sub.textContent = "HOSP";
+      button.dataset.ksTitle = `In hospital; the countdown is in the cell. DIBS unlocks at ${formatCellCountdown(CONFIG.gateSeconds)} remaining.`;
       return;
     }
     if (decision.state === TARGET_STATE.UNKNOWN) {
