@@ -593,6 +593,70 @@
     #warPanel .warbar .clock { font-size: 11px; flex: none; overflow: visible; }
   }
 
+  /* ---- R27 (2026-11): the Filters button and the sort and filter panel ----
+     The panel sits straight under the head of the list and is closed on every page load. It only hides
+     rows and picks the sort; the table is drawn as before. Its colours are tokens of their own, as in R25:
+     text 4.5:1 and every edge 3:1 against the panel, in both themes. The page's --line-strong is too faint
+     for an edge (1.8:1 on white), so the boxes in here use --r27-edge. The boxes are plain controls drawn
+     here (no native look), 20 px, in a label that is 32 px high on a wide screen and 36 px on a phone. */
+  #filterBtn[aria-expanded="true"], #filterBtn[data-active="true"] { border-color: var(--accent); color: var(--accent); }
+  #filterPanel {
+    --r27-ink: #14202b; --r27-soft: #435260; --r27-edge: #566879; --r27-bad: #8c241f;
+    display: flex; flex-direction: column; gap: 10px; padding: 14px 18px;
+    background: var(--surface); border-bottom: 1px solid var(--line);
+  }
+  :root:not([data-theme="light"]) #filterPanel { --r27-ink: #e3e9ef; --r27-soft: #cbd6e0; --r27-edge: #a6b5c3; --r27-bad: #ffbab2; }
+  #filterPanel .frow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
+  #filterPanel .fname {
+    font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: .11em; text-transform: uppercase;
+    color: var(--r27-soft); flex: 0 0 132px;
+  }
+  #filterPanel .fcheck { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; cursor: pointer; color: var(--r27-ink); font-size: 14px; }
+  #filterPanel input[type="checkbox"] {
+    -webkit-appearance: none; appearance: none; position: relative; flex: none; margin: 0; cursor: pointer;
+    width: 20px; height: 20px; border: 2px solid var(--r27-edge); border-radius: 3px; background: var(--surface-2);
+  }
+  #filterPanel input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
+  #filterPanel input[type="checkbox"]:checked::after {
+    content: ''; position: absolute; left: 5px; top: 1px; width: 5px; height: 10px;
+    border: solid var(--accent-ink); border-width: 0 2px 2px 0; transform: rotate(45deg);
+  }
+  #filterPanel select, #filterPanel input[type="text"] {
+    font-family: var(--mono); font-size: 14px; color: var(--r27-ink); background: var(--surface-2);
+    border: 1px solid var(--r27-edge); border-radius: 3px; padding: 6px 9px; min-height: 36px; min-width: 0;
+  }
+  #filterPanel input[type="text"] { width: 168px; }
+  #filterPanel input[type="text"]::placeholder { color: var(--r27-soft); opacity: 1; }
+  #filterPanel input[type="text"].bad { border-color: var(--bad); border-width: 2px; padding: 5px 8px; }
+  #filterPanel .btn { border-color: var(--r27-edge); color: var(--r27-ink); }
+  #filterPanel .btn[disabled] { color: var(--r27-soft); opacity: 1; }
+  #filterPanel .frange { display: flex; gap: 8px; align-items: flex-start; }
+  #filterPanel .ffield { display: flex; flex-direction: column; gap: 2px; }
+  #filterPanel .ferr { color: var(--r27-bad); font-size: 12px; line-height: 1.3; }
+  #filterPanel .fnote { margin: 0; color: var(--r27-soft); font-size: 13px; }
+  #filterPanel .fsum { margin-top: 2px; padding-top: 10px; border-top: 1px solid var(--line); }
+  #filterPanel .fsum #fShowing { color: var(--r27-ink); font-size: 14px; font-weight: 600; }
+  /* Visible columns, wide screen: the header and the cells of a hidden column go. */
+  @media (min-width: 701px) {
+    #targetHost.hide-level thead th:nth-child(2), #targetHost.hide-level tbody td:nth-child(2),
+    #targetHost.hide-ff thead th:nth-child(3), #targetHost.hide-ff tbody td:nth-child(3),
+    #targetHost.hide-est thead th:nth-child(4), #targetHost.hide-est tbody td:nth-child(4),
+    #targetHost.hide-status thead th:nth-child(5), #targetHost.hide-status tbody td:nth-child(5) { display: none; }
+  }
+  @media (max-width: 700px) {
+    #filterPanel { padding: 12px 12px; }
+    #filterPanel .fname { flex: 1 0 100%; }
+    #filterPanel .fcheck { min-height: 36px; }
+    #filterPanel .btn { min-height: 36px; }
+    #filterPanel .frange { flex: 1 1 100%; }
+    #filterPanel .ffield { flex: 1 1 0; min-width: 0; }
+    #filterPanel input[type="text"] { width: 100%; }
+    #filterPanel select { max-width: 100%; }
+    /* Visible columns, phone: the cell's content is hidden, but the grid and the row height stay. */
+    #targetHost.hide-level tbody td:nth-child(2), #targetHost.hide-ff tbody td:nth-child(3),
+    #targetHost.hide-est tbody td:nth-child(4), #targetHost.hide-status tbody td:nth-child(5) { visibility: hidden; }
+  }
+
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
@@ -777,7 +841,8 @@
           <dd>Your Torn key and your FFScouter key if you gave one, in this browser's local storage
             on this device, as plain text &mdash; this page does not encrypt them. They stay until
             you press Forget key or clear the browser's site data. The column you last sorted the
-            list by is kept there too. For the war that is running, the honor number of each player on
+            list by is kept there too, and so are your filters (activity, status, ranges and visible
+            columns) once you have changed one; Reset filters removes them. For the war that is running, the honor number of each player on
             the other side is kept there as well, and removed when the war is over or when you press
             Forget key. Your choice for Honor bars is kept there as well, once you have
             pressed that button. Your choice between the dark and the light theme is kept there as
@@ -809,6 +874,16 @@
             the war and then shows how long the war has run; it is counted with the Torn clock this
             page has measured, not with this device's own, and says "Start time unknown" until it
             has one.</dd>
+          <dt>Filters</dt>
+          <dd>The Filters button opens a panel with the sort (the same choice as the column headings;
+            Last action with the arrow up puts the most recent first), the activity and the status you
+            want to see, ranges for FF, Stats and Last action, and which columns to show. Filters only
+            hide rows: every row is still read, counted in Callable and kept up to date, and Callable
+            and the filters apply together. A target with no value for a range you have set is hidden,
+            and the panel says how many. Out soon is hospital with 10 minutes or less left on the Torn
+            clock. When FF is not available (no key, old figures or FFScouter down) the FF and Stats
+            ranges are paused, so the list is never emptied by it. Reset filters puts everything back;
+            the sort stays.</dd>
           <dt>Honor bars</dt>
           <dd>Each row can show the player's honor bar behind the name, with the name written on it.
             To know which bar a player wears, this page reads the honor ID from the same profile call
@@ -852,7 +927,75 @@
       <h2>Targets</h2>
       <button type="button" class="btn small" id="callableBtn" aria-pressed="false">Callable (0)</button>
       <button type="button" class="btn small" id="honorBtn" aria-pressed="true">Honor bars</button>
+      <button type="button" class="btn small" id="filterBtn" aria-expanded="false" aria-controls="filterPanel">Filters</button>
       <p class="hint" id="targetHint"></p>
+    </div>
+    <div id="filterPanel" hidden>
+      <div class="frow">
+        <label class="fname" for="fSort">Sort</label>
+        <select id="fSort">
+          <option value="">Default order</option>
+          <option value="target">Name</option>
+          <option value="level">Level</option>
+          <option value="ff">FF</option>
+          <option value="est">EST</option>
+          <option value="status">Status</option>
+          <option value="dibs">DIBS</option>
+          <option value="lastaction">Last action</option>
+        </select>
+        <button type="button" class="btn small" id="fDir" aria-label="Sort direction" disabled>&#9650;</button>
+        <span class="fnote" id="fDirNote"></span>
+      </div>
+      <div class="frow" role="group" aria-labelledby="fActName">
+        <span class="fname" id="fActName">Activity</span>
+        <label class="fcheck"><input type="checkbox" data-group="activity" value="online"><span>Online</span></label>
+        <label class="fcheck"><input type="checkbox" data-group="activity" value="idle"><span>Idle</span></label>
+        <label class="fcheck"><input type="checkbox" data-group="activity" value="offline"><span>Offline</span></label>
+      </div>
+      <div class="frow" role="group" aria-labelledby="fStName">
+        <span class="fname" id="fStName">Status</span>
+        <label class="fcheck"><input type="checkbox" data-group="status" value="okay"><span>Okay</span></label>
+        <label class="fcheck"><input type="checkbox" data-group="status" value="hospital"><span>Hospital</span></label>
+        <label class="fcheck"><input type="checkbox" data-group="status" value="outsoon"><span>Out soon (&le;10m)</span></label>
+        <label class="fcheck"><input type="checkbox" data-group="status" value="jail"><span>Jail</span></label>
+        <label class="fcheck"><input type="checkbox" data-group="status" value="abroad"><span>Abroad</span></label>
+        <label class="fcheck"><input type="checkbox" data-group="status" value="traveling"><span>Traveling</span></label>
+        <label class="fcheck"><input type="checkbox" data-group="status" value="fedded"><span>Fedded</span></label>
+      </div>
+      <div class="frow" role="group" aria-labelledby="fFfName">
+        <span class="fname" id="fFfName">FF range</span>
+        <span class="frange">
+          <span class="ffield"><input type="text" inputmode="decimal" maxlength="16" autocomplete="off" placeholder="min" aria-label="FF range, minimum" data-bound="ff" data-end="min"><span class="ferr" hidden>Not a number</span></span>
+          <span class="ffield"><input type="text" inputmode="decimal" maxlength="16" autocomplete="off" placeholder="max" aria-label="FF range, maximum" data-bound="ff" data-end="max"><span class="ferr" hidden>Not a number</span></span>
+        </span>
+      </div>
+      <div class="frow" role="group" aria-labelledby="fEsName">
+        <span class="fname" id="fEsName">Stats range</span>
+        <span class="frange">
+          <span class="ffield"><input type="text" inputmode="text" maxlength="16" autocomplete="off" placeholder="min, e.g. 750k" aria-label="Stats range, minimum" data-bound="est" data-end="min"><span class="ferr" hidden>Not a number</span></span>
+          <span class="ffield"><input type="text" inputmode="text" maxlength="16" autocomplete="off" placeholder="max, e.g. 1.5b" aria-label="Stats range, maximum" data-bound="est" data-end="max"><span class="ferr" hidden>Not a number</span></span>
+        </span>
+      </div>
+      <div class="frow" role="group" aria-labelledby="fLaName">
+        <span class="fname" id="fLaName">Last action</span>
+        <span class="frange">
+          <span class="ffield"><input type="text" inputmode="numeric" maxlength="16" autocomplete="off" placeholder="min, minutes ago" aria-label="Last action, minimum minutes ago" data-bound="last" data-end="min"><span class="ferr" hidden>Not a number</span></span>
+          <span class="ffield"><input type="text" inputmode="numeric" maxlength="16" autocomplete="off" placeholder="max, minutes ago" aria-label="Last action, maximum minutes ago" data-bound="last" data-end="max"><span class="ferr" hidden>Not a number</span></span>
+        </span>
+      </div>
+      <div class="frow" role="group" aria-labelledby="fCoName">
+        <span class="fname" id="fCoName">Visible columns</span>
+        <label class="fcheck"><input type="checkbox" data-group="cols" value="level"><span>Level</span></label>
+        <label class="fcheck"><input type="checkbox" data-group="cols" value="ff"><span>FF</span></label>
+        <label class="fcheck"><input type="checkbox" data-group="cols" value="est"><span>EST</span></label>
+        <label class="fcheck"><input type="checkbox" data-group="cols" value="status"><span>Status</span></label>
+      </div>
+      <div class="frow fsum">
+        <span id="fShowing" role="status">Showing 0 of 0</span>
+        <button type="button" class="btn small" id="fReset">Reset filters</button>
+      </div>
+      <p class="fnote" id="fHidden" hidden></p>
+      <p class="fnote" id="fPaused" hidden></p>
     </div>
     <div class="simreset" id="simResetBar" hidden>
       <button type="button" class="btn danger small" id="simResetBtn">Reset test war</button>
@@ -1586,6 +1729,7 @@
    'sessionSaid','sessionState','sessionRetry',
    'warPanel','warWho','warMeta','warClock','warScore',
    'targetPanel','targetHint','staleBar','targetHost','callableBtn','honorBtn','advHonors','themeBtn',
+   'filterBtn','filterPanel','fSort','fDir','fDirNote','fShowing','fHidden','fPaused','fReset',
    'simBanner','simRealWar','simWireWar','simResetBar','simResetBtn','simResetNote',
    'actionMessage','simResetButtonSize','simResetIdleSize','simResetArmedSize',
    'advServer','advWar','advMe','advClaims','advRoster','advFf','advError','advRaw']
@@ -3817,9 +3961,22 @@
       compare: function (a, b, ctx) { return dibsRank(a, ctx) - dibsRank(b, ctx); } }
   ];
 
+  // R27. A sort that has no column: the panel offers it, the headings and the phone's sort row do not,
+  // and no heading is marked while it is chosen. Up (asc) is the most recent action first, down (desc)
+  // the oldest first; a target with no last action sits last whichever way the list is turned.
+  var EXTRA_SORTS = [
+    { id: 'lastaction', label: 'Last action',
+      compare: function (a, b, ctx) {
+        var x = a.lastAction > 0 ? a.lastAction : null, y = b.lastAction > 0 ? b.lastAction : null;
+        if (x === null && y === null) return 0;
+        if (x === null || y === null) return (x === null ? 1 : -1) * (ctx && ctx.dir === 'desc' ? -1 : 1);
+        return y - x;
+      } }
+  ];
+
   function columnById(id) {
     var found = null;
-    COLUMNS.forEach(function (column) { if (column.id === id) found = column; });
+    COLUMNS.concat(EXTRA_SORTS).forEach(function (column) { if (column.id === id) found = column; });
     return found;
   }
 
@@ -3866,6 +4023,234 @@
     renderTargets();
   }
   el.callableBtn.addEventListener('click', toggleCallable);
+
+  // ------------------------------------------------- R27: the sort and filter panel
+  //
+  // A pure view, like the sort and Callable: it hides rows (tr.hidden) and nothing more. Every row is
+  // built, kept up to date by the second hand and counted in Callable as before; nothing is asked of
+  // Torn or FFScouter for it. Time is counted on getTornNowMs(), never on this device's own clock.
+  // Rows with no value for a range that is set are hidden, and the panel says how many. FF and Stats
+  // ranges are paused while FF is not 'ok' (no key, old figures, source down): FFScouter being away
+  // never empties the list.
+  // Stored under FILTER_STORE only once a filter has been changed: { schemaVersion: 1, activity, status,
+  // ff, est, last, cols }. Anything that does not read back whole is the default (everything shown).
+  var FILTER_STORE = 'ks-war-room-filters';
+  var FILTER_OUT_SOON_SECONDS = 600;
+  var ACTIVITY_KEYS = ['online', 'idle', 'offline'];
+  var STATUS_KEYS = ['okay', 'hospital', 'outsoon', 'jail', 'abroad', 'traveling', 'fedded'];
+  var COLUMN_KEYS = ['level', 'ff', 'est', 'status'];
+  var STATE_OF_KEY = { okay: 'Okay', hospital: 'Hospital', jail: 'Jail', abroad: 'Abroad', traveling: 'Traveling', fedded: 'Federal' };
+  var RANGE_KEYS = ['ff', 'est', 'last'];
+  var RANGE_NAME = { ff: 'FF', est: 'EST', last: 'last action' };
+
+  function defaultFilters() {
+    return {
+      activity: ACTIVITY_KEYS.slice(), status: STATUS_KEYS.slice(), cols: COLUMN_KEYS.slice(),
+      ff: { min: '', max: '' }, est: { min: '', max: '' }, last: { min: '', max: '' }
+    };
+  }
+
+  function readFilters() {
+    var raw = read(FILTER_STORE);
+    if (!raw) return defaultFilters();
+    try {
+      var data = JSON.parse(raw);
+      if (!data || typeof data !== 'object' || Array.isArray(data) || data.schemaVersion !== 1) return defaultFilters();
+      var next = defaultFilters();
+      var subset = function (list, valid) {
+        if (!Array.isArray(list)) throw new Error('list');
+        var kept = [];
+        valid.forEach(function (key) { if (list.indexOf(key) >= 0) kept.push(key); });
+        list.forEach(function (key) { if (valid.indexOf(key) < 0) throw new Error('key'); });
+        return kept;
+      };
+      var bounds = function (box) {
+        if (!box || typeof box !== 'object' || Array.isArray(box)) throw new Error('bounds');
+        if (typeof box.min !== 'string' || typeof box.max !== 'string' || box.min.length > 16 || box.max.length > 16) throw new Error('text');
+        return { min: box.min, max: box.max };
+      };
+      next.activity = subset(data.activity, ACTIVITY_KEYS);
+      next.status = subset(data.status, STATUS_KEYS);
+      next.cols = subset(data.cols, COLUMN_KEYS);
+      RANGE_KEYS.forEach(function (key) { next[key] = bounds(data[key]); });
+      return next;
+    } catch (e) {
+      return defaultFilters();
+    }
+  }
+
+  var filters = readFilters();
+
+  function saveFilters() {
+    write(FILTER_STORE, JSON.stringify({
+      schemaVersion: 1, activity: filters.activity, status: filters.status,
+      ff: filters.ff, est: filters.est, last: filters.last, cols: filters.cols
+    }));
+  }
+
+  // One bound as the member typed it. null: empty, no limit. false: not a number, the limit is not used.
+  // FF: 2, 3.4, .5. Stats: the same with k, m, b or t after it (750k, 200m, 1.5b, 2T). Last action: whole minutes.
+  function parseBound(kind, raw) {
+    var text = String(raw).replace(/\s+/g, '');
+    if (text === '') return null;
+    if (kind === 'last') return /^\d{1,7}$/.test(text) ? Number(text) : false;
+    var m = text.match(kind === 'est' ? /^(\d+(?:[.,]\d+)?|[.,]\d+)([kmbt])?$/i : /^(\d+(?:[.,]\d+)?|[.,]\d+)()$/);
+    if (!m) return false;
+    var scale = { k: 1e3, m: 1e6, b: 1e9, t: 1e12 }[(m[2] || '').toLowerCase()] || 1;
+    var value = Number(m[1].replace(',', '.')) * scale;
+    return isFinite(value) ? value : false;
+  }
+  function rangeOf(kind) { return { min: parseBound(kind, filters[kind].min), max: parseBound(kind, filters[kind].max) }; }
+  function isLimit(bound) { return typeof bound === 'number'; }
+  function rangeIsSet(range) { return isLimit(range.min) || isLimit(range.max); }
+  function inRange(value, range) { return (!isLimit(range.min) || value >= range.min) && (!isLimit(range.max) || value <= range.max); }
+
+  // How many filters differ from "everything shown". Visible columns count as one.
+  function filterCount() {
+    var n = 0;
+    if (filters.activity.length < ACTIVITY_KEYS.length) n += 1;
+    if (filters.status.length < STATUS_KEYS.length) n += 1;
+    if (filters.cols.length < COLUMN_KEYS.length) n += 1;
+    RANGE_KEYS.forEach(function (kind) { if (rangeIsSet(rangeOf(kind))) n += 1; });
+    return n;
+  }
+
+  // What every row is asked, read once per drawing.
+  function filterContext() {
+    return {
+      ffUsable: statSource.state() === 'ok',
+      nowS: getTornNowMs() / 1000,
+      ranges: { ff: rangeOf('ff'), est: rangeOf('est'), last: rangeOf('last') },
+      activityOn: filters.activity.length < ACTIVITY_KEYS.length,
+      statusOn: filters.status.length < STATUS_KEYS.length
+    };
+  }
+
+  function statusMatches(target, ctx) {
+    return filters.status.some(function (key) {
+      if (key === 'outsoon') return target.state === 'Hospital' && target.until > 0 && target.until - ctx.nowS <= FILTER_OUT_SOON_SECONDS;
+      return STATE_OF_KEY[key] === target.state;
+    });
+  }
+
+  // pass: the row stays. other: it passes everything but the ranges whose value is missing. missing: those ranges.
+  function filterVerdict(target, ctx) {
+    var other = true;
+    var missing = [];
+    if (ctx.activityOn) {
+      var activity = activityOf(target);
+      if (!activity || filters.activity.indexOf(activity) < 0) other = false;
+    }
+    if (ctx.statusOn && !statusMatches(target, ctx)) other = false;
+    var check = function (kind, value) {
+      if (!rangeIsSet(ctx.ranges[kind])) return;
+      if (value === null) missing.push(kind);
+      else if (!inRange(value, ctx.ranges[kind])) other = false;
+    };
+    if (ctx.ffUsable) {
+      var stat = statSource.get(target.id);
+      check('ff', stat.state === 'ok' ? stat.ff : null);
+      check('est', stat.state === 'ok' ? stat.est : null);
+    }
+    check('last', target.lastAction > 0 ? Math.floor(Math.max(0, ctx.nowS - target.lastAction) / 60) : null);
+    return { pass: other && missing.length === 0, other: other, missing: missing };
+  }
+
+  function chooseSort(id) {
+    if (id === '') { sortState = null; write(SORT_STORE, ''); }
+    else if (columnById(id) && !(sortState && sortState.id === id)) {
+      sortState = { id: id, dir: 'asc' };
+      write(SORT_STORE, sortState.id + ':' + sortState.dir);
+    } else return;
+    renderTargets();
+  }
+  function flipSortDirection() {
+    if (!sortState) return;
+    sortState = { id: sortState.id, dir: sortState.dir === 'asc' ? 'desc' : 'asc' };
+    write(SORT_STORE, sortState.id + ':' + sortState.dir);
+    renderTargets();
+  }
+
+  // The boxes and fields show what `filters` holds. Run at the start and by Reset; never while typing.
+  function fillFilterFields() {
+    el.filterPanel.querySelectorAll('input[type="checkbox"][data-group]').forEach(function (box) {
+      box.checked = filters[box.getAttribute('data-group')].indexOf(box.value) >= 0;
+    });
+    el.filterPanel.querySelectorAll('input[data-bound]').forEach(function (field) {
+      field.value = filters[field.getAttribute('data-bound')][field.getAttribute('data-end')];
+    });
+  }
+
+  // The parts of the panel that do not depend on a drawing: the button, the sort, the red edge on a bad bound.
+  function paintFilterControls() {
+    var n = filterCount();
+    el.filterBtn.textContent = n ? 'Filters (' + n + ')' : 'Filters';
+    el.filterBtn.setAttribute('data-active', n ? 'true' : 'false');
+    el.fSort.value = sortState ? sortState.id : '';
+    el.fDir.disabled = !sortState;
+    el.fDir.textContent = sortState && sortState.dir === 'desc' ? '▼' : '▲';
+    el.fDir.setAttribute('aria-label', 'Sort direction: ' + (sortState && sortState.dir === 'desc' ? 'descending' : 'ascending'));
+    el.fDirNote.textContent = sortState && sortState.id === 'lastaction' ? (sortState.dir === 'asc' ? 'most recent first' : 'oldest first') : '';
+    el.filterPanel.querySelectorAll('input[data-bound]').forEach(function (field) {
+      var bad = parseBound(field.getAttribute('data-bound'), field.value) === false;
+      field.classList.toggle('bad', bad);
+      field.setAttribute('aria-invalid', bad ? 'true' : 'false');
+      field.nextElementSibling.hidden = !bad;
+    });
+  }
+
+  // The lines that come from a drawing: how many are shown, how many are hidden for want of a value,
+  // and whether the FF ranges are paused.
+  function paintFilterStats(shown, total, hiddenFor, paused) {
+    el.fShowing.textContent = 'Showing ' + shown + ' of ' + total;
+    var notes = [];
+    RANGE_KEYS.forEach(function (kind) { if (hiddenFor[kind]) notes.push(hiddenFor[kind] + ' hidden: no ' + RANGE_NAME[kind]); });
+    el.fHidden.textContent = notes.join(' · ');
+    el.fHidden.hidden = !notes.length;
+    el.fPaused.textContent = paused ? 'FF filter paused: FF not available' : '';
+    el.fPaused.hidden = !paused;
+  }
+
+  function resetFilters() {
+    filters = defaultFilters();
+    write(FILTER_STORE, '');
+    fillFilterFields();
+    paintFilterControls();
+    renderTargets();
+  }
+
+  el.filterBtn.addEventListener('click', function () {
+    var open = el.filterPanel.hidden;
+    el.filterPanel.hidden = !open;
+    el.filterBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  el.filterPanel.addEventListener('change', function (event) {
+    var node = event.target;
+    if (node === el.fSort) { chooseSort(node.value); return; }
+    var group = node.getAttribute && node.getAttribute('data-group');
+    if (!group || !filters[group]) return;
+    var valid = group === 'activity' ? ACTIVITY_KEYS : (group === 'status' ? STATUS_KEYS : COLUMN_KEYS);
+    filters[group] = valid.filter(function (key) {
+      var box = el.filterPanel.querySelector('input[data-group="' + group + '"][value="' + key + '"]');
+      return !!box && box.checked;
+    });
+    saveFilters();
+    paintFilterControls();
+    renderTargets();
+  });
+  el.filterPanel.addEventListener('input', function (event) {
+    var field = event.target;
+    var kind = field.getAttribute && field.getAttribute('data-bound');
+    if (!kind || !filters[kind]) return;
+    filters[kind][field.getAttribute('data-end')] = field.value.trim().slice(0, 16);
+    saveFilters();
+    paintFilterControls();
+    renderTargets();
+  });
+  el.fDir.addEventListener('click', flipSortDirection);
+  el.fReset.addEventListener('click', resetFilters);
+  fillFilterFields();
+  paintFilterControls();
 
   // R22. The Honor bars button: on or off, remembered on this device once it has been pressed.
   el.honorBtn.addEventListener('click', function () { Honors.setOn(!Honors.isOn()); });
@@ -4094,6 +4479,15 @@
       var cell = tr.querySelector('[data-hosp-id]');
       if (cell) cell.textContent = hospitalText(shown.decision);
     });
+    // R27: a clock or a reading can change what a filter says about a row (Out soon, how long ago the
+    // last action was, a roster that has gone stale, FF going stale). Then the table is drawn again.
+    if (!redraw && filterCount() > 0) {
+      var filterCtx = filterContext();
+      el.targetHost.querySelectorAll('tr[data-fpass]').forEach(function (tr) {
+        var target = byId[tr.getAttribute('data-target-id')];
+        if (target && (filterVerdict(target, filterCtx).pass ? '1' : '0') !== tr.getAttribute('data-fpass')) redraw = true;
+      });
+    }
     if (redraw) renderTargets();
     else scheduleGateWake();
   }
@@ -4280,7 +4674,10 @@
 
     var tbody = document.createElement('tbody');
     var callableCount = 0;   // rows whose Take DIBS button can be pressed (R18)
-    var keptCount = 0;       // rows left on screen by the filter
+    var keptCount = 0;       // rows left on screen by the filters and Callable
+    var filterCtx = filterContext();          // R27
+    var passCount = 0;                        // rows the R27 filters keep
+    var hiddenFor = { ff: 0, est: 0, last: 0 };   // rows hidden for want of a value in a range that is set
 
     rows.forEach(function (target) {
       var tr = document.createElement('tr');
@@ -4541,7 +4938,13 @@
       // to date by the second hand and counted all the same, so one that becomes
       // callable shows itself at the next drawing.
       if (callableRow) callableCount += 1;
-      if (callableOnly && !keptRow) tr.hidden = true;
+      // R27: the panel's filters hide a row in the same way, and the two apply together. The verdict
+      // is kept on the row so that the second hand can tell when a clock or a reading has changed it.
+      var verdict = filterVerdict(target, filterCtx);
+      tr.setAttribute('data-fpass', verdict.pass ? '1' : '0');
+      if (verdict.pass) passCount += 1;
+      else if (verdict.other) verdict.missing.forEach(function (kind) { hiddenFor[kind] += 1; });
+      if (!verdict.pass || (callableOnly && !keptRow)) tr.hidden = true;
       else keptCount += 1;
       tbody.appendChild(tr);
     });
@@ -4571,7 +4974,27 @@
     el.targetHost.textContent = '';
     el.targetHost.appendChild(msort);
     el.targetHost.appendChild(table);
-    if (callableOnly && keptCount === 0) {
+    // R27: the host says which columns are hidden (the CSS does the rest), and the panel and the hint say what is shown.
+    COLUMN_KEYS.forEach(function (key) { el.targetHost.classList.toggle('hide-' + key, filters.cols.indexOf(key) < 0); });
+    var rowsPaused = !filterCtx.ffUsable && (rangeIsSet(filterCtx.ranges.ff) || rangeIsSet(filterCtx.ranges.est));
+    paintFilterControls();
+    paintFilterStats(keptCount, rows.length, hiddenFor, rowsPaused);
+    if (filterCount() > 0) {
+      hint.push('showing ' + keptCount + ' of ' + rows.length);
+      el.targetHint.textContent = hint.join(' · ');
+    }
+    if (rows.length && passCount === 0) {
+      var none = document.createElement('p');
+      none.className = 'empty';
+      none.textContent = 'No target matches the filters. ';
+      var noneReset = document.createElement('button');
+      noneReset.type = 'button';
+      noneReset.className = 'btn small';
+      noneReset.textContent = 'Reset filters';
+      noneReset.onclick = resetFilters;
+      none.appendChild(noneReset);
+      el.targetHost.appendChild(none);
+    } else if (callableOnly && keptCount === 0) {
       var nothing = document.createElement('p');
       nothing.className = 'empty';
       nothing.textContent = 'No target can be called right now.';
