@@ -10,7 +10,7 @@
     --ground: #eaedf1; --surface: #ffffff; --surface-2: #f4f6f9;
     --ink: #14202b; --muted: #5c6d7e; --faint: #8b9aa8;
     --line: #d3dae1; --line-strong: #b8c3cd;
-    --accent: #a3512a; --accent-ink: #ffffff; --accent-soft: #f2ded4;
+    --accent: #a3512a; --accent-ink: #ffffff; --accent-soft: #f2ded4; --link: #8a431f;
     --good: #1c7355; --good-soft: #dfeee8;
     --stop: #b3453e; --warn: #8a6410;
     --shadow: 0 1px 2px rgba(20,32,43,.06), 0 8px 24px rgba(20,32,43,.06);
@@ -25,7 +25,7 @@
       --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
       --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
       --line: #26313b; --line-strong: #35434f;
-      --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+      --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a; --link: #d8804d;
       --good: #46a583; --good-soft: #172a24;
       --stop: #e0796f; --warn: #d0a545;
       --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
@@ -37,7 +37,7 @@
     --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
     --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
     --line: #26313b; --line-strong: #35434f;
-    --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+    --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a; --link: #d8804d;
     --good: #46a583; --good-soft: #172a24;
     --stop: #e0796f; --warn: #d0a545;
     --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
@@ -318,10 +318,49 @@
   .versions .row .k { font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: .09em; text-transform: uppercase; color: var(--faint); }
   .versions .row .v strong { font-family: var(--mono); font-size: 13px; color: var(--ink); }
   @media (max-width: 560px) { .versions .row { grid-template-columns: 1fr; gap: 2px; } }
+
+  .backbar { margin-bottom: -14px; }
+  .backbar a, .backbar a:visited {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+    text-decoration: none; border: 1px solid var(--line-strong);
+    border-radius: 3px; padding: 7px 12px; display: inline-block;
+  }
+  .backbar a:hover { color: var(--accent); border-color: var(--accent); }
+  .backbar a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Links inside the Before you start box: darker shade of the accent in light mode (4.3:1 otherwise). */
+  .keynote a, .keynote a:visited { color: var(--link); text-decoration: underline; text-underline-offset: 2px; }
+
+  /* Torn PDA address: selectable text and a Copy button. */
+  .addr { display: grid; gap: 6px; margin: 4px 0 0 22px; }
+  .addr .k {
+    font-family: var(--display); font-weight: 600; font-size: 11px;
+    letter-spacing: .09em; text-transform: uppercase; color: var(--faint);
+  }
+  .addr .line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+  .addr .url {
+    flex: 1 1 200px; min-width: 0;
+    font-family: var(--mono); font-size: 12px; color: var(--ink);
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 2px;
+    padding: 6px 8px; overflow-wrap: anywhere; word-break: break-all; user-select: all;
+  }
+  .copy {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .09em; text-transform: uppercase;
+    background: transparent; color: var(--accent); border: 1px solid var(--accent);
+    border-radius: 3px; padding: 7px 14px; cursor: pointer; white-space: nowrap;
+  }
+  .copy:hover { background: var(--accent-soft); }
+  .copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .steps .addr { margin-left: 0; margin-top: 6px; }
+  .newlist li { margin: 8px 0; }
 </style>
 </head>
 <body>
 <div class="wrap">
+  <nav class="backbar"><a href="scripts.html">&larr; Kingshade Scripts</a></nav>
+
   <header class="masthead">
     <div>
       <p class="eyebrow">Kingshade Development</p>
@@ -329,14 +368,14 @@
       <p class="sub">How to update the KS scripts before the war, how to check you are on the right
         version, and how DIBS works once the war is live.</p>
     </div>
-    <span class="stamp">Updated Oct 2026</span>
+    <span class="stamp">Updated Nov 2026</span>
   </header>
 
   <div class="keynote">
     <span class="title">Before you start</span>
     <div class="versions">
-      <div class="row"><span class="k">Torn PDA</span><span class="v">KS Torn War Dibs PDA <strong>v1.5.186</strong></span></div>
-      <div class="row"><span class="k">Computer</span><span class="v">KS Torn War Dibs PC <strong>v1.1.10</strong> (in Tampermonkey)</span></div>
+      <div class="row"><span class="k">Torn PDA</span><span class="v">KS Torn War Dibs PDA <strong>v1.5.195</strong></span></div>
+      <div class="row"><span class="k">Computer</span><span class="v">KS Torn War Dibs PC <strong>v1.1.18</strong> (in Tampermonkey)</span></div>
     </div>
     <p><strong>DIBS now runs on our own KS War Room server.</strong> FFScouter's Hit Calling is no longer
       used for DIBS, and <strong>KS FFScouter Call Guard is retired</strong> &mdash; remove it from every device
@@ -348,31 +387,55 @@
   </div>
 
   <section>
+    <h2>New since October</h2>
+    <div class="card">
+      <ul class="steps newlist">
+        <li><strong>Share with KS.</strong> A button under <strong>Settings</strong> in the KS panel, <strong>off</strong> by default.
+          When you turn it on, your own five battle stats and your Torn ID are sent every 6 hours while your own war page is open.
+          They are used only for the faction's stat estimates and are never shown to anyone. It is your choice.</li>
+        <li><strong>Filters</strong> (Torn PDA only). The <strong>Filters</strong> button in the KS panel sorts and hides rows on the war page by
+          FF, stats, level, status, activity and last action. It works only on the page, nothing is sent, and your own DIBS is never hidden.</li>
+        <li><strong>Hospital 48 hours or more.</strong> The target shows its real time instead of an unknown mark and is locked. On the computer the
+          button shows the time, for example <strong>2d20h</strong>, with <strong>HOSP</strong> underneath. On Torn PDA it shows, for example,
+          <strong>2d 20h 0m</strong>, with <strong>LOCKED</strong> underneath. DIBS opens only at 2:00 or less, as before.</li>
+        <li><strong>War Room.</strong> <a href="warroom.html">War Room</a> is the same DIBS board in the browser, with landing times, filters,
+          honor bars, a war clock and the lead against the target.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
     <h2>Torn PDA</h2>
     <div class="card">
       <h3>If you already have KS Torn War Dibs installed</h3>
       <ol class="steps">
-        <li>Open Torn PDA. Open <strong>Settings</strong>, then <strong>User Scripts</strong>.</li>
+        <li>Open Torn PDA. Open <strong>Settings</strong> &rarr; <strong>Advanced browser settings</strong> &rarr; <strong>Manage scripts</strong>.</li>
         <li>Tap the <strong>pencil</strong> next to <strong>KS Torn War Dibs PDA</strong>.</li>
         <li>Tap <strong>Configure</strong>, the button next to <em>Remote load/update</em>.</li>
-        <li>Tap <strong>Check for Update</strong>. When it offers 1.5.186, tap <strong>Update</strong>.</li>
-        <li>In the same User Scripts list, switch <strong>KS FFScouter Call Guard</strong> off, or delete it.</li>
+        <li>Tap <strong>Check for Update</strong>. When it offers 1.5.195, tap <strong>Update</strong>.</li>
+        <li>In the same Manage scripts list, switch <strong>KS FFScouter Call Guard</strong> off, or delete it.</li>
         <li>Close Torn PDA completely and open it again.</li>
-        <li>Open your faction's Ranked War page. The KS panel must show <strong>v1.5.186</strong> in the top right corner.</li>
+        <li>Open your faction's Ranked War page. The KS panel must show <strong>v1.5.195</strong> in the top right corner.</li>
         <li>Once your faction's war is matched, tap <strong>Settings</strong> in the KS panel. The War Room row says <strong>War Room: SIGNED IN</strong>.</li>
       </ol>
       <div class="figs">
         <figure><img src="pda-edit-script.jpg" alt="Torn PDA edit script dialog with the Configure button next to Remote load/update"><figcaption>Step 3: the <strong>Configure</strong> button sits next to <em>Remote load/update</em>.</figcaption></figure>
-        <figure><img src="pda-remote-update.jpg" alt="Torn PDA remote script update dialog with Check for Update and Update buttons"><figcaption>Step 4: <strong>Check for Update</strong>, then <strong>Update</strong>. This phone was already on an older version, so it says no newer version &mdash; yours will offer 1.5.186.</figcaption></figure>
+        <figure><img src="pda-remote-update.jpg" alt="Torn PDA remote script update dialog with Check for Update and Update buttons"><figcaption>Step 4: <strong>Check for Update</strong>, then <strong>Update</strong>. This phone was already on an older version, so it says no newer version &mdash; yours will offer 1.5.195.</figcaption></figure>
         <figure><img src="pda-panel-1.5.167.jpg" alt="KS Torn War Dibs panel on the Ranked War page"><figcaption>Step 7: the panel on the Ranked War page with the version top right (older version shown).</figcaption></figure>
       </div>
 
       <h3>If Check for Update finds nothing, or you never installed it</h3>
       <ol class="steps">
-        <li>In Torn PDA &rarr; Settings &rarr; User Scripts, switch any older KS Torn War Dibs <strong>off</strong>.</li>
-        <li>Open <a href="scripts.html">Kingshade Scripts</a> and press <strong>Install</strong> on the Torn PDA card for KS Torn War Dibs.</li>
-        <li>If a page of text opens instead: select all, copy, then in Torn PDA press <strong>+</strong> under User Scripts and paste it in. Save.</li>
-        <li>Close Torn PDA completely and open it again. Check the panel says <strong>v1.5.186</strong>.</li>
+        <li>In Manage scripts, <strong>delete</strong> any older KS Torn War Dibs. Turning it off is not enough: Torn PDA will not add a second script with the same name, but still says &ldquo;Script successfully added!&rdquo;.</li>
+        <li>Press <strong>+</strong>, then <strong>Configure</strong> next to <em>Remote load/update</em>, then <strong>Remote URL</strong>.</li>
+        <li>Paste this address:
+          <div class="addr">
+            <span class="k">Torn PDA address</span>
+            <div class="line"><code class="url" id="addr-guide">https://hjunez.github.io/kingshade-leader-tools/KS_Torn_War_Dibs_PDA.user.js</code><button type="button" class="copy" data-copy="addr-guide">Copy</button></div>
+          </div>
+        </li>
+        <li>Press <strong>Fetch</strong>, then <strong>Load</strong>, then <strong>Continue</strong>.</li>
+        <li>Close Torn PDA completely and open it again. Check the panel says <strong>v1.5.195</strong>.</li>
       </ol>
     </div>
   </section>
@@ -383,10 +446,10 @@
       <h3>KS Torn War Dibs PC</h3>
       <ol class="steps">
         <li>Click the Tampermonkey icon in your browser toolbar &rarr; <strong>Utilities</strong> &rarr; <strong>Check for userscript updates</strong>.</li>
-        <li>Open the Tampermonkey dashboard and look at the <strong>Version</strong> column: <strong>KS Torn War Dibs PC</strong> must say <strong>1.1.10</strong>. Only one version may be enabled.</li>
+        <li>Open the Tampermonkey dashboard and look at the <strong>Version</strong> column: <strong>KS Torn War Dibs PC</strong> must say <strong>1.1.18</strong>. Only one version may be enabled.</li>
         <li>If it still shows an older number: open <a href="scripts.html">Kingshade Scripts</a>, press <strong>Install</strong> on the PC card, and confirm the update in the Tampermonkey window that opens.</li>
         <li>In the same dashboard, find <strong>KS FFScouter Call Guard</strong> and delete it with the trash-can icon in its row.</li>
-        <li>Open Torn's Ranked War page. The KS panel must say <strong>v1.1.10 TEST</strong>. The word TEST is part of the label and is expected.</li>
+        <li>Open Torn's Ranked War page. The KS panel must say <strong>v1.1.18 TEST</strong>. The word TEST is part of the label and is expected.</li>
         <li>If Tampermonkey asks whether the script may connect to <code>ks-war-room-claims.hans-viklund.workers.dev</code>, choose <strong>Always allow domain</strong>. That is the KS War Room server.</li>
         <li>Once your faction's war is matched, the panel's War Room row says <strong>War Room: SIGNED IN</strong>.</li>
       </ol>
@@ -481,5 +544,33 @@
     <p><a class="back" href="scripts.html">Back to Kingshade Scripts</a></p>
   </footer>
 </div>
+<script>
+(function () {
+  var canCopy = !!(navigator.clipboard && navigator.clipboard.writeText);
+  var buttons = document.querySelectorAll('button[data-copy]');
+  Array.prototype.forEach.call(buttons, function (btn) {
+    var timer = null;
+    if (!canCopy) btn.textContent = 'Select and copy';
+    btn.addEventListener('click', function () {
+      var el = document.getElementById(btn.getAttribute('data-copy'));
+      if (!el) return;
+      function select() {
+        var range = document.createRange();
+        range.selectNodeContents(el);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        btn.textContent = 'Select and copy';
+      }
+      if (!canCopy) { select(); return; }
+      navigator.clipboard.writeText(el.textContent.trim()).then(function () {
+        btn.textContent = 'Copied';
+        clearTimeout(timer);
+        timer = setTimeout(function () { btn.textContent = 'Copy'; }, 2000);
+      }, select);
+    });
+  });
+})();
+</script>
 </body>
 </html>
