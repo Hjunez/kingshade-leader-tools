@@ -10,7 +10,7 @@
     --ground: #eaedf1; --surface: #ffffff; --surface-2: #f4f6f9;
     --ink: #14202b; --muted: #5c6d7e; --faint: #8b9aa8;
     --line: #d3dae1; --line-strong: #b8c3cd;
-    --accent: #a3512a; --accent-ink: #ffffff; --accent-soft: #f2ded4;
+    --accent: #a3512a; --accent-ink: #ffffff; --accent-soft: #f2ded4; --link: #8a431f;
     --good: #1c7355; --good-soft: #dfeee8;
     --stop: #b3453e; --warn: #8a6410;
     --shadow: 0 1px 2px rgba(20,32,43,.06), 0 8px 24px rgba(20,32,43,.06);
@@ -25,7 +25,7 @@
       --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
       --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
       --line: #26313b; --line-strong: #35434f;
-      --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+      --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a; --link: #d8804d;
       --good: #46a583; --good-soft: #172a24;
       --stop: #e0796f; --warn: #d0a545;
       --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
@@ -37,7 +37,7 @@
     --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
     --ink: #e3e9ef; --muted: #93a3b2; --faint: #6b7c8b;
     --line: #26313b; --line-strong: #35434f;
-    --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+    --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a; --link: #d8804d;
     --good: #46a583; --good-soft: #172a24;
     --stop: #e0796f; --warn: #d0a545;
     --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
@@ -282,6 +282,34 @@
   }
   .backbar a:hover { color: var(--accent); border-color: var(--accent); }
   .backbar a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Links inside the Before you install box: the page's accent colour, underlined.
+     Light mode uses a darker shade of it, because the plain accent is 4.3:1 on this box. */
+  .keynote a, .keynote a:visited { color: var(--link); text-decoration: underline; text-underline-offset: 2px; }
+  .keynote a:hover { text-decoration-thickness: 2px; }
+  .keynote a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Torn PDA address: selectable text and a Copy button. */
+  .addr { display: grid; gap: 6px; margin-top: 12px; }
+  .addr .k {
+    font-family: var(--display); font-weight: 600; font-size: 11px;
+    letter-spacing: .09em; text-transform: uppercase; color: var(--faint);
+  }
+  .addr .line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+  .addr .url {
+    flex: 1 1 200px; min-width: 0;
+    font-family: var(--mono); font-size: 12px; color: var(--ink);
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 2px;
+    padding: 6px 8px; overflow-wrap: anywhere; word-break: break-all; user-select: all;
+  }
+  .copy {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .09em; text-transform: uppercase;
+    background: transparent; color: var(--accent); border: 1px solid var(--accent);
+    border-radius: 3px; padding: 7px 14px; cursor: pointer; white-space: nowrap;
+  }
+  .copy:hover { background: var(--accent-soft); }
+  .copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 </style>
 </head>
 <body>
@@ -302,11 +330,16 @@
     <span class="title">Before you install</span>
     <p><strong>On a computer:</strong> you need Tampermonkey in your browser first. Install it from
       the Chrome Web Store or the Firefox add-ons site, then come back here and press Install.</p>
-    <p><strong>On Torn PDA:</strong> the app has its own script list. Open Torn PDA, go to its
-      userscript settings, add a script, and paste the address of the file you want. Each card
-      below shows the file name.</p>
-    <p>If pressing Install just opens a page full of text, nothing is broken — select all of it,
-      copy it, and paste it into a new script in Tampermonkey or Torn PDA.</p>
+    <p><strong>On Torn PDA:</strong> the app has its own script list. Open Torn PDA, then
+      <strong>Settings</strong> &rarr; <strong>Advanced browser settings</strong> &rarr;
+      <strong>Manage scripts</strong> &rarr; <strong>+</strong> &rarr; <strong>Configure</strong>
+      (next to <em>Remote load/update</em>) &rarr; <strong>Remote URL</strong> &rarr; paste the
+      address shown on the card (press Copy) &rarr; <strong>Fetch</strong> &rarr;
+      <strong>Load</strong> &rarr; <strong>Continue</strong>. If an older copy with the same name is
+      already there, delete it first: Torn PDA will not add a second script with the same name,
+      but still says it was added.</p>
+    <p>On a computer, if pressing Install just opens a page full of text, nothing is broken — select
+      all of it, copy it, and paste it into a new script in Tampermonkey.</p>
     <p><strong>Ranked war coming up?</strong> Read the <a href="war-dibs-guide.html">Ranked War DIBS guide</a>
       — how to update, how to check your version, and how DIBS works.</p>
   </div>
@@ -356,16 +389,16 @@
       <div class="card">
         <span class="tag">PC</span>
         <span class="name">KS Black Market</span>
-        <span class="ver">Version 0.4.0</span>
+        <span class="ver">Version 0.4.1</span>
         <span class="what">Your travel advisor: the most profitable runs abroad for every item, and when to leave
-          Torn to land right after a restock — with the chance the stock is still there. For members of Politically
+          Torn to land right after a restock — with the chance the stock is still there. For members of PoIitically
           Incorrect only.</span>
         <div class="facts">
           <div class="row"><span class="k">Runs on</span><span class="v">Any Torn page (a small BM button, bottom left)</span></div>
           <div class="row"><span class="k">Network</span><span class="v">Only the KS Black Market server <code>ks-blackmarket.hans-viklund.workers.dev</code>. Nothing else — it never contacts Torn itself.</span></div>
           <div class="row"><span class="k">Reads</span><span class="v">The cash shown in Torn's sidebar, and the Travel Agency page when you open it (travel method and item slots) — only while the tab is visible. Nothing it reads is sent anywhere.</span></div>
           <div class="row"><span class="k">Stores</span><span class="v">Your Torn key, travel method, item slots, sort choice and starred or hidden items in your script manager. Your key is sent to the KS Black Market server only to sign you in; the server asks Torn which faction you are in and does not store the key. The sign-in is kept in memory only.</span></div>
-          <div class="row"><span class="k">Torn key</span><span class="v">Yes. A Public key is enough. Only used to check that you are in Politically Incorrect.</span></div>
+          <div class="row"><span class="k">Torn key</span><span class="v">Yes. A Public key is enough. Only used to check that you are in PoIitically Incorrect.</span></div>
         </div>
         <div class="get">
           <a class="btn" href="KS_Black_Market_PC.user.js">Install</a>
@@ -385,7 +418,7 @@
         <span class="name">KS Torn War Dibs</span>
         <span class="ver">Version 1.5.195</span>
         <span class="what">The same shared DIBS as the computer version, built for the phone, so
-          the whole faction can call targets from wherever they are playing. Filters sorts and filters
+          the whole faction can call targets from wherever they are playing. The Filters button sorts and filters
           the war list by FF, stats, level, status, activity and last action.</span>
         <div class="facts">
           <div class="row"><span class="k">Runs on</span><span class="v">Torn faction pages</span></div>
@@ -393,6 +426,10 @@
           <div class="row"><span class="k">Stores</span><span class="v">Your keys (encrypted) and settings in your own browser. Your Torn key is sent to the KS War Room server only to sign you in; the server asks Torn who you are and does not store the key. The server keeps the claims (target, your Torn ID, times) and deletes them when the war has been untouched for 12 hours. Share with KS is off by default; when you turn it on, your own battle stats (strength, defense, speed, dexterity, total) and your Torn ID go to the KS War Room server every 6 hours while your own war page is open, are used only for the faction's stat estimates and are never shown to anyone.</span></div>
           <div class="row"><span class="k">Torn key</span><span class="v">Yes. Faction members and wars, user basic and profile, and user battlestats (used only by Share with KS).</span></div>
           <div class="row"><span class="k">Read this</span><span class="v">If you were given a test build with <strong>TEST</strong> in its name, turn that one off before you install this. Two copies at once and only one of them draws.</span></div>
+        </div>
+        <div class="addr">
+          <span class="k">Torn PDA address</span>
+          <div class="line"><code class="url" id="addr-wd">https://hjunez.github.io/kingshade-leader-tools/KS_Torn_War_Dibs_PDA.user.js</code><button type="button" class="copy" data-copy="addr-wd">Copy</button></div>
         </div>
         <div class="get">
           <a class="btn" href="KS_Torn_War_Dibs_PDA.user.js">Install</a>
@@ -403,16 +440,20 @@
       <div class="card">
         <span class="tag">Torn PDA</span>
         <span class="name">KS Black Market</span>
-        <span class="ver">Version 0.4.0</span>
+        <span class="ver">Version 0.4.1</span>
         <span class="what">Your travel advisor: the most profitable runs abroad for every item, and when to leave
           Torn to land right after a restock — with the chance the stock is still there. Built for the phone. For
-          members of Politically Incorrect only.</span>
+          members of PoIitically Incorrect only.</span>
         <div class="facts">
           <div class="row"><span class="k">Runs on</span><span class="v">Any Torn page (a small BM button, bottom left)</span></div>
           <div class="row"><span class="k">Network</span><span class="v">Only the KS Black Market server <code>ks-blackmarket.hans-viklund.workers.dev</code>. Nothing else — it never contacts Torn itself.</span></div>
-          <div class="row"><span class="k">Reads</span><span class="v">The cash shown in Torn's sidebar, and the Travel Agency page when you open it (travel method and item slots) — only while the tab is visible. Nothing it reads is sent anywhere. Reading the Travel Agency page is verified on PC only.</span></div>
+          <div class="row"><span class="k">Reads</span><span class="v">The cash shown in Torn's sidebar, and the Travel Agency page when you open it (travel method and item slots) — only while the tab is visible. Nothing it reads is sent anywhere.</span></div>
           <div class="row"><span class="k">Stores</span><span class="v">Your Torn key, travel method, item slots, sort choice and starred or hidden items in your script manager. Your key is sent to the KS Black Market server only to sign you in; the server asks Torn which faction you are in and does not store the key. The sign-in is kept in memory only.</span></div>
-          <div class="row"><span class="k">Torn key</span><span class="v">Yes. A Public key is enough. Only used to check that you are in Politically Incorrect.</span></div>
+          <div class="row"><span class="k">Torn key</span><span class="v">Yes. A Public key is enough. Only used to check that you are in PoIitically Incorrect.</span></div>
+        </div>
+        <div class="addr">
+          <span class="k">Torn PDA address</span>
+          <div class="line"><code class="url" id="addr-bm">https://hjunez.github.io/kingshade-leader-tools/KS_Black_Market_PDA.user.js</code><button type="button" class="copy" data-copy="addr-bm">Copy</button></div>
         </div>
         <div class="get">
           <a class="btn" href="KS_Black_Market_PDA.user.js">Install</a>
@@ -446,6 +487,10 @@
           <div class="row"><span class="k">Stores</span><span class="v">Your settings in your own browser only. Never uploaded.</span></div>
           <div class="row"><span class="k">Torn key</span><span class="v">No.</span></div>
         </div>
+        <div class="addr">
+          <span class="k">Torn PDA address</span>
+          <div class="line"><code class="url" id="addr-boot">https://hjunez.github.io/kingshade-leader-tools/Kingshades_Bootlegging_Advisor.user.js</code><button type="button" class="copy" data-copy="addr-boot">Copy</button></div>
+        </div>
         <div class="get">
           <a class="btn" href="Kingshades_Bootlegging_Advisor.user.js">Install</a>
           <span class="file">Kingshades_Bootlegging_Advisor.user.js</span>
@@ -464,6 +509,10 @@
           <div class="row"><span class="k">Network</span><span class="v"><code>api.torn.com</code> (faction basic, and user battlestats for Share with KS), <code>ffscouter.com</code> and, only if you turn Share with KS on, the KS War Room server <code>ks-war-room-claims.hans-viklund.workers.dev</code>. Nothing else.</span></div>
           <div class="row"><span class="k">Stores</span><span class="v">Your key (unencrypted), settings, manual values and a short cache in your own browser or Torn PDA only. Share with KS is off by default; when you turn it on, your own battle stats (strength, defense, speed, dexterity, total) and your Torn ID go to the KS War Room server every 6 hours while the faction page is open, are used only for the faction's stat estimates and are never shown to anyone. Your key is sent there only to sign you in and is not stored.</span></div>
           <div class="row"><span class="k">Torn key</span><span class="v">Yes. A custom key: user <code>basic</code>, <code>battlestats</code>, <code>hof</code>, <code>attacks</code>, <code>personalstats</code> and faction <code>basic</code>, as FFScouter requires. KS Scout itself only reads faction <code>basic</code>, and user <code>battlestats</code> when Share with KS is on.</span></div>
+        </div>
+        <div class="addr">
+          <span class="k">Torn PDA address</span>
+          <div class="line"><code class="url" id="addr-scout">https://hjunez.github.io/kingshade-leader-tools/Kingshade_Scout_Torn_PDA.user.js</code><button type="button" class="copy" data-copy="addr-scout">Copy</button></div>
         </div>
         <div class="get">
           <a class="btn" href="Kingshade_Scout_Torn_PDA.user.js">Install</a>
@@ -484,5 +533,34 @@
       the KS War Room server to sign you in if you turn Share with KS on.</p>
   </footer>
 </div>
+<script>
+(function () {
+  var canCopy = !!(navigator.clipboard && navigator.clipboard.writeText);
+  var buttons = document.querySelectorAll('button[data-copy]');
+  Array.prototype.forEach.call(buttons, function (btn) {
+    var timer = null;
+    if (!canCopy) btn.textContent = 'Select and copy';
+    btn.addEventListener('click', function () {
+      var el = document.getElementById(btn.getAttribute('data-copy'));
+      if (!el) return;
+      function select() {
+        var range = document.createRange();
+        range.selectNodeContents(el);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        btn.textContent = 'Select and copy';
+      }
+      if (!canCopy) { select(); return; }
+      navigator.clipboard.writeText(el.textContent.trim()).then(function () {
+        btn.textContent = 'Copied';
+        clearTimeout(timer);
+        timer = setTimeout(function () { btn.textContent = 'Copy'; }, 2000);
+      }, select);
+    });
+  });
+})();
+</script>
 </body>
+
 </html>
