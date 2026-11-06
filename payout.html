@@ -702,7 +702,7 @@
       var payload = await response.json();
       if (payload && payload.error) {
         if (TERMINAL_CODES[payload.error.code]) { storeKey(''); el.apiKey.value = ''; }
-        throw new Error(describeError(payload.error.code, payload.error.error));
+        var e = new Error(describeError(payload.error.code, payload.error.error)); e.code = payload.error.code; throw e;
       }
       storeKey(key);
       return payload;
@@ -751,6 +751,8 @@
 
     var TORN_CALLS_PER_MINUTE = 100;
     var ATTACK_PAGE_DELAY = Math.max(700, Math.ceil(60000 / TORN_CALLS_PER_MINUTE));
+    var MAX_ATTACKS = 20000;
+    var MAX_ATTACK_PAGES = 400;
 
     async function fetchWarAttacks(report, opponentId, token) {
       if (typeof report.end !== 'number') {
@@ -766,14 +768,31 @@
       function validFaction(faction) {
         return faction === null || (faction && Number.isSafeInteger(Number(faction.id)) && Number(faction.id) > 0);
       }
-      for (var pageNumber = 0; pageNumber < 80; pageNumber += 1) {
+      var startedAt = Date.now();
+      var earliestSoFar = Infinity;
+      for (var pageNumber = 0; pageNumber < MAX_ATTACK_PAGES; pageNumber += 1) {
         if (token !== loadToken) return null;
         if (pageNumber > 0) {
           await new Promise(function (resolve) { setTimeout(resolve, ATTACK_PAGE_DELAY); });
           if (token !== loadToken) return null;
         }
-        var payload = await tornGet('/faction/attacks?filters=outgoing&limit=100&sort=DESC' +
-          '&from=' + (report.start - 1) + '&to=' + cursor);
+        var payload;
+        var rateRetries = 0;
+        for (;;) {
+          try {
+            payload = await tornGet('/faction/attacks?filters=outgoing&limit=100&sort=DESC' +
+              '&from=' + (report.start - 1) + '&to=' + cursor);
+            break;
+          } catch (err) {
+            if (!err || err.code !== 5 || rateRetries >= 3) throw err;
+            rateRetries += 1;
+            if (token !== loadToken) return null;
+            show(el.okBox, 'Torn asked us to slow down. Waiting 60 seconds, then carrying on from page ' +
+              (pageNumber + 1) + '.');
+            await new Promise(function (resolve) { setTimeout(resolve, 60000); });
+            if (token !== loadToken) return null;
+          }
+        }
         if (token !== loadToken) return null;
         var page = payload && payload.attacks;
         if (!Array.isArray(page) || page.length > 100) {
@@ -794,7 +813,16 @@
           if (!attacks.has(attack.id)) attacks.set(attack.id, attack);
           earliest = Math.min(earliest, attack.ended);
         });
-        show(el.okBox, 'Reading the attack log… ' + attacks.size.toLocaleString('en-US') + ' attacks so far.');
+        earliestSoFar = Math.min(earliestSoFar, earliest);
+        var coverage = Number.isFinite(earliestSoFar)
+          ? Math.min(1, Math.max(0, (report.end - earliestSoFar) / (report.end - report.start + 1))) : 0;
+        var timeLeft = '';
+        if (coverage >= 0.05) {
+          var secondsLeft = (Date.now() - startedAt) / 1000 * (1 - coverage) / coverage;
+          timeLeft = secondsLeft < 60 ? ' · under a minute left' : ' · about ' + Math.ceil(secondsLeft / 60) + ' min left';
+        }
+        show(el.okBox, 'Reading the attack log… page ' + (pageNumber + 1) + ' · ' +
+          attacks.size.toLocaleString('en-US') + ' attacks so far' + timeLeft);
         if (page.length < 100) {
           var members = new Map();
           var hiddenAttackers = 0;
@@ -817,9 +845,12 @@
           return { members: members, hits: hits, assists: assists,
             attacks: attacks.size, hiddenAttackers: hiddenAttackers };
         }
+        if (attacks.size > MAX_ATTACKS) {
+          throw new Error('The attack log for this war is too long to read (over 20,000 attacks). Nothing was loaded.');
+        }
         cursor = earliest - (attacks.size === before ? 1 : 0);
       }
-      throw new Error('The attack log for this war is too long to read (over 8,000 attacks). Nothing was loaded.');
+      throw new Error('The attack log for this war could not be read to the end. Nothing was loaded.');
     }
 
     async function loadReport() {
