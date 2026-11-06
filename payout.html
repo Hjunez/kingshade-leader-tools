@@ -753,6 +753,7 @@
     var ATTACK_PAGE_DELAY = Math.max(700, Math.ceil(60000 / TORN_CALLS_PER_MINUTE));
     var MAX_ATTACKS = 20000;
     var MAX_ATTACK_PAGES = 400;
+    var WAR_END_MARGIN = 900;   // seconds read past the war end, for hits that were still running when it ended
 
     async function fetchWarAttacks(report, opponentId, token) {
       if (typeof report.end !== 'number') {
@@ -762,7 +763,8 @@
         throw new Error('The war report has an invalid time window. Nothing was loaded.');
       }
       var attacks = new Map();
-      var cursor = report.end;
+      var windowEnd = report.end + WAR_END_MARGIN;
+      var cursor = windowEnd;
       var results = ['None', 'Attacked', 'Mugged', 'Hospitalized', 'Arrested', 'Looted',
         'Lost', 'Stalemate', 'Assist', 'Escape', 'Timeout', 'Special', 'Bounty', 'Interrupted'];
       function validFaction(faction) {
@@ -815,7 +817,7 @@
         });
         earliestSoFar = Math.min(earliestSoFar, earliest);
         var coverage = Number.isFinite(earliestSoFar)
-          ? Math.min(1, Math.max(0, (report.end - earliestSoFar) / (report.end - report.start + 1))) : 0;
+          ? Math.min(1, Math.max(0, (windowEnd - earliestSoFar) / (windowEnd - report.start + 1))) : 0;
         var timeLeft = '';
         if (coverage >= 0.05) {
           var secondsLeft = (Date.now() - startedAt) / 1000 * (1 - coverage) / coverage;
@@ -829,9 +831,9 @@
           var hits = 0;
           var assists = 0;
           attacks.forEach(function (attack) {
-            if (attack.attacker === null) { hiddenAttackers += 1; return; }
+            if (attack.attacker === null) { if (attack.started <= report.end) hiddenAttackers += 1; return; }
             if (!attack.attacker.faction || Number(attack.attacker.faction.id) !== FACTION_ID ||
-                attack.is_ranked_war !== true || !attack.defender.faction ||
+                attack.started > report.end || attack.is_ranked_war !== true || !attack.defender.faction ||
                 Number(attack.defender.faction.id) !== opponentId) return;
             var hit = ['Attacked', 'Mugged', 'Hospitalized'].indexOf(attack.result) !== -1;
             var assist = attack.result === 'Assist';
