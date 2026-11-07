@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         KS Chain Dibs PC
 // @namespace    kingshade.torn.chaindibs
-// @version      0.6.0
-// @description  A small floating window with your faction chain: timer, the queue for the next hit, and the Im here rule so the chain does not break. Only the member who made the hit leaves the queue. When anybody may hit, FREE HIT links to a free target. Im here is locked when you cannot hit. Stand first without pressing Im here for 5 hits and you are removed as AFK. A bonus hit is announced. The minimized window still shows who is first and who is the hitter, and a yellow frame tells you when you hold the hit.
+// @version      0.7.0
+// @description  A small floating window with your faction chain: timer, the queue for the next hit, and the Im here rule so the chain does not break. Only the member who made the hit leaves the queue. When anybody may hit, FREE HIT links to a free target. Im here is locked when you cannot hit. Stand first without pressing Im here for 5 hits and you are removed as AFK. A bonus hit is announced. The minimized window still shows who is first and who is the hitter, and a yellow frame tells you when you hold the hit. If you hold the hit and fail, the button I failed - free hit lets everybody hit at once and shows them who released it.
 // @author       Kingshade
 // @downloadURL  https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Chain_Dibs_PC.user.js
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Chain_Dibs_PC.user.js
@@ -20,8 +20,10 @@
 // ==/UserScript==
 
 /*
- * KS Chain Dibs PC 0.6.0
+ * KS Chain Dibs PC 0.7.0
  *
+ * 0.7.0  ADDED: "I failed - free hit" button for the hitter. Everyone sees
+ *        who released the hit, and FREE HIT starts at once.
  * 0.6.0  ADDED: minimized window shows who is first and who is the hitter.
  *        ADDED: "You are first/2nd in the queue". ADDED: a clear yellow frame
  *        and "YOU ARE THE HITTER" when you hold the hit, and "You are now first
@@ -121,6 +123,14 @@
  *    stops only these calls until a new key is saved and shows the key link.
  *    Neither ever stops Watch or removes the key. With the calls above this
  *    tab stays at about 73 Torn calls a minute or fewer (Torn allows 100).
+ *
+ *  - I failed - free hit (0.7.0): shown only while YOU hold the hit (GET READY
+ *    or HIT NOW). Two clicks within 3 seconds send ONE request to the KS server
+ *    (/chain/unconfirm with the word failed, the same route the energy check
+ *    uses); the server then lets everybody hit and tells them who released the
+ *    hit and why. When a hit was released and the faction list is not empty, the
+ *    free target check starts at once instead of waiting for its usual time; it
+ *    keeps the same limits as above. No new address, no new Torn call.
  *
  *  - AFK, the bonus hit warning and the 0.6.0 displays (first in the queue, the
  *    hitter, the frame, "You are now first") make no new call. Who was removed
@@ -258,6 +268,17 @@
   var AFK_NAMES_SHOWN = 2;             // "removed as AFK" names two, then +N
   var AFK_SELF_TEXT = 'You were removed from the queue as AFK (5 hits without Im here).';
 
+  // 0.7.0: the hitter lets go of the hit ("I failed - free hit").
+  var FAIL_BTN_TEXT = 'I failed - free hit';
+  var FAIL_BTN_BG = '#8e1b10';          // the button as it normally is
+  var FAIL_ARM_TEXT = 'Click again to release';
+  var FAIL_ARM_BG = '#c0392b';          // after the first click
+  var FAIL_ARM_MS = 3000;               // the second click must come within this time
+  var FAIL_DONE_TEXT = 'You released the hit - FREE HIT for everyone.';
+  var FAIL_LOST_TEXT = 'KS server not reached. Nothing was changed.';
+  var REL_BG = '#c0392b';               // the row that says who released the hit
+  var REL_TEXTS = { failed: ' failed the hit - FREE HIT', cannot_hit: ' cannot hit - FREE HIT', left: ' left the queue - FREE HIT' };
+
   var PHASE_STYLE = {
     waiting:      { bg: '#3a3f45', fg: '#e6e6e6' },
     confirm:      { bg: '#b8860b', fg: '#ffffff' },
@@ -273,8 +294,8 @@
   };
 
   var TOS_ROWS = [
-    ['Data Storage', 'The KS server keeps the chain queue (Torn IDs, join time, Im here, and how many hits in a row you stood first without pressing it) and the latest chain reading, deleted 12 hours after the last change, for one minute the Torn IDs of members it removed as AFK, and the free hit list (Torn IDs of targets set by the faction leader) until the leader changes it.'],
-    ['Data Sharing', 'Faction members who use KS Chain Dibs see the queue, the free hit list and, for one minute, who was removed as AFK. Nobody outside the faction. Your own attacks are read only to see if you made the chain hit; only that fact is sent to the KS server. Your own energy and status are read only to see if you can hit; they are not sent anywhere.'],
+    ['Data Storage', 'The KS server keeps the chain queue (Torn IDs, join time, Im here, and how many hits in a row you stood first without pressing it), who released the current hit and why, and the latest chain reading, deleted 12 hours after the last change, for one minute the Torn IDs of members it removed as AFK, and the free hit list (Torn IDs of targets set by the faction leader) until the leader changes it.'],
+    ['Data Sharing', 'Faction members who use KS Chain Dibs see the queue, the free hit list, who released the current hit and, for one minute, who was removed as AFK. Nobody outside the faction. Your own attacks are read only to see if you made the chain hit; only that fact is sent to the KS server. Your own energy and status are read only to see if you can hit; they are not sent anywhere.'],
     ['Purpose of Use', 'Coordinate who takes the next chain hit so the chain does not break, and point to a free target when anybody may hit.'],
     ['Key Storage & Sharing', 'Stored only in Tampermonkey on this PC. Sent to api.torn.com, and once per sign-in to the KS server to confirm your Torn ID and faction. The KS server never stores it.'],
     ['Key Access Level', 'Limited (custom key: user basic, attacks and bars, faction chain and members).']
@@ -310,7 +331,7 @@
   var namesBusy = false;
   // FREE HIT target, leader tab only: which turn it looks at, whether a check is
   // running, when the next one is due, and which list the last check used.
-  var freeCtl = { turn: null, gen: 0, busy: false, nextAt: 0, listSig: '', keyWasBad: false };
+  var freeCtl = { turn: null, gen: 0, busy: false, nextAt: 0, listSig: '', keyWasBad: false, relKey: null };
   var statusTimes = [];       // when the status calls were made (the last 60 s)
   // Can he hit? Leader tab only. gen = which round of watching this is (an answer
   // from an older round is not believed); busy = a check is on its way; force = a
@@ -341,6 +362,11 @@
   var movedFirst = null;      // { key, shown }
   var movedSeq = 0;
   var lastAutoKey = null;
+  // 0.7.0: the button I failed - free hit (armed until a time, one request at a
+  // time) and where the released hit was last seen (to see the moment it happens).
+  var failCtl = { armedUntil: 0, busy: false };
+  var relTrack = null;        // { turnKey, released, serverTime }
+  var relEvent = null;        // { turnKey }: somebody else released the hit while he stands in the queue
 
   // ------------------------------------------------------------ helpers
 
@@ -395,11 +421,13 @@
     return m + ':' + (s < 10 ? '0' : '') + s;
   }
 
-  // The same bands as the server. The upper end of each band is open.
-  function phaseFor(remainingMs, hasOwner) {
+  // The same bands as the server. The upper end of each band is open. 0.7.0: a
+  // decided turn whose owner released the hit is FREE HIT from the decision on.
+  function phaseFor(remainingMs, hasOwner, released) {
     if (remainingMs <= 0) return 'ended';
     if (remainingMs > CONFIRM_FROM_MS) return 'waiting';
     if (remainingMs > RESOLVE_AT_MS) return 'confirm';
+    if (released === true) return 'free_hit';
     if (remainingMs > HIT_NOW_AT_MS) return hasOwner ? 'get_ready' : 'no_confirmed';
     if (remainingMs > FREE_HIT_AT_MS) return hasOwner ? 'hit_now' : 'free_hit';
     return 'free_hit';
@@ -439,7 +467,12 @@
       if (typeof t !== 'object' || !isInt(t.chainId) || !isInt(t.current)) return null;
       if (typeof t.resolved !== 'boolean' || typeof t.noConfirmed !== 'boolean' || typeof t.ownerLeft !== 'boolean') return null;
       if (t.ownerId !== null && !(typeof t.ownerId === 'string' && /^[0-9]{1,12}$/.test(t.ownerId))) return null;
-      turn = { chainId: t.chainId, current: t.current, resolved: t.resolved, ownerId: t.ownerId, noConfirmed: t.noConfirmed, ownerLeft: t.ownerLeft };
+      // 0.7.0: who released the hit and why. Missing or wrong = nobody released it.
+      // Only a whole pair counts: one without the other is no release at all.
+      var relBy = (typeof t.releasedBy === 'string' && /^[0-9]{1,12}$/.test(t.releasedBy)) ? t.releasedBy : null;
+      var relWhy = (typeof t.releaseReason === 'string' && REL_TEXTS.hasOwnProperty(t.releaseReason)) ? t.releaseReason : null;
+      if (relBy === null || relWhy === null) { relBy = null; relWhy = null; }
+      turn = { chainId: t.chainId, current: t.current, resolved: t.resolved, ownerId: t.ownerId, noConfirmed: t.noConfirmed, ownerLeft: t.ownerLeft, releasedBy: relBy, releaseReason: relWhy };
     }
     if (!Array.isArray(j.queue) || j.queue.length > 25) return null;
     var queue = [];
@@ -572,7 +605,7 @@
     var was = watchOn;
     watchOn = w.on;
     watchSince = w.since;
-    if (watchOn !== was) { posTrack = null; movedFirst = null; }
+    if (watchOn !== was) { posTrack = null; movedFirst = null; relTrack = null; relEvent = null; failCtl.armedUntil = 0; }
     if (watchOn && !was) {
       inactiveSince = 0;
       loadNames();
@@ -1149,6 +1182,49 @@
     return '';
   }
 
+  // ------------------------------------------------------------ the released hit (display, 0.7.0)
+
+  // Who released the hit of the decided turn and why: { by, reason }, or null. A
+  // saved answer from an older version has no such fields: that is null too.
+  function releaseOf(snap) {
+    if (!snap || !snap.turn || snap.turn.resolved !== true) return null;
+    var by = snap.turn.releasedBy;
+    var why = snap.turn.releaseReason;
+    if (typeof by !== 'string' || !/^[0-9]{1,12}$/.test(by)) return null;
+    if (typeof why !== 'string' || !REL_TEXTS.hasOwnProperty(why)) return null;
+    return { by: by, reason: why };
+  }
+
+  // The row for everybody else: "<name> failed the hit - FREE HIT". Not for the one who released it.
+  function releaseRowText(snap) {
+    var rel = releaseOf(snap);
+    if (!rel || rel.by === snap.you.tornId) return '';
+    return cleanName(nameOf(rel.by)) + REL_TEXTS[rel.reason];
+  }
+
+  // Watches for the moment somebody else releases the hit while he stands in the
+  // queue (releasedBy goes from nobody to somebody, inside the same turn). The
+  // first answer after Watch is turned on is no moment. Returns whether the
+  // window should open itself for it.
+  function trackRelease(snap, d) {
+    if (!snap || !watchOn) return false;
+    if (!shared || !shared.snapAt || shared.snapAt < watchSince) return false;
+    var turnKey = turnKeyOf(snap);
+    var rel = releaseOf(snap);
+    var released = rel !== null;
+    if (!relTrack || relTrack.serverTime !== snap.serverTime) {
+      var prev = relTrack;
+      relTrack = { turnKey: turnKey, released: released, serverTime: snap.serverTime };
+      if (prev === null || turnKey === null || prev.turnKey !== turnKey) {
+        relEvent = null;   // the first answer, or another turn: nothing to compare with
+      } else if (!prev.released && released && rel.by !== snap.you.tornId && snap.you.inQueue) {
+        relEvent = { turnKey: turnKey };
+      }
+    }
+    if (relEvent && (relEvent.turnKey !== turnKey || !snap.you.inQueue)) relEvent = null;
+    return !!relEvent && d.valid === true;
+  }
+
   // ------------------------------------------------------------ FREE HIT target (leader tab only)
 
   function snapTargets(snap) {
@@ -1176,6 +1252,7 @@
       remaining: remaining,
       resolved: snap.turn.resolved,
       hasOwner: snap.turn.ownerId !== null,
+      released: releaseOf(snap) !== null,
       targets: snapTargets(snap)
     };
   }
@@ -1195,6 +1272,7 @@
     freeCtl.busy = false;
     freeCtl.nextAt = 0;
     freeCtl.listSig = '';
+    freeCtl.relKey = null;
     if (clear && shared && shared.freeHit) publish({ freeHit: null });
   }
 
@@ -1222,7 +1300,15 @@
     if (shared && shared.freeKeyBad) { freeCtl.keyWasBad = true; return; }
     if (freeCtl.keyWasBad) { freeCtl.keyWasBad = false; freeCtl.nextAt = 0; }
 
-    var soon = info.remaining <= FREE_SOON_OWNER_MS ||
+    // 0.7.0: a released hit is FREE HIT at once. The first look at the released
+    // turn asks at once unless a target for this turn is already known; after
+    // that the usual rhythm (every 20 s, the same limits) goes on.
+    if (info.released && freeCtl.relKey !== info.key) {
+      freeCtl.relKey = info.key;
+      var known = shared && shared.freeHit && shared.freeHit.turn === info.key;
+      if (!known) freeCtl.nextAt = 0;
+    }
+    var soon = info.released || info.remaining <= FREE_SOON_OWNER_MS ||
       (info.resolved && !info.hasOwner && info.remaining <= FREE_SOON_NO_OWNER_MS);
     if (!soon || freeCtl.busy) return;
     var sig = info.targets.join(',');
@@ -1709,6 +1795,29 @@
     });
   }
 
+  // I failed - free hit (0.7.0). Only the hitter has the button. The first click
+  // arms it for 3 seconds, the second click inside that time sends ONE request
+  // (/chain/unconfirm with reason failed). No dialog, nothing else is sent.
+  function onFailClick() {
+    if (!watchOn || failCtl.busy) return;
+    var snap = (shared && shared.snap) ? shared.snap : null;
+    if (!snap || snap.you.isOwner !== true) { failCtl.armedUntil = 0; render(); return; }
+    var now = Date.now();
+    if (failCtl.armedUntil <= now) {
+      failCtl.armedUntil = now + FAIL_ARM_MS;
+      render();
+      return;
+    }
+    failCtl.armedUntil = 0;
+    failCtl.busy = true;
+    chainCall('unconfirm', null, function (r, j) {
+      failCtl.busy = false;
+      var answer = takeAnswer(r, j, false);
+      if (answer && answer.action === 'owner_released') setLocalMsg(FAIL_DONE_TEXT);
+      else setLocalMsg(FAIL_LOST_TEXT);
+    }, { reason: 'failed' });
+  }
+
   // ------------------------------------------------------------ UI
 
   function buttonStyle(bg, fg) {
@@ -1811,6 +1920,10 @@
     // 0.6.0: the hitter banner (top of the body), the place line and the now-first line (above the queue)
     ui.hitterBanner = mark(el('div', ''), 'hitterbanner');
     css(ui.hitterBanner, 'all:initial;display:none;box-sizing:border-box;min-height:28px;margin:0 0 4px 0;padding:5px 6px;border-radius:4px;text-align:center;background:' + HITTER_COLOR + ';color:#000000;font:bold 14px/18px Arial,Helvetica,sans-serif;');
+    // 0.7.0: the button of the hitter (right under the banner) and the row that says who released the hit
+    ui.failBtn = mark(makeButton(FAIL_BTN_TEXT, FAIL_BTN_BG, '#ffffff', onFailClick), 'failbtn');
+    ui.released = mark(el('div', ''), 'released');
+    css(ui.released, 'all:initial;display:none;box-sizing:border-box;margin:2px 0 4px 0;padding:4px 6px;border-radius:4px;text-align:center;background:' + REL_BG + ';color:#ffffff;font:bold 13px/18px Arial,Helvetica,sans-serif;');
     ui.movedFirst = mark(el('div', MOVED_TEXT), 'movedfirst');
     css(ui.movedFirst, 'all:initial;display:none;box-sizing:border-box;margin:2px 0 4px 0;padding:4px 6px;border-radius:4px;text-align:center;background:' + MOVED_COLOR + ';color:#ffffff;font:bold 13px/18px Arial,Helvetica,sans-serif;');
     ui.place = mark(el('div', ''), 'place');
@@ -1836,11 +1949,13 @@
     ui.targets = buildTargetsPanel();
 
     ui.body.appendChild(ui.hitterBanner);
+    ui.body.appendChild(ui.failBtn);
     ui.body.appendChild(ui.chainLine);
     ui.body.appendChild(ui.timer);
     ui.body.appendChild(ui.bonus);
     ui.body.appendChild(ui.phase);
     ui.body.appendChild(ui.freeLink);
+    ui.body.appendChild(ui.released);
     ui.body.appendChild(ui.movedFirst);
     ui.body.appendChild(ui.place);
     ui.body.appendChild(ui.queue);
@@ -2150,7 +2265,7 @@
       d.text = 'CHECKING';
       return d;
     }
-    var phase = phaseFor(remaining, hasOwner);
+    var phase = phaseFor(remaining, hasOwner, releaseOf(snap) !== null);
     d.phaseKey = phase;
     d.showOwner = true;
     var owner = hasOwner ? snap.turn.ownerId : null;
@@ -2234,8 +2349,10 @@
     var usable = watchOn && hasKey && d.valid === true && !!snap;
     var hitterOn = usable && hitterActive(d, snap);
     var movedOn = watchOn && hasKey && trackMovedFirst(snap, d);
+    // 0.7.0: somebody else released the hit while he stands in the queue.
+    var relOn = watchOn && hasKey && trackRelease(snap, d);
     // The window opens itself once for each such event. His saved choice stays as he made it.
-    var evKey = hitterOn ? 'H:' + turnKeyOf(snap) : (movedOn ? movedFirst.key : null);
+    var evKey = hitterOn ? 'H:' + turnKeyOf(snap) : (relOn ? 'R:' + relEvent.turnKey : (movedOn ? movedFirst.key : null));
     if (evKey !== null && evKey !== lastAutoKey) {
       lastAutoKey = evKey;
       if (minimized) minimized = false;
@@ -2275,6 +2392,8 @@
       ui.chainLine.textContent = 'Watch is off. No requests are made.';
       show(ui.timer, false);
       show(ui.hitterBanner, false);
+      show(ui.failBtn, false);
+      show(ui.released, false);
       show(ui.movedFirst, false);
       show(ui.place, false);
       show(ui.bonus, false);
@@ -2330,6 +2449,20 @@
       if (ui.hitterBanner.textContent !== bannerText) ui.hitterBanner.textContent = bannerText;
     }
     show(ui.hitterBanner, hitterOn);
+    // 0.7.0: the button of the hitter (two clicks) and the row for everybody else.
+    show(ui.failBtn, hitterOn);
+    if (hitterOn) {
+      var armed = failCtl.armedUntil > Date.now();
+      var failText = armed ? FAIL_ARM_TEXT : FAIL_BTN_TEXT;
+      if (ui.failBtn.textContent !== failText) ui.failBtn.textContent = failText;
+      ui.failBtn.style.background = armed ? FAIL_ARM_BG : FAIL_BTN_BG;
+      ui.failBtn.setAttribute('data-armed', armed ? '1' : '0');
+    } else {
+      failCtl.armedUntil = 0;
+    }
+    var relText = (usable && d.showOwner) ? releaseRowText(snap) : '';
+    if (ui.released.textContent !== relText) ui.released.textContent = relText;
+    show(ui.released, relText !== '');
     show(ui.movedFirst, movedOn);
     var place = usable ? placeText(snap) : '';
     if (ui.place.textContent !== place) ui.place.textContent = place;
