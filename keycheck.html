@@ -182,7 +182,7 @@
   <section class="panel">
     <div class="panel-head">
       <h2>Checks</h2>
-      <p class="hint">Seven calls, one per thing the tools need.</p>
+      <p class="hint">Eleven calls, one per thing the tools need.</p>
     </div>
     <div id="checks"></div>
   </section>
@@ -230,6 +230,18 @@
       { id: 'inventory', label: 'Armory contents',
         used: 'Armory Audit — who holds what',
         path: '/faction/inventory?cat=weapons&limit=1', need: 'faction → inventory' },
+      { id: 'attacks', label: 'Faction attack log',
+        used: 'Payout Ledger — late hits',
+        path: '/faction/attacks?limit=1', need: 'faction → attacks' },
+      { id: 'profile', label: 'Your profile',
+        used: 'Recruit Finder — players who joined a faction',
+        path: '/user/profile', need: 'user → profile' },
+      { id: 'personalstats', label: 'Personal stats',
+        used: 'Recruit Finder — daily play time',
+        path: '/user/personalstats?cat=popular', need: 'user → personalstats' },
+      { id: 'snapshot', label: 'Player snapshot',
+        used: 'Recruit Finder — the search itself',
+        path: '/user/snapshot', need: 'user → snapshot' },
       { id: 'basic', label: 'Faction basics',
         used: 'Nothing yet — tells us whether faction access works at all',
         path: '/faction/basic', need: 'faction API access' }
@@ -295,6 +307,47 @@
         { headers: { Authorization: 'ApiKey ' + key } });
       var payload = await response.json();
       return { status: response.status, payload: payload };
+    }
+
+    // The player snapshot answers CSV, which can be large, and an error as JSON. Only the first part
+    // of the answer is read, then the stream is cancelled; the CSV itself is never interpreted.
+    async function readHead(response) {
+      if (response.body && typeof response.body.getReader === 'function') {
+        var reader = response.body.getReader();
+        var text = '';
+        try {
+          var first = await reader.read();
+          if (first && first.value) text = new TextDecoder().decode(first.value);
+        } finally {
+          try { await reader.cancel(); } catch (e) { /* already closed */ }
+        }
+        return text;
+      }
+      return response.text();
+    }
+
+    async function callSnapshot(path) {
+      var key = el.apiKey.value.trim();
+      var joiner = path.indexOf('?') === -1 ? '?' : '&';
+      var response = await fetch('https://api.torn.com/v2' + path + joiner + 'comment=KSKeyCheck',
+        { headers: { Authorization: 'ApiKey ' + key } });
+      var text = await readHead(response);
+      var start = text.charCodeAt(0) === 0xFEFF ? 1 : 0;
+      var head = text.slice(start).replace(/^\s+/, '');
+      if (head.charAt(0) === '{') {
+        var payload = null;
+        try { payload = JSON.parse(head); } catch (e) { payload = null; }
+        if (!payload || !payload.error) {
+          // The error object is small, but a cut-off read can leave the JSON incomplete.
+          var c = /"code"\s*:\s*(\d+)/.exec(head);
+          var m = /"error"\s*:\s*"([^"]*)"/.exec(head);
+          payload = { error: { code: c ? Number(c[1]) : -1, error: m ? m[1] : 'unexpected answer' } };
+        }
+        return { status: response.status, payload: payload };
+      }
+      // A failed answer that is not Torn's own JSON error (a gateway page, say) is not a working call.
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      return { status: response.status, payload: {} };
     }
 
     function row(check, state, code, text) {
@@ -450,7 +503,7 @@
 
         var state, code = null, text = null;
         try {
-          var out = await call(path);
+          var out = check.id === 'snapshot' ? await callSnapshot(path) : await call(path);
           if (out.payload && out.payload.error) {
             state = 'no';
             code = out.payload.error.code;
