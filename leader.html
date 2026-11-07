@@ -212,6 +212,7 @@
   .tag.partial { background: transparent; color: var(--warn); border: 1px solid currentColor; }
   .tag.beta { background: transparent; color: var(--warn); border: 1px solid currentColor; padding: 2px 6px; }
   .tag.checking, .tag.unknown { background: transparent; color: var(--faint); border: 1px solid var(--line-strong); }
+  .tag.ended { background: transparent; color: var(--muted); border: 1px solid currentColor; padding: 2px 6px; }
 
   .card .lock {
     font-size: 13px;
@@ -243,6 +244,8 @@
   }
 
   .keynote p { margin: 0; font-size: 14px; max-width: 70ch; }
+
+  .keynote a.mini { display: inline-block; align-self: flex-start; text-decoration: none; }
 
   /* ---- welcome bar ---- */
 
@@ -516,6 +519,29 @@
     <div class="ev-list" id="ebListHost"></div>
   </section>
 
+  <div class="keynote">
+    <span class="title">First time here?</span>
+    <p>These tools read your faction through Torn's
+      API. Make one Custom Key in Torn under Settings → API Keys and tick these boxes:</p>
+    <p>Under <strong>faction</strong>: <strong>members</strong> · <strong>rankedwars</strong> ·
+      <strong>rankedwarreport</strong> · <strong>crimes</strong> · <strong>news</strong> ·
+      <strong>inventory</strong> · <strong>attacks</strong></p>
+    <p>Under <strong>user</strong>: <strong>personalstats</strong> · <strong>snapshot</strong> ·
+      <strong>profile</strong> (Recruit Finder needs personalstats and
+      snapshot, and profile to find players who joined a faction since Torn's snapshot)</p>
+    <a class="mini primary" href="https://www.torn.com/preferences.php#tab=api?step=addNewKey&amp;title=KSLeaderTools&amp;faction=members,rankedwars,rankedwarreport,crimes,news,inventory,attacks&amp;user=personalstats,snapshot,profile" target="_blank" rel="noopener noreferrer">Create the Leader Tools key</a>
+    <p>Ticking the boxes is only half of it. Your faction position also needs
+      <strong>Faction API Access</strong>, which the Leader sets on the position in Torn, not on the
+      key. Without it, crimes, the armory log and the armory contents all come back refused even
+      though every box is ticked and you can see the same data in Torn.</p>
+    <p>Sign in above and the cards below will tell you which tools your key actually opens, and why
+      any of them are closed.</p>
+    <p>Your key stays in your own browser. Every tool here sends it only to Torn, with one
+      exception: Faction Events signs you in to Kingshade's own event server so the board knows
+      you are in the faction. That server asks Torn who the key belongs to and then throws it
+      away — it never stores it.</p>
+  </div>
+
   <section>
     <h2>Ready to use</h2>
     <div class="grid">
@@ -567,11 +593,11 @@
         <span class="go">Open</span>
       </a>
 
-      <a class="card" href="halloween.html">
-        <span class="tag beta">Beta</span>
-        <span class="name">Halloween Competition</span>
-        <span class="what">Hits, mugs, hosps, retals, respect, activity and treats for every member across the
-          Halloween event. Picks the leaders in each category and copies the standings.</span>
+      <a class="card" href="halloween-2026-stats.html">
+        <span class="tag ended">Ended</span>
+        <span class="name">Halloween 2026 results</span>
+        <span class="what">Final standings from the Halloween event, 25 Oct – 1 Nov 2026, for every member.
+          Attacks, respect, records, activity and treats, with each member's rank and a side-by-side comparison.</span>
         <span class="go">Open</span>
       </a>
 
@@ -579,7 +605,9 @@
         <span class="tag beta">Beta</span>
         <span class="name">Recruit Finder</span>
         <span class="what">Active players without a faction who meet our bar: donator, level range and real daily
-          play time from Torn's own player snapshot. One click, a ranked list with profile links.</span>
+          play time from Torn's own player snapshot. It tracks the players you have already contacted and those who
+          have since joined a faction, and shows Elo and, with your own FFScouter key, estimated battle stats.
+          One click, a ranked list with profile links.</span>
         <span class="go">Open</span>
       </a>
 
@@ -595,28 +623,6 @@
     </div>
   </section>
 
-
-  <div class="keynote">
-    <span class="title">First time here?</span>
-    <p>These tools read your faction through Torn's
-      API. Make one Custom Key in Torn under Settings → API Keys and tick these boxes:</p>
-    <p>Under <strong>faction</strong>: <strong>members</strong> · <strong>rankedwars</strong> ·
-      <strong>rankedwarreport</strong> · <strong>crimes</strong> · <strong>news</strong> ·
-      <strong>inventory</strong> · <strong>attacks</strong></p>
-    <p>Under <strong>user</strong>: <strong>personalstats</strong> · <strong>competition</strong> ·
-      <strong>snapshot</strong> (Halloween Competition needs personalstats and competition;
-      Recruit Finder needs personalstats and snapshot)</p>
-    <p>Ticking the boxes is only half of it. Your faction position also needs
-      <strong>Faction API Access</strong>, which the Leader sets on the position in Torn, not on the
-      key. Without it, crimes, the armory log and the armory contents all come back refused even
-      though every box is ticked and you can see the same data in Torn.</p>
-    <p>Sign in above and the cards below will tell you which tools your key actually opens, and why
-      any of them are closed.</p>
-    <p>Your key stays in your own browser. Every tool here sends it only to Torn, with one
-      exception: Faction Events signs you in to Kingshade's own event server so the board knows
-      you are in the faction. That server asks Torn who the key belongs to and then throws it
-      away — it never stores it.</p>
-  </div>
 
   <footer>
     <p>These pages read through Torn's official API and never act on your behalf in Torn. Faction
@@ -652,11 +658,10 @@
   // Cards not listed here need nothing beyond the member list, or no API at all,
   // so they are never greyed out.
   var TOOLS = [
-    { href: 'payout.html', needs: ['rankedwars'] },
+    { href: 'payout.html', needs: ['rankedwars', 'attacks'] },
     { href: 'history.html', needs: ['rankedwars'] },
     { href: 'oc.html', needs: ['crimes'] },
-    { href: 'armory.html', needs: ['news', 'inventory'] },
-    { href: 'halloween.html', needs: ['attacks'] }
+    { href: 'armory.html', needs: ['news', 'inventory'] }
   ];
 
   var PART_NAME = {
