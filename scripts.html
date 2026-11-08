@@ -406,6 +406,27 @@
         </div>
       </div>
 
+      <div class="card">
+        <span class="tag">PC</span>
+        <span class="name">KS Chain Dibs</span>
+        <span class="ver">Version 0.7.0</span>
+        <span class="what">A small chain window on every Torn page: the chain timer, a queue for the next hit
+          and the Im here rule, so the chain does not break. Only the member who made the hit leaves the queue.
+          When anybody may hit, FREE HIT links to a free target, and if the hitter fails his attack one button
+          lets everybody hit at once. For members of PoIitically Incorrect only.</span>
+        <div class="facts">
+          <div class="row"><span class="k">Runs on</span><span class="v">Any Torn page (a small window, top left)</span></div>
+          <div class="row"><span class="k">Network</span><span class="v"><code>api.torn.com</code> and the KS War Room server <code>ks-war-room-claims-staging.hans-viklund.workers.dev</code>. Nothing else, and no requests to torn.com pages.</span></div>
+          <div class="row"><span class="k">Reads</span><span class="v">The chain bar in Torn's side menu (hits and time left), read only, on the page you have open.</span></div>
+          <div class="row"><span class="k">Stores</span><span class="v">Your Torn key in Tampermonkey on this PC. It is sent to the KS War Room server once per sign-in to confirm your Torn ID and faction; the server never stores it. The server keeps the chain queue (Torn IDs, join time, Im here, and how many hits in a row you stood first without pressing it), who released the current hit and why, and the latest chain reading, deleted 12 hours after the last change, for one minute the Torn IDs of members it removed as AFK, and the free hit list set by the faction leader. Your own attacks, energy and status are read only to see if you made the chain hit or can hit; only the fact that you made the hit is sent to the server.</span></div>
+          <div class="row"><span class="k">Torn key</span><span class="v">Yes. A custom key with user basic, attacks and bars, and faction chain and members. The window has a link that creates exactly that key.</span></div>
+        </div>
+        <div class="get">
+          <a class="btn" href="KS_Chain_Dibs_PC.user.js">Install</a>
+          <span class="file">KS_Chain_Dibs_PC.user.js</span>
+        </div>
+      </div>
+
     </div>
   </section>
 
