@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <title>Pre-war Matchup</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
   :root {
     color-scheme: light;
@@ -51,8 +52,33 @@
   h1 { font-size: 34px; } h2 { font-size: 24px; } h3 { font-size: 20px; }
   p { margin: 8px 0; overflow-wrap: anywhere; }
   .backbar { margin-bottom: 18px; }
-  .masthead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 18px; border-bottom: 2px solid var(--line-strong); }
-  .stamp { color: var(--accent); font-size: 13px; }
+  .backbar a {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+    text-decoration: none; border: 1px solid var(--line-strong);
+    border-radius: 3px; padding: 7px 12px; display: inline-block;
+  }
+  .backbar a:hover { color: var(--accent); border-color: var(--accent); }
+  .backbar a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .masthead {
+    display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between;
+    gap: 12px 24px; padding-bottom: 20px; border-bottom: 2px solid var(--line-strong);
+  }
+  .eyebrow {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .16em; text-transform: uppercase; color: var(--accent); margin: 0 0 4px;
+  }
+  .masthead h1 {
+    font-family: var(--display); font-weight: 700; font-size: clamp(34px, 6vw, 52px);
+    line-height: 1; margin: 0; text-wrap: balance;
+  }
+  .masthead p.sub { margin: 10px 0 0; font-size: 15px; color: var(--muted); max-width: 54ch; }
+  .stamp {
+    font-family: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 12px; letter-spacing: .04em; color: var(--faint);
+    border: 1px solid var(--line-strong); border-radius: 2px; padding: 5px 9px; white-space: nowrap;
+  }
+  .stamp:empty { display: none; }
   section { padding: 24px 0; border-bottom: 1px solid var(--line-strong); }
   .key-grid, .columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
   label { display: block; font-weight: 600; margin-bottom: 7px; }
@@ -105,6 +131,41 @@
   code { font-family: var(--mono); overflow-wrap: anywhere; }
   footer { padding-top: 18px; }
   [hidden] { display: none !important; }
+  /* Row colour, copied from War Room (Sidoversyn 2026-10): the row is tinted in its FF colour on ONE layer,
+     strongest in the middle and gone at both edges; the FF figure carries a 3 px edge in the same colour.
+     The colour says only how hard a target is. */
+  :root { --row-fade: .22; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --row-fade: .28; } }
+  :root[data-theme="dark"] { --row-fade: .28; }
+  tbody tr.faded {
+    background-image: linear-gradient(90deg, rgba(var(--row-rgb), 0) 0%, rgba(var(--row-rgb), var(--row-fade)) 50%, rgba(var(--row-rgb), 0) 100%);
+  }
+  td.ffcell.edged { box-shadow: inset 3px 0 0 var(--ff-edge); font-weight: 600; }
+  /* Old figures (the STALE line is showing) are not tinted. */
+  body.figures-stale tbody tr.faded { background-image: none; }
+  body.figures-stale td.ffcell.edged { box-shadow: none; font-weight: inherit; }
+  /* Honor bars, copied from War Room (R22): Torn's own 200 x 19 picture with the name written on it,
+     white with a black outline. The line keeps the height of a plain name, so a bar that arrives moves nothing. */
+  .honorstrip { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 14px 0; }
+  .honorstrip p { margin: 0; }
+  #honorBtn { min-height: 34px; padding: 4px 12px; font-size: 13px; }
+  #honorBtn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  .hlink {
+    position: relative; display: block; width: 200px; max-width: 100%; height: 1.5em;
+    border-bottom: 0; color: #fff; text-decoration: none;
+  }
+  .name-cell a.hlink, .name-cell a.hlink:hover { color: #fff; text-decoration: none; }
+  .hlink img { position: absolute; left: 0; top: calc((1.5em - 19px) / 2); display: block; width: 200px; max-width: 100%; height: 19px; }
+  .hlink .hname {
+    position: absolute; left: 0; right: 0; top: calc((1.5em - 19px) / 2); height: 19px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; line-height: 19px; font-weight: 600; white-space: nowrap; color: #fff;
+    text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000,
+      0 -1px 0 #000, 0 1px 0 #000, -1px 0 0 #000, 1px 0 0 #000;
+  }
+  /* Our own members in "Most dangerous": a plain name in a sentence, or a bar. */
+  .reach-item.hlink { display: inline-block; vertical-align: middle; margin: 1px 8px 1px 0; }
+  .reach-cell.has-bars .reach-sep { display: none; }
   @media (max-width: 700px) {
     .wrap { padding: 18px 14px 40px; }
     .key-grid, .columns { grid-template-columns: minmax(0, 1fr); gap: 24px; }
@@ -119,13 +180,24 @@
     .target-table [data-column="class"] { width: 108px; }
     .target-table [data-column="level"], .danger-table [data-column="level"] { width: 60px; }
     .danger-table [data-column="reach"] { width: 192px; white-space: normal; overflow-wrap: anywhere; }
+    /* A bar is 200 px wide: with bars on the screen the name columns take room for it. */
+    .target-table.has-bars [data-column="name"], .danger-table.has-bars [data-column="name"] { width: 224px; }
+    .danger-table.has-bars [data-column="reach"] { width: 224px; }
   }
 </style>
 </head>
 <body>
 <main class="wrap">
   <nav class="backbar"><a href="./">&larr; All tools</a></nav>
-  <header class="masthead"><h1>Pre-war Matchup</h1><span class="stamp" id="factionStamp"></span></header>
+  <header class="masthead">
+    <div>
+      <p class="eyebrow">Kingshade Development</p>
+      <h1>Pre-war Matchup</h1>
+      <p class="sub">Before a Ranked War: who you are up against, how the two factions compare in strength,
+        and which enemies are your own targets.</p>
+    </div>
+    <span class="stamp" id="factionStamp"></span>
+  </header>
   <section aria-label="Your keys">
     <div class="key-grid">
       <div>
@@ -156,23 +228,36 @@
   <details>
     <summary>What this page does, calls and stores</summary>
     <dl>
-      <dt>Data Storage</dt><dd>Only in this browser. Nothing is kept on any server; the figures live in the open tab only.</dd>
+      <dt>Data Storage</dt><dd>Only in this browser. Nothing is kept on any server; the figures live in the open tab only. The one thing kept between visits, besides your keys, is the honor number of each player (see Honor bars below).</dd>
       <dt>Data Sharing</dt><dd>Nobody.</dd>
       <dt>Purpose of Use</dt><dd>Competitive advantage.</dd>
       <dt>Key Storage &amp; Sharing</dt><dd>Stored in this browser only. Not shared.</dd>
-      <dt>Key Access Level</dt><dd>Public.</dd>
+      <dt>Key Access Level</dt><dd>Public. Honor bars also need the <code>user &rarr; profile</code> selection on your Torn key; without it they stay off and the page works as before.</dd>
     </dl>
-    <p class="note">The four Torn reads are <code>/v2/key/info</code>, <code>/v2/faction/wars</code>,
+    <p class="note">The four Torn reads that load the page are <code>/v2/key/info</code>, <code>/v2/faction/wars</code>,
       <code>/v2/faction/members?striptags=true</code> and <code>/v2/faction/{opponent}/members?striptags=true</code>.
       Every Torn request carries <code id="commentTag"></code>. A missing opponent or an error can stop the sequence early.</p>
+    <p class="note"><strong>Honor bars.</strong> Each name in Your targets, Full enemy list and Most dangerous can show the player's
+      honor bar behind it, with the name written on it. To know which bar a player wears, this page reads the honor ID from
+      <code>/v2/user/{id}/profile</code>: once per player, one player at a time, at most one read every 6 seconds (so at most ten a minute),
+      starting with Your targets, then the rest of the enemies, then our own members, and only while this page is on screen. A full
+      roster of about 100 players therefore takes about ten minutes; the line above the lists says how far it has come.
+      The picture itself is loaded straight from <code>www.torn.com</code> by your browser, once per honor; this page does not copy it,
+      does not save it and sends no page address along with the request. Torn staff have approved reading the honor ID and loading the picture
+      this way. Only the honor number of each player is kept in this browser (<code id="honorStoreName"></code>: the number or &ldquo;no bar&rdquo;,
+      the time it was read, where it came from and a version, never a key, a picture or a name), for 7 days; after that it is read again.
+      It is removed when you press Forget key and when another key is used. The Honor bars button switches all of it off on this device
+      (<code id="honorSwitchName"></code>): no profile reads for bars, no pictures, plain names. It is on until you turn it off. Where anything is
+      missing &mdash; no honor, a key without profile, a picture Torn does not deliver &mdash; the name is shown plain.</p>
     <p class="note">FFScouter receives the IDs from both rosters at <code>https://ffscouter.com/api/v1/get-stats</code>.
       Its API requires your FFScouter key in the request address. Your Torn key goes only to
       <code>api.torn.com</code>, in the Authorization header, never in the address. The Torn key never goes
       to FFScouter and the FFScouter key never goes to Torn. Use keys that belong to you in both fields.</p>
-    <p class="note">Only the two keys are kept in localStorage: <code id="tornStoreName"></code> and
-      <code id="ffStoreName"></code>. Figures are kept in memory in this tab. Nothing is written in Torn.
-      There is no background monitoring, scraping, automatic action, claim server or event server.
-      Saved keys load once when this page opens; subsequent reads require Refresh.</p>
+    <p class="note">Kept in localStorage: your two keys, <code id="tornStoreName"></code> and
+      <code id="ffStoreName"></code>, and the honor numbers and the Honor bars switch described above. The figures are kept in memory in this tab. Nothing is written in Torn.
+      Apart from the honor-bar reads described above, which use your own key one player at a time while this page is on screen,
+      there is no background monitoring, scraping, automatic action, claim server or event server.
+      Saved keys load once when this page opens; subsequent reads of the war and the figures require Refresh.</p>
   </details>
   <p id="staleBar" class="msg" role="status" hidden></p>
   <section id="warSection" aria-label="War">
@@ -189,6 +274,10 @@
     <div class="section-heading"><h2 id="strengthTitle">Strength comparison</h2></div>
     <p class="note">Estimates come from FFScouter and are estimates, not Torn's figures.</p>
     <div class="columns"><div><h3>Us</h3><div id="strengthUs" class="empty">WAIT</div></div><div><h3>Them</h3><div id="strengthThem" class="empty">WAIT</div></div></div>
+  </section>
+  <section class="honorstrip" aria-label="Honor bars">
+    <button id="honorBtn" type="button" aria-pressed="true">Honor bars</button>
+    <p id="honorLine" class="note" role="status" hidden></p>
   </section>
   <section aria-labelledby="targetsTitle">
     <div class="section-heading"><h2 id="targetsTitle">Your targets</h2><span class="note" id="rangeLabel"></span></div>
@@ -210,7 +299,7 @@
     <p id="advFfMax" class="note"></p>
     <p class="note">Other members' reach assumes evenly distributed battle stats. Priority uses the supplied value curve and level-based respect estimate; it is not a prediction of a win.</p>
   </details>
-  <footer><p class="note">Manual refresh only. These are estimates for planning; profile links open only when you select them.</p></footer>
+  <footer><p class="note">The war and the figures are read only when you press Load or Refresh; honor bars are read one player at a time while this page is on screen. These are estimates for planning; profile links open only when you select them.</p></footer>
 </main>
 <script>
 (function () {
@@ -240,6 +329,18 @@
   const TERMINAL_CODES = new Set([2, 10, 13, 18]);
   const RETRY_CODES = new Set([5, 9, 17]);
   const WARS_DENIED_CODES = new Set([7, 16]);
+  // Honor bars. The rules are War Room's (R22, R24): one profile read at a time, at most one every 6 seconds,
+  // only while the page is on screen, the picture straight from Torn with no page address.
+  const HONOR_IMAGE_BASE = 'https://www.torn.com/images/honors/';
+  const HONOR_READ_INTERVAL_MS = 6000;
+  const HONOR_ID_MAX = 999999;
+  const HONOR_RETRY_MAX = 3;
+  const HONOR_PAUSE_MS = 60000;
+  const HONOR_KEEP_MS = 7 * 24 * 3600 * 1000;
+  const HONOR_STORE = 'ks-prewar-honors';
+  const HONOR_IDS_STORE = 'ks-prewar-honor-ids';
+  const HONOR_IDS_SCHEMA = 1;
+  const HONOR_IDS_MAX_ENTRIES = 2000;
   const VALUE_CURVE = [
     [1.0,1.00],[1.2,1.20],[1.4,1.41],[1.6,1.61],[1.8,1.82],[2.0,2.02],[2.1,2.12],
     [2.2,2.22],[2.3,2.31],[2.4,2.39],[2.5,2.45],[2.6,2.50],[2.7,2.52],[2.8,2.51],
@@ -294,6 +395,20 @@
   function canBeat(ff) { return ff !== null && ff >= 0 && ff <= effectiveFfMax; }
   function inside(ff) { return ff !== null && ff >= FF_WINDOW_MIN && ff <= effectiveFfMax; }
   function rangeText(max = effectiveFfMax) { return FF_WINDOW_MIN.toFixed(2) + '\u2013' + max.toFixed(2); }
+  // Copied byte for byte from warroom.html (scoutFfColor, hexToRgbList): the row colour and the FF edge.
+  // KS Scout 0.9.1's FF palette and banding (ffStyle), as values: eleven steps
+  // from FF 1 (blue) to FF 5 (red), clipped at both ends.
+  var SCOUT_FF_PALETTE = ['#1734e8', '#1788e8', '#17dbe8', '#17e8a1', '#17e84e',
+    '#34e817', '#88e817', '#dbe817', '#e8a117', '#e84e17', '#e81734'];
+  function scoutFfColor(ff) {
+    if (typeof ff !== 'number' || !isFinite(ff) || ff <= 0) return null;
+    var clamped = Math.max(1, Math.min(5, ff));
+    return SCOUT_FF_PALETTE[Math.floor(((clamped - 1) / 4) * 10)] || null;
+  }
+  function hexToRgbList(hex) {
+    return parseInt(hex.slice(1, 3), 16) + ', ' + parseInt(hex.slice(3, 5), 16) + ', ' + parseInt(hex.slice(5, 7), 16);
+  }
+
   function valueAt(ff) {
     if (!finite(ff)) return null;
     if (ff < VALUE_CURVE[0][0]) return ff;
@@ -474,6 +589,250 @@
     }
     return { stats, count };
   }
+  // Honor bars: the bar behind a player's name, with the name written on it (War Room R22/R24; Torn staff approved
+  // reading honor_id out of the profile and loading the picture from torn.com without copying it, and keeping the
+  // honor number in the member's own browser). This block does only that:
+  //   - the honor ID comes out of /v2/user/{id}/profile, one player at a time, at most one read every
+  //     HONOR_READ_INTERVAL_MS, only while this page is on screen and the figures are loaded;
+  //   - the picture is asked for once per honor ID, with no page address, and a row shows it only after it has loaded;
+  //   - the honor number of each player is kept in this browser for HONOR_KEEP_MS (number, time, source, schema
+  //     version; never a key, a picture or a name) and removed on Forget key and when another key is used.
+  // Whatever is missing, the name is shown plain.
+  const Honors = (function () {
+    let on = read(HONOR_STORE) !== 'off';
+    let order = [];              // player IDs in reading order
+    let owner = '';              // Torn ID of the key's owner the numbers belong to
+    let storedFor = null;        // the owner the kept numbers were last checked for
+    let outcomes = new Map();    // player ID -> { honorId or null, fetchedAt, source, schemaVersion, gaveUp? }
+    const failures = new Map();  // player ID -> readings that failed
+    const images = new Map();    // honor ID -> 'loading' | 'ok' | 'refused'
+    const held = new Map();      // honor ID -> the Image that loaded it
+    let pendingRead = null, lastStart = 0, timer = null, serial = 0;
+    let profileMissing = false, keyFailureCode = null, retryAfter = 0;
+
+    // A whole number from 1 to HONOR_ID_MAX, nothing else. It is the only thing that ever goes into a picture's address.
+    function isHonorId(value) { return typeof value === 'number' && Number.isSafeInteger(value) && value >= 1 && value <= HONOR_ID_MAX; }
+    function imageUrl(honorId) { return isHonorId(honorId) ? HONOR_IMAGE_BASE + String(honorId) + '/f.png' : ''; }
+
+    // ---- the numbers kept in this browser ----
+    function clearStored() { try { localStorage.removeItem(HONOR_IDS_STORE); } catch (_) { /* nothing to remove */ } }
+    function keep(text) { try { localStorage.setItem(HONOR_IDS_STORE, text); } catch (_) { /* the numbers then live in this tab only */ } }
+    // { ignore } for a version this page does not know (left alone), { bad } for ours but wrong (removed), else the entries.
+    function parseStored(text) {
+      let data;
+      try { data = JSON.parse(text); } catch (_) { return { bad: true }; }
+      if (!data || typeof data !== 'object' || Array.isArray(data)) return { bad: true };
+      if (data.schemaVersion !== HONOR_IDS_SCHEMA) return { ignore: true };
+      if (data.source !== 'torn-profile' || typeof data.playerId !== 'string' || !data.ids || typeof data.ids !== 'object' || Array.isArray(data.ids)) return { bad: true };
+      const keys = Object.keys(data.ids);
+      if (keys.length > HONOR_IDS_MAX_ENTRIES) return { bad: true };
+      const entries = [];
+      for (const id of keys) {
+        const entry = data.ids[id];
+        if (!/^[0-9]{1,12}$/.test(id) || !entry || typeof entry !== 'object' || Array.isArray(entry)) return { bad: true };
+        if (entry.v !== null && !isHonorId(entry.v)) return { bad: true };
+        if (!finite(entry.t) || entry.t <= 0) return { bad: true };
+        entries.push([id, entry.v, entry.t]);
+      }
+      return { playerId: data.playerId, entries };
+    }
+    // Takes in the kept numbers once per key owner. One thing wrong and all of it is removed; another owner's are removed.
+    function loadStored() {
+      if (!owner || storedFor === owner) return;
+      storedFor = owner;
+      const text = read(HONOR_IDS_STORE);
+      if (!text) return;
+      const parsed = parseStored(text);
+      if (parsed.ignore) return;
+      if (parsed.bad || parsed.playerId !== owner) { clearStored(); return; }
+      const now = Date.now();
+      for (const [id, honorId, savedAt] of parsed.entries) {
+        if (savedAt > now + 60000 || now - savedAt >= HONOR_KEEP_MS) continue;   // from the future or older than 7 days: read again
+        if (!outcomes.has(id)) outcomes.set(id, { honorId, fetchedAt: savedAt, source: 'stored', schemaVersion: HONOR_IDS_SCHEMA });
+      }
+      preloadAll();
+    }
+    // After a reading was accepted: all the numbers are written again, each with the time it was read.
+    function persist() {
+      if (!owner || storedFor !== owner) return;
+      const now = Date.now();
+      let rows = [];
+      outcomes.forEach((outcome, id) => { if (!outcome.gaveUp && now - outcome.fetchedAt < HONOR_KEEP_MS) rows.push([id, outcome]); });
+      if (!rows.length) return;
+      if (rows.length > HONOR_IDS_MAX_ENTRIES) rows = rows.sort((a, b) => b[1].fetchedAt - a[1].fetchedAt).slice(0, HONOR_IDS_MAX_ENTRIES);
+      const ids = {};
+      rows.forEach(([id, outcome]) => { ids[id] = { v: outcome.honorId, t: outcome.fetchedAt }; });
+      keep(JSON.stringify({ schemaVersion: HONOR_IDS_SCHEMA, source: 'torn-profile', playerId: owner, ids }));
+    }
+
+    // ---- the pictures ----
+    function preload(honorId) {
+      if (!on || images.has(honorId)) return;
+      const url = imageUrl(honorId);
+      if (!url) return;
+      images.set(honorId, 'loading');
+      const probe = new Image();
+      held.set(honorId, probe);   // while it lives the browser reuses the loaded picture for every name that wears the bar
+      probe.referrerPolicy = 'no-referrer';
+      probe.onload = () => { images.set(honorId, probe.naturalWidth > 0 ? 'ok' : 'refused'); paint(); };
+      probe.onerror = () => { images.set(honorId, 'refused'); paint(); };
+      probe.src = url;
+    }
+    function preloadAll() { if (on) outcomes.forEach(outcome => { if (outcome.honorId !== null) preload(outcome.honorId); }); }
+    function barFor(id) {
+      const outcome = on ? outcomes.get(id) : null;
+      return outcome && outcome.honorId !== null && images.get(outcome.honorId) === 'ok' ? outcome.honorId : 0;
+    }
+    function imageFor(honorId) {
+      const img = document.createElement('img');
+      img.setAttribute('referrerpolicy', 'no-referrer');
+      img.alt = ''; img.setAttribute('aria-hidden', 'true');
+      img.setAttribute('width', '200'); img.setAttribute('height', '19');
+      img.src = imageUrl(honorId);
+      return img;
+    }
+    // Every name on the page that can wear a bar gets it, or goes back to the plain name. Tables that hold a bar take room for it.
+    function paint() {
+      document.querySelectorAll('[data-hid]').forEach(item => {
+        const bar = barFor(item.dataset.hid);
+        if (String(bar || '') === (item.dataset.bar || '')) return;
+        if (bar) {
+          item.textContent = ''; item.classList.add('hlink');
+          item.append(imageFor(bar), node('span', item.dataset.hname, 'hname'));
+          item.dataset.bar = String(bar);
+        } else {
+          item.classList.remove('hlink'); item.textContent = item.dataset.hname; delete item.dataset.bar;
+        }
+      });
+      document.querySelectorAll('.target-table, .danger-table').forEach(t => t.classList.toggle('has-bars', t.querySelector('.hlink') !== null));
+      document.querySelectorAll('.reach-cell').forEach(c => c.classList.toggle('has-bars', c.querySelector('.hlink') !== null));
+    }
+
+    // ---- the reading ----
+    function recentTornCalls() { const now = Date.now(); return tornCalls.filter(time => now - time < MINUTE_MS).length; }
+    function candidates() {
+      return order.filter(id => !outcomes.has(id) && (failures.get(id) || 0) < HONOR_RETRY_MAX)
+        .map((id, index) => ({ id, index })).sort((a, b) => ((failures.get(a.id) || 0) - (failures.get(b.id) || 0)) || a.index - b.index);
+    }
+    // What the page does about honor bars right now, and why.
+    function plan(now) {
+      if (!on) return { what: 'off' };
+      if (profileMissing) return { what: 'no-profile' };
+      if (keyFailureCode !== null) return { what: 'rejected' };
+      if (now < retryAfter) return { what: 'resting', wait: retryAfter - now };
+      if (suspended || !snapshot || loading || !TORN_API_KEY_PATTERN.test(el.apiKey.value.trim())) return { what: 'waiting' };
+      if (document.hidden) return { what: 'hidden' };
+      const due = candidates();
+      if (!due.length) return { what: 'done' };
+      if (pendingRead) return { what: 'busy' };
+      const wait = lastStart + HONOR_READ_INTERVAL_MS - now;
+      if (wait > 0) return { what: 'spacing', wait };
+      if (recentTornCalls() >= TORN_CALLS_PER_MINUTE) return { what: 'spacing', wait: 5000 };
+      return { what: 'go', id: due[0].id };
+    }
+    function failed(id) {
+      failures.set(id, (failures.get(id) || 0) + 1);
+      if (failures.get(id) >= HONOR_RETRY_MAX) outcomes.set(id, { honorId: null, fetchedAt: Date.now(), source: 'torn-profile', schemaVersion: HONOR_IDS_SCHEMA, gaveUp: true });
+    }
+    async function profileRead(id, key, controller) {
+      const now = Date.now();
+      tornCalls = tornCalls.filter(time => now - time < MINUTE_MS); tornCalls.push(now);
+      const url = new URL('https://api.torn.com/v2/user/' + id + '/profile');
+      url.searchParams.set('comment', TORN_COMMENT);
+      const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+      try {
+        const response = await fetch(url.href, { headers: { Authorization: 'ApiKey ' + key }, signal: controller.signal, credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error' });
+        let payload;
+        try { payload = await response.json(); } catch (_) { throw new Error('unreadable answer'); }
+        if (payload && payload.error) { const error = new Error('Torn error'); error.code = Number.isInteger(payload.error.code) ? payload.error.code : null; throw error; }
+        if (!response.ok || !payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('bad answer');
+        return payload;
+      } finally { clearTimeout(timeout); }
+    }
+    async function readOne(id) {
+      const mine = serial, key = el.apiKey.value.trim(), startedAt = Date.now();
+      lastStart = startedAt;
+      const controller = new AbortController();
+      pendingRead = controller;
+      try {
+        const payload = await profileRead(id, key, controller);
+        if (mine !== serial) return;   // a new key, Forget key or the button turned off while the answer was on its way
+        const profileData = payload.profile;
+        if (profileData && typeof profileData === 'object' && String(profileData.id) === id) {
+          outcomes.set(id, { honorId: isHonorId(profileData.honor_id) ? profileData.honor_id : null, fetchedAt: startedAt, source: 'torn-profile', schemaVersion: HONOR_IDS_SCHEMA });
+          persist();
+          if (outcomes.get(id).honorId !== null) preload(outcomes.get(id).honorId);
+        } else failed(id);
+      } catch (error) {
+        if (mine !== serial) return;
+        const code = Number.isInteger(error && error.code) ? error.code : null;
+        if (code === 16) { profileMissing = true; outcomes = new Map(); clearStored(); }
+        else if (TERMINAL_CODES.has(code)) { keyFailureCode = code; outcomes = new Map(); clearStored(); }
+        else if (RETRY_CODES.has(code)) retryAfter = Date.now() + HONOR_PAUSE_MS;
+        else failed(id);
+      } finally {
+        if (pendingRead === controller) pendingRead = null;
+        if (mine === serial) { paint(); kick(); }
+      }
+    }
+    function clearTimer() { if (timer !== null) { clearTimeout(timer); timer = null; } }
+    // Starts a reading when everything allows it, or sets the one timer that will look again.
+    function kick() {
+      clearTimer();
+      const step = plan(Date.now());
+      if (step.what === 'go') readOne(step.id);
+      else if (step.what === 'spacing' || step.what === 'resting') timer = setTimeout(kick, step.wait);
+      refreshLine();
+    }
+    function lineText() {
+      if (!on) return '';
+      if (profileMissing) return 'Honor bars need user → profile on your Torn key.';
+      if (keyFailureCode !== null) return 'Honor bars stopped: Torn does not accept this key.';
+      if (!order.length) return '';
+      let known = 0, gaveUp = 0;
+      order.forEach(id => { const outcome = outcomes.get(id); if (outcome) { if (outcome.gaveUp) gaveUp++; else known++; } });
+      const text = 'Honor bars: ' + known + ' of ' + order.length + ' read';
+      const step = plan(Date.now()).what;
+      if (step === 'done') return gaveUp ? text + ' (' + gaveUp + ' could not be read)' : '';
+      return step === 'resting' ? text + ' — Torn asked for a pause, trying again soon' : text;
+    }
+    function refreshLine() { say(el.honorLine, lineText()); }
+    function paintButton() { el.honorBtn.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+    function drop() {
+      serial += 1;
+      if (pendingRead) { pendingRead.abort(); pendingRead = null; }
+      clearTimer();
+    }
+
+    return {
+      isOn: () => on,
+      paintButton,
+      paint,
+      // Called with every drawing of the lists: the players in the order they are read.
+      update(data, ids) {
+        if (owner && owner !== data.me) this.reset();
+        owner = data.me; order = [...new Set(ids)];
+        loadStored(); paint(); kick();
+      },
+      kick,
+      stop() { drop(); refreshLine(); },
+      setOn(value) {
+        on = !!value;
+        try { localStorage.setItem(HONOR_STORE, on ? 'on' : 'off'); } catch (_) { /* the choice then holds for this visit only */ }
+        drop(); paintButton();
+        if (on) preloadAll();
+        paint(); kick();
+      },
+      // A new key or Forget key: what was read is gone from memory and from the browser.
+      reset() {
+        drop();
+        outcomes = new Map(); failures.clear();
+        profileMissing = false; keyFailureCode = null; retryAfter = 0;
+        owner = ''; storedFor = null; order = [];
+        clearStored(); paint(); refreshLine();
+      }
+    };
+  })();
   function table(headers, className, columns = []) {
     const scroll = node('div', undefined, 'table-scroll');
     scroll.tabIndex = 0; scroll.setAttribute('role', 'region'); scroll.setAttribute('aria-label', headers.join(', '));
@@ -488,6 +847,9 @@
     link.target = '_blank'; link.rel = 'noopener noreferrer';
     return link;
   }
+  // A name that can turn into an honor bar: the same profile link, marked with the player's ID and the plain name.
+  function barSlot(item, id, label) { item.dataset.hid = id; item.dataset.hname = label; return item; }
+  function profileSlot(member) { return barSlot(profile(member), member.id, member.name); }
   function estimateText(stat) { return stat && stat.est != null ? stat.estText || 'UNKNOWN' : 'UNKNOWN'; }
   function renderStrength(host, members, data) {
     host.replaceChildren(); host.className = '';
@@ -538,13 +900,19 @@
       tr.dataset.competitors = member.competitors;
       if (member.score !== null) { tr.dataset.score = member.score; tr.dataset.priority = member.prio; }
       const name = node('td', undefined, 'name-cell'); name.dataset.column = 'name';
-      name.append(profile(member), node('span', member.id, 'sub num'));
+      name.append(profileSlot(member), node('span', member.id, 'sub num'));
       const age = member.updated == null ? 'updated UNKNOWN' : 'updated ' + Math.floor(Math.max(0, Date.now() / 1000 - member.updated) / 86400) + ' d ago';
       name.append(node('span', (member.source || 'UNKNOWN') + ' \u00b7 ' + age, 'sub'));
       if (member.competitors > 0) name.append(node('span', member.competitors + (member.competitors === 1 ? ' other' : ' others') + ' can also reach this one', 'sub'));
       const level = node('td', member.level, 'num'); level.dataset.column = 'level';
       const ff = node('td', member.ff === null ? 'UNKNOWN' : member.ff.toFixed(2), 'num'); ff.dataset.column = 'ff';
       const est = node('td', estimateText(member), 'num'); est.dataset.column = 'est';
+      // The row colour and the edge on the FF figure, from the FF the row shows (War Room's scoutFfColor).
+      const tint = scoutFfColor(member.ff);
+      if (tint) {
+        tr.classList.add('faded'); tr.style.setProperty('--row-rgb', hexToRgbList(tint));
+        ff.classList.add('ffcell', 'edged'); ff.style.setProperty('--ff-edge', tint);
+      }
       const category = ffClass(member.ff), cls = node('td'); cls.dataset.column = 'class';
       cls.append(node('span', category.word, 'pill' + (category.tone ? ' ' + category.tone : '')));
       tr.append(name, ff, cls, level, est); built.body.append(tr);
@@ -559,12 +927,23 @@
     const built = table(['Member', 'Who of us can beat them', 'Level', 'EST'], 'danger-table', ['name', 'reach', 'level', 'est']);
     rows.forEach(target => {
       const tr = node('tr'); tr.dataset.targetId = target.id;
-      const name = node('td', undefined, 'name-cell'); name.append(profile(target));
-      const names = data.own.slice().sort((a, b) => a.id === data.me ? -1 : b.id === data.me ? 1 : Number(a.id) - Number(b.id))
-        .filter(k => canBeat(k.id === data.me ? target.ff : estimatedFF((data.stats.get(k.id) || {}).est, target.est)))
-        .map(k => k.id === data.me ? 'you' : k.name);
-      const text = names.length ? names.slice(0, 8).join(', ') + (names.length > 8 ? ', +' + (names.length - 8) + ' more' : '') : 'None of us';
-      const who = node('td', text); who.dataset.column = 'reach';
+      const name = node('td', undefined, 'name-cell'); name.append(profileSlot(target));
+      // This table shows no FF figure; the row takes the colour of the target's FF as the other tables show it.
+      const tint = scoutFfColor(target.ff);
+      if (tint) { tr.classList.add('faded'); tr.style.setProperty('--row-rgb', hexToRgbList(tint)); }
+      const reachers = data.own.slice().sort((a, b) => a.id === data.me ? -1 : b.id === data.me ? 1 : Number(a.id) - Number(b.id))
+        .filter(k => canBeat(k.id === data.me ? target.ff : estimatedFF((data.stats.get(k.id) || {}).est, target.est)));
+      // The text is the same as before; each name is its own element so that it can turn into an honor bar.
+      const who = node('td'); who.dataset.column = 'reach';
+      if (!reachers.length) who.textContent = 'None of us';
+      else {
+        who.classList.add('reach-cell');
+        reachers.slice(0, 8).forEach((k, i) => {
+          if (i) who.append(node('span', ', ', 'reach-sep'));
+          who.append(barSlot(node('span', k.id === data.me ? 'you' : k.name, 'reach-item'), k.id, k.id === data.me ? 'you' : k.name));
+        });
+        if (reachers.length > 8) who.append(node('span', ', ', 'reach-sep'), node('span', '+' + (reachers.length - 8) + ' more'));
+      }
       tr.append(name, who, node('td', target.level, 'num'), node('td', estimateText(target), 'num')); built.body.append(tr);
     });
     el.dangerHost.append(built.scroll);
@@ -587,6 +966,8 @@
     if (refreshFailure) say(el.staleBar, 'STALE \u2014 Refresh failed: ' + refreshFailure + ' The figures below are from ' + clock(snapshot.readAt) + ' your time.');
     else if (Date.now() - snapshot.readAt >= STALE_AFTER_MS) say(el.staleBar, 'STALE \u2014 Read ' + Math.floor((Date.now() - snapshot.readAt) / MINUTE_MS) + ' minutes ago. Press Refresh.');
     else say(el.staleBar, '');
+    // Old figures are not tinted.
+    document.body.classList.toggle('figures-stale', !el.staleBar.hidden);
   }
   function renderAdvanced() {
     const data = snapshot;
@@ -611,13 +992,19 @@
       say(el.targetsMessage, 'Nothing inside the faction FF range (' + rangeText() + ') for you. Closest outside it:');
     } else say(el.targetsMessage, '');
     if (selected.length) renderTargetTable(el.yourTargetsHost, selected); else el.yourTargetsHost.replaceChildren();
-    renderTargetTable(el.enemyHost, [...inRange, ...ranked.filter(t => !inside(t.ff)), ...targets.filter(t => t.ff === null).sort((a, b) => Number(a.id) - Number(b.id))]);
+    const enemyRows = [...inRange, ...ranked.filter(t => !inside(t.ff)), ...targets.filter(t => t.ff === null).sort((a, b) => Number(a.id) - Number(b.id))];
+    renderTargetTable(el.enemyHost, enemyRows);
     renderDanger(data, targets); renderTimes(); renderAdvanced();
+    // Honor bars are read in this order: Your targets, the rest of the enemies, then our own members (you first, then by ID,
+    // the order of the names in Most dangerous).
+    const ownIds = data.own.map(m => m.id).sort((a, b) => a === data.me ? -1 : b === data.me ? 1 : Number(a) - Number(b));
+    Honors.update(data, [...selected.map(t => t.id), ...enemyRows.map(t => t.id), ...ownIds]);
   }
   function placeholders(word) {
     for (const id of ['strengthUs', 'strengthThem', 'enemyHost', 'dangerHost']) el[id].replaceChildren(node('p', word, 'empty'));
     el.yourTargetsHost.replaceChildren(); say(el.targetsMessage, word);
     el.warWho.textContent = word; el.warTime.textContent = word; say(el.warNote, ''); say(el.countdown, '');
+    document.body.classList.remove('figures-stale');
   }
   function invalidateFigures(reason) {
     if (!snapshot) return;
@@ -734,6 +1121,7 @@
     stopRequest();
     if (kind === 'torn') {
       snapshot = null; refreshFailure = ''; placeholders('WAIT'); say(el.staleBar, ''); el.readAt.textContent = 'Read time: UNKNOWN';
+      Honors.reset();
     } else { invalidateFigures('FFScouter key changed. Press Refresh.'); if (snapshot) render(snapshot); else placeholders('WAIT'); }
     renderAdvanced(); controls();
   }
@@ -756,6 +1144,11 @@
   el.ffKey.addEventListener('blur', saveFf);
   el.apiKey.addEventListener('input', () => keyEdited('torn'));
   el.ffKey.addEventListener('input', () => keyEdited('ff'));
+  el.honorBtn.addEventListener('click', () => Honors.setOn(!Honors.isOn()));
+  // The honor reads stop when the page leaves the screen and start again when it is back.
+  document.addEventListener('visibilitychange', () => Honors.kick());
+  window.addEventListener('pagehide', () => Honors.stop());
+  window.addEventListener('pageshow', event => { if (event.persisted) Honors.kick(); });
   el.toggleKey.addEventListener('click', () => toggle(el.apiKey, el.toggleKey, 'Torn key'));
   el.toggleFfKey.addEventListener('click', () => toggle(el.ffKey, el.toggleFfKey, 'FFScouter key'));
   el.forgetKey.addEventListener('click', () => { write(KEY_STORE, ''); el.apiKey.value = ''; keyEdited('torn'); say(el.keyError, 'Torn key removed from this page.'); });
@@ -785,6 +1178,7 @@
   el.advFfMax.textContent = 'FF max: ' + effectiveFfMax.toFixed(2) + (validLinkFfMax ? ' (link)' : ' (default)');
   el.commentTag.textContent = 'comment=' + TORN_COMMENT;
   el.tornStoreName.textContent = KEY_STORE; el.ffStoreName.textContent = FF_STORE;
+  el.honorStoreName.textContent = HONOR_IDS_STORE; el.honorSwitchName.textContent = HONOR_STORE; Honors.paintButton();
   el.apiKey.value = read(KEY_STORE); el.ffKey.value = read(FF_STORE);
   startTimers();
   if (el.apiKey.value) load();
