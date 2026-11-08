@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PC
 // @namespace    kingshade.torn
-// @version      1.1.18
+// @version      1.1.19
 // @downloadURL  https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @description  PC TEST: DIBS as a native roster column beside Torn's Attack cell; FF and Est from FFScouter's get-stats API. War Stuff Enhanced is detected and shown read-only; it never blocks.
@@ -17,6 +17,50 @@
 // ==/UserScript==
 
 /*
+ * KS Torn War Dibs PC v1.1.19 (2026-11-08) -- a target in a hospital ABROAD is
+ * not DIBS-able. ONE MAIN CHANGE. Name, namespace, update address and every
+ * storage name are those of 1.1.18.
+ * FIXED
+ *   - In the war on 2026-11-08 several members took DIBS on targets lying in a
+ *     hospital abroad (for example "In a South African hospital for 51 seconds").
+ *     Nobody at home in Torn can attack such a target, so the DIBS locked the
+ *     target and the member's only DIBS slot for nothing. 1.1.18 judged "in
+ *     hospital" with /hospital/i on state, description or details and never
+ *     asked where the hospital is.
+ * CHANGED
+ *   - New hospitalPlaceFromStatus(status), from Torn's API status only (never
+ *     from the page): HOME when the description starts with "In hospital";
+ *     ABROAD when it matches "In a/an <nationality> hospital" (for example
+ *     "In a South African hospital", "In an Emirati hospital"); UNKNOWN when the
+ *     description is missing or not recognised. Only HOME is DIBS-able; ABROAD
+ *     and UNKNOWN never are (fail-closed).
+ *   - verifyFreshTargetBasicForClaim (the /basic read just before a claim)
+ *     accepts only HOME. A claim against ABROAD or UNKNOWN is never sent to the
+ *     server (no POST /claim); the member sees "claim refused" with the reason.
+ *   - The decision engine takes the place from the fresh API status. ABROAD
+ *     draws the DIBS cell as not DIBS-able: "ABROAD", "hosp" underneath, the
+ *     colour of the other not-DIBS-able cells, the button disabled. UNKNOWN is
+ *     drawn as the existing unknown state ("HOSP?", "UNKNOWN"). With no fresh API
+ *     status (page evidence only) the cell is drawn as before; the /basic gate
+ *     still stops the claim.
+ *   - The low-life queue never reads a target that is ABROAD or UNKNOWN.
+ *   - The 48 hour display (longHospitalSeconds) applies to HOME only.
+ *   - Status sorting puts an ABROAD target in the Traveling/Abroad group.
+ * NOT CHANGED
+ *   - The DIBS rules (2:00 gate, FF 2.00-3.40, low life 4.50 for 20 % or less,
+ *     online is free), the rest of the claim path, every request and interval,
+ *     storage, Share with KS, type=2, maxHospitalSeconds (48 h). VIEW shows what
+ *     it showed before.
+ * KNOWN ISSUES
+ *   - None new. A description Torn has not shown before is UNKNOWN until its text
+ *     is known; the target then cannot be DIBSed (fail-closed).
+ * VERIFICATION
+ *   - Synthetic only (Chromium against stand-in Torn and KS servers). The text
+ *     forms are from Torn's own answers: 25 432 "In hospital for ..." and
+ *     1 349 "In a/an <nationality> hospital for ..." rows, 2026-10-20 to
+ *     2026-11-06.
+ * Everything else is unchanged from 1.1.18.
+ *
  * KS Torn War Dibs PC v1.1.18 (2026-11-04) -- a hospital time of 48 hours or
  * more is shown as a time. ONE MAIN CHANGE, display and Status sorting only.
  * Name, namespace, update address and every storage name are those of 1.1.17.
@@ -731,8 +775,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs PC",
-    version: "1.1.18",
-    instanceKey: "__ksTornWarDibsPcV1118",
+    version: "1.1.19",
+    instanceKey: "__ksTornWarDibsPcV1119",
     rowHostPrefix: "ks-twd-wse-row-v010-",
     rosterStyleId: "ks-twd-wse-roster-style-v010",
     panelId: "ks-twd-wse-panel",
@@ -2966,6 +3010,8 @@
     const status = freshOpponentStatusForTarget(targetId);
     if (!status || status.activity === "online") return null;
     if (!isHospitalStatusValue(status.state) && !isHospitalStatusValue(status.description) && !isHospitalStatusValue(status.details)) return null;
+    // 1.1.19: a target abroad (or of unknown place) is never a candidate.
+    if (hospitalPlaceFromStatus(status) !== HOSPITAL_PLACE.HOME) return null;
     if (hospitalUntilExpired(status.until)) return null;
     const seconds = hospitalRemainingSeconds(status.until);
     return Number.isFinite(seconds) && seconds >= 0 && seconds <= CONFIG.gateSeconds ? seconds : null;
@@ -3991,6 +4037,21 @@
 
   function isHospitalStatusValue(value) { return /hospital/i.test(normalizeText(value)); }
 
+  // 1.1.19: where a hospital is, from Torn's API status only. Torn writes
+  // "In hospital for ..." at home and "In a <nationality> hospital for ..." (or
+  // "In an <nationality> ...") abroad. Nobody at home can attack a target abroad.
+  // Only HOME is DIBS-able; a missing or unrecognised description is UNKNOWN and
+  // is not DIBS-able either (fail-closed). Call it for a status that is a
+  // hospital status; it never reads the page.
+  const HOSPITAL_PLACE = Object.freeze({ HOME: "home", ABROAD: "abroad", UNKNOWN: "unknown" });
+  function hospitalPlaceFromStatus(status) {
+    if (!status || typeof status !== "object") return HOSPITAL_PLACE.UNKNOWN;
+    const description = normalizeText(status.description);
+    if (/^in hospital(?![a-z])/i.test(description)) return HOSPITAL_PLACE.HOME;
+    if (/^in an? [a-z][a-z'.-]*(?: [a-z][a-z'.-]*){0,2} hospital(?![a-z])/i.test(description)) return HOSPITAL_PLACE.ABROAD;
+    return HOSPITAL_PLACE.UNKNOWN;
+  }
+
   let viewMembersState = { factionIds: [], members: new Map(), fetchedAt: 0 };
   let viewMembersInFlight = false;
 
@@ -4217,16 +4278,19 @@
         isHospitalStatusValue(apiStatus.description) ||
         isHospitalStatusValue(apiStatus.details);
       if (!apiHospital) return { isHospital: false, seconds: null, source: "torn-api" };
+      // 1.1.19: where the hospital is, from the same fresh API status. Page
+      // evidence (below, when there is no fresh API status) carries no place.
+      const place = hospitalPlaceFromStatus(apiStatus);
       const remaining = hospitalRemainingSeconds(apiStatus.until);
-      if (Number.isFinite(remaining)) return { isHospital: true, seconds: remaining, source: "torn-api" };
+      if (Number.isFinite(remaining)) return { isHospital: true, seconds: remaining, source: "torn-api", place };
 
       // The release time has passed: out, regardless of a stale state field.
       if (hospitalUntilExpired(apiStatus.until)) {
         return { isHospital: false, seconds: null, source: "torn-api-expired" };
       }
       const fallback = visibleHospitalEvidence(row);
-      if (fallback.isHospital && Number.isFinite(fallback.seconds)) return fallback;
-      return { isHospital: true, seconds: null, source: "torn-api" };
+      if (fallback.isHospital && Number.isFinite(fallback.seconds)) return { ...fallback, place };
+      return { isHospital: true, seconds: null, source: "torn-api", place };
     }
     return visibleHospitalEvidence(row);
   }
@@ -4246,6 +4310,8 @@
       isHospitalStatusValue(apiStatus.description) ||
       isHospitalStatusValue(apiStatus.details);
     if (!hospital) return null;
+    // 1.1.19: the 48 hour display is for a hospital at home only.
+    if (hospitalPlaceFromStatus(apiStatus) !== HOSPITAL_PLACE.HOME) return null;
     const until = Number(apiStatus.until);
     if (!Number.isFinite(until) || until <= 0) return null;
     const remaining = Math.ceil(until - getTornNowMs() / 1000);
@@ -4628,7 +4694,7 @@
   // Pure target decision engine
   // ---------------------------------------------------------------------------
 
-  function classifyLiveTargetState({ playerId, ownTargetId, isHospital, seconds, fairFight, rwPhase, activity = null, lowHp = false }) {
+  function classifyLiveTargetState({ playerId, ownTargetId, isHospital, seconds, fairFight, rwPhase, activity = null, lowHp = false, hospitalPlace = HOSPITAL_PLACE.HOME }) {
     const ff = Number.isFinite(fairFight) ? Number(fairFight) : null;
     if (ownTargetId) {
       if (ownTargetId === playerId) return { state: TARGET_STATE.CLAIMED, seconds, fairFight: ff, reason: "active-own-dibs", mode: "live" };
@@ -4646,6 +4712,9 @@
       };
     }
     if (!isHospital) return { state: TARGET_STATE.UNAVAILABLE, seconds: null, fairFight: ff, reason: "not-hospital", mode: "live" };
+    // 1.1.19: only a hospital at home is DIBS-able (see hospitalPlaceFromStatus).
+    if (hospitalPlace === HOSPITAL_PLACE.ABROAD) return { state: TARGET_STATE.UNAVAILABLE, seconds: null, fairFight: ff, reason: "hospital-abroad", mode: "live" };
+    if (hospitalPlace !== HOSPITAL_PLACE.HOME) return { state: TARGET_STATE.UNKNOWN, seconds: null, fairFight: ff, reason: "hospital-place-unverifiable", mode: "live" };
     if (seconds === null) return { state: TARGET_STATE.UNKNOWN, seconds: null, fairFight: ff, reason: "hospital-timer-unverifiable", mode: "live" };
     if (seconds > CONFIG.gateSeconds) return { state: TARGET_STATE.LOCKED, seconds, fairFight: ff, reason: "hospital-too-early", mode: "live" };
     if (ff === null) return { state: TARGET_STATE.UNKNOWN, seconds, fairFight: null, reason: "fair-fight-unverifiable", mode: "live" };
@@ -4655,7 +4724,7 @@
     return { state: TARGET_STATE.READY, seconds, fairFight: ff, reason: lowHp === true ? "hospital-window-low-life-fair-fight-open" : "hospital-window-and-fair-fight-open", mode: "live", ...(lowHp === true ? { lowHp: true } : {}) };
   }
 
-  function classifyTargetState({ playerId, ownClaim, isHospital, seconds, fairFight, rwPhase, activity = null, lowHp = false }) {
+  function classifyTargetState({ playerId, ownClaim, isHospital, seconds, fairFight, rwPhase, activity = null, lowHp = false, hospitalPlace = HOSPITAL_PLACE.HOME }) {
     if (ownClaim) {
       if (ownClaim.targetId === playerId) {
         return { state: TARGET_STATE.CLAIMED, seconds, fairFight, reason: "active-own-dibs", mode: "live" };
@@ -4670,7 +4739,8 @@
       fairFight,
       rwPhase,
       activity,
-      lowHp
+      lowHp,
+      hospitalPlace
     });
   }
 
@@ -4694,6 +4764,13 @@
     const returnedIdentity = body?.profile?.player_id ?? body?.profile?.id ?? body?.player_id ?? body?.id;
     if (returnedIdentity !== undefined && String(Number(returnedIdentity)) !== String(Number(targetId))) return false;
     if (!isHospitalStatusValue(status.state) && !isHospitalStatusValue(status.description)) return false;
+    // 1.1.19: the deciding gate. Only a hospital at home is accepted; abroad and
+    // unrecognised text are refused, and no claim is sent to the server.
+    const place = hospitalPlaceFromStatus(status);
+    if (place !== HOSPITAL_PLACE.HOME) {
+      if (typeof captureProof === "function") captureProof({ refusedPlace: place });
+      return false;
+    }
     const until = Number(status.until);
     if (!Number.isFinite(until) || until <= 0) return false;
     const seconds = Math.ceil(until - getTornNowMs() / 1000);
@@ -4792,6 +4869,15 @@
       }
       let targetBasicProof = null;
       if (!(await verifyFreshTargetBasicForClaim(targetId, writeRuntimeCurrent, proof => { targetBasicProof = proof; }))) {
+        // 1.1.19: say why when Torn says the hospital is not at home.
+        if (targetBasicProof?.refusedPlace === HOSPITAL_PLACE.ABROAD) {
+          if (writeRuntimeCurrent()) holdSharedWriteFailure("War Room: claim refused · target is in a hospital abroad");
+          return;
+        }
+        if (targetBasicProof?.refusedPlace === HOSPITAL_PLACE.UNKNOWN) {
+          if (writeRuntimeCurrent()) holdSharedWriteFailure("War Room: claim refused · hospital place not confirmed");
+          return;
+        }
         throw new Error("fresh target basic verification failed");
       }
       if (!writeRuntimeCurrent()) return;
@@ -5761,6 +5847,9 @@
     const apiHospital = viewHospital?.reason === "member-not-in-fetched-rosters" ? null : viewHospital;
     const hospital = apiHospital || computeHospitalSeconds(binding);
     if (hospital?.isHospital === true) {
+      // 1.1.19: a hospital abroad (from Torn's API status) sorts with Traveling/Abroad.
+      const placeStatus = rosterApiStatus(binding.targetId);
+      if (placeStatus && hospitalPlaceFromStatus(placeStatus) === HOSPITAL_PLACE.ABROAD) return { group: ROSTER_GROUP.TRAVEL, seconds: 0 };
       if (Number.isFinite(hospital.seconds)) return { group: ROSTER_GROUP.HOSPITAL, seconds: hospital.seconds };
       // 1.1.18: a release time of 48 h or more sorts by its real time, after
       // every shorter hospital time. No release time at all stays unknown.
@@ -6008,7 +6097,12 @@
       }
       return { relevant: true, label: "LOCKED" };
     }
+    // 1.1.19: a hospital abroad is not DIBS-able; the cell says so.
+    if (decision?.state === TARGET_STATE.UNAVAILABLE && decision.reason === "hospital-abroad") {
+      return { relevant: true, label: "ABROAD", className: "unavailable" };
+    }
     if (decision?.state === TARGET_STATE.UNKNOWN) {
+      if (decision.reason === "hospital-place-unverifiable") return { relevant: true, label: "HOSP?" };
       if (decision.reason === "hospital-timer-unverifiable") {
         // 1.1.18: a release time of 48 h or more is shown as a locked target's time.
         if (Number.isFinite(longSeconds)) return { relevant: true, label: formatCellCountdown(longSeconds), className: "locked" };
@@ -6201,9 +6295,19 @@
     }
     if (decision.state === TARGET_STATE.UNKNOWN) {
       sub.textContent = "UNKNOWN";
+      if (decision.reason === "hospital-place-unverifiable") {
+        button.dataset.ksTitle = `${rowValues ? `${rowValues} · ` : ""}In hospital, but Torn's text does not say where. DIBS is not offered.`;
+      }
       return;
     }
-    if (decision.state === TARGET_STATE.UNAVAILABLE) { sub.textContent = ""; return; }
+    if (decision.state === TARGET_STATE.UNAVAILABLE) {
+      sub.textContent = "";
+      if (decision.reason === "hospital-abroad") {
+        sub.textContent = "hosp";
+        button.dataset.ksTitle = `${rowValues ? `${rowValues} · ` : ""}In a hospital abroad: nobody at home in Torn can attack this target. DIBS is not offered.`;
+      }
+      return;
+    }
     sub.textContent = "LOCKED";
   }
 
@@ -6275,7 +6379,8 @@
       fairFight: readRowFairFight(binding.row),
       rwPhase: currentRwPhase(),
       activity: freshOpponentActivityForTarget(binding.targetId),
-      lowHp: lowHpForTarget(binding.targetId)
+      lowHp: lowHpForTarget(binding.targetId),
+      hospitalPlace: hospital.place || HOSPITAL_PLACE.HOME
     });
   }
 
