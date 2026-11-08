@@ -16,6 +16,7 @@
     --good: #1c7355; --good-soft: #dfeee8;
     --warn: #8c6210; --warn-soft: #f6ecd6;
     --bad: #a12f2a; --bad-soft: #f6dedc;
+    --good-rgb: 28, 115, 85; --bad-rgb: 161, 47, 42;
     --display: 'Saira Condensed', 'Arial Narrow', Helvetica, sans-serif;
     --body: 'Public Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif;
     --mono: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
@@ -30,6 +31,7 @@
       --good: #46a583; --good-soft: #172a24;
       --warn: #cc9f3f; --warn-soft: #2a2417;
       --bad: #dd6a61; --bad-soft: #2c1b1a;
+      --good-rgb: 70, 165, 131; --bad-rgb: 221, 106, 97;
     }
   }
   :root[data-theme="dark"] {
@@ -41,6 +43,7 @@
     --good: #46a583; --good-soft: #172a24;
     --warn: #cc9f3f; --warn-soft: #2a2417;
     --bad: #dd6a61; --bad-soft: #2c1b1a;
+    --good-rgb: 70, 165, 131; --bad-rgb: 221, 106, 97;
   }
   * { box-sizing: border-box; letter-spacing: 0; }
   body { margin: 0; background: var(--ground); color: var(--ink); font: 15px/1.5 var(--body); }
@@ -102,11 +105,10 @@
   .section-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: baseline; margin-bottom: 14px; }
   .metrics { margin: 12px 0 18px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; }
   dt { color: var(--muted); } dd { margin: 0; overflow-wrap: anywhere; }
-  .metrics dd { font-family: var(--mono); text-align: right; }
+  .metrics dd { font-family: var(--mono); text-align: right; padding: 1px 10px; }
   .class-list { list-style: none; padding: 0; margin: 10px 0 20px; }
   .class-list li { position: relative; isolation: isolate; display: flex; justify-content: space-between; gap: 10px; padding: 5px 8px; margin-bottom: 3px; font-size: 13px; }
-  .class-list .bar { position: absolute; z-index: -1; inset: 0 auto 0 0; background: var(--accent-soft); }
-  .columns > div:last-child .bar { background: var(--warn-soft); }
+  .class-list .bar { position: absolute; z-index: -1; inset: 0 auto 0 0; background: var(--line); }
   .table-scroll { max-width: 100%; overflow-x: auto; border: 1px solid var(--line); background: var(--surface); }
   table { border-collapse: collapse; width: 100%; }
   th { background: var(--surface-2); color: var(--muted); font-size: 12px; text-align: left; }
@@ -144,6 +146,20 @@
   /* Old figures (the STALE line is showing) are not tinted. */
   body.figures-stale tbody tr.faded { background-image: none; }
   body.figures-stale td.ffcell.edged { box-shadow: none; font-weight: inherit; }
+  /* Strength comparison (Pre-war 3): the same fade shape. In Top 10 the row takes its estimate class's colour (tr.faded above).
+     An estimate-class bar takes the same colour, strongest in the middle, weaker (not gone) at the ends so that its length still reads.
+     The side that leads a figure in Us / Them gets a green fade behind it, the other a red one. Colour here means strength only. */
+  :root { --bar-fade: .5; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bar-fade: .55; } }
+  :root[data-theme="dark"] { --bar-fade: .55; }
+  .class-list .bar.tinted {
+    background: linear-gradient(90deg, rgba(var(--row-rgb), calc(var(--bar-fade) * .35)) 0%, rgba(var(--row-rgb), var(--bar-fade)) 50%, rgba(var(--row-rgb), calc(var(--bar-fade) * .35)) 100%);
+  }
+  .metrics dd.lead-good { background-image: linear-gradient(90deg, rgba(var(--good-rgb), 0) 0%, rgba(var(--good-rgb), var(--row-fade)) 50%, rgba(var(--good-rgb), 0) 100%); }
+  .metrics dd.lead-bad { background-image: linear-gradient(90deg, rgba(var(--bad-rgb), 0) 0%, rgba(var(--bad-rgb), var(--row-fade)) 50%, rgba(var(--bad-rgb), 0) 100%); }
+  /* Old figures are not tinted here either. */
+  body.figures-stale .class-list .bar.tinted { background: var(--line); }
+  body.figures-stale .metrics dd.lead-good, body.figures-stale .metrics dd.lead-bad { background-image: none; }
   /* Honor bars, copied from War Room (R22): Torn's own 200 x 19 picture with the name written on it,
      white with a black outline. The line keeps the height of a plain name, so a bar that arrives moves nothing. */
   .honorstrip { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 14px 0; }
@@ -249,6 +265,7 @@
       It is removed when you press Forget key and when another key is used. The Honor bars button switches all of it off on this device
       (<code id="honorSwitchName"></code>): no profile reads for bars, no pictures, plain names. It is on until you turn it off. Where anything is
       missing &mdash; no honor, a key without profile, a picture Torn does not deliver &mdash; the name is shown plain.</p>
+    <p class="note">The colours in Strength comparison show the estimate class and which side leads; they are estimates from FFScouter.</p>
     <p class="note">FFScouter receives the IDs from both rosters at <code>https://ffscouter.com/api/v1/get-stats</code>.
       Its API requires your FFScouter key in the request address. Your Torn key goes only to
       <code>api.torn.com</code>, in the Authorization header, never in the address. The Torn key never goes
@@ -350,6 +367,9 @@
   ];
   const CLASS_EDGES = [1e7, 1e8, 5e8, 1e9, 5e9];
   const CLASS_NAMES = ['under 10m', '10m\u2013100m', '100m\u2013500m', '500m\u20131b', '1b\u20135b', '5b and over', 'no estimate'];
+  // One colour per estimate class, weakest to strongest: the page's orange accent (hue 22) with rising saturation.
+  // 'no estimate' (the last class name) has none.
+  const CLASS_TINTS = ['#9a8c84', '#b0866d', '#c87c51', '#de7335', '#f16b1e', '#ff640a'];
   const el = {};
   document.querySelectorAll('[id]').forEach(element => { el[element.id] = element; });
   let sequence = 0, request = null, pending = Promise.resolve();
@@ -851,45 +871,75 @@
   function barSlot(item, id, label) { item.dataset.hid = id; item.dataset.hname = label; return item; }
   function profileSlot(member) { return barSlot(profile(member), member.id, member.name); }
   function estimateText(stat) { return stat && stat.est != null ? stat.estText || 'UNKNOWN' : 'UNKNOWN'; }
+  // The estimate class of a value: an index into CLASS_NAMES ('no estimate' is the last one).
+  function classIndex(value) {
+    if (value == null) return CLASS_NAMES.length - 1;
+    const index = CLASS_EDGES.findIndex(edge => value < edge);
+    return index < 0 ? CLASS_EDGES.length : index;
+  }
+  // The colour of a class as an "r, g, b" list for --row-rgb, or null where the class has none.
+  function classTint(index) {
+    return Number.isInteger(index) && index >= 0 && index < CLASS_TINTS.length ? hexToRgbList(CLASS_TINTS[index]) : null;
+  }
+  // Called after BOTH sides are drawn. The side with the higher figure gets a green fade behind it, the other a red one.
+  // Equal figures, or a figure that is UNKNOWN on either side, get no colour. It reads the computed numbers, not the text.
+  function markLeaders(us, them) {
+    Object.keys(us).forEach(key => {
+      const a = us[key].number, b = them[key] ? them[key].number : null;
+      if (!finite(a) || !finite(b) || Math.abs(a - b) <= 1e-9 * Math.max(Math.abs(a), Math.abs(b))) return;
+      const ahead = a > b;
+      us[key].dd.classList.add(ahead ? 'lead-good' : 'lead-bad');
+      them[key].dd.classList.add(ahead ? 'lead-bad' : 'lead-good');
+    });
+  }
+  // Draws one side and returns its compared figures: { key: { dd, number } } (number is null where the figure is UNKNOWN).
   function renderStrength(host, members, data) {
     host.replaceChildren(); host.className = '';
     const estimates = data.ffOk ? members.map(m => (data.stats.get(m.id) || {}).est).filter(v => v != null) : [];
     const levels = members.map(m => m.level), metrics = node('dl', undefined, 'metrics');
     const levelFormat = value => value === null ? 'UNKNOWN' : value.toFixed(1);
+    const averageEstimate = data.ffOk ? average(estimates) : null, medianEstimate = data.ffOk ? median(estimates) : null;
+    const averageLevel = average(levels), medianLevel = median(levels);
     const values = [
-      ['Members', String(members.length)],
+      ['Members', String(members.length), 'members', members.length],
       ['With an estimate', data.ffOk ? estimates.length + ' of ' + members.length : 'UNKNOWN'],
-      ['Average estimate', data.ffOk ? compact(average(estimates)) : 'UNKNOWN'],
-      ['Median estimate', data.ffOk ? compact(median(estimates)) : 'UNKNOWN'],
-      ['Average level', levelFormat(average(levels))], ['Median level', levelFormat(median(levels))]
+      ['Average estimate', data.ffOk ? compact(averageEstimate) : 'UNKNOWN', 'averageEstimate', averageEstimate],
+      ['Median estimate', data.ffOk ? compact(medianEstimate) : 'UNKNOWN', 'medianEstimate', medianEstimate],
+      ['Average level', levelFormat(averageLevel), 'averageLevel', averageLevel], ['Median level', levelFormat(medianLevel), 'medianLevel', medianLevel]
     ];
-    values.forEach(([label, value]) => { metrics.append(node('dt', label), node('dd', value)); });
+    const compared = {};
+    values.forEach(([label, value, key, number]) => {
+      const dd = node('dd', value); metrics.append(node('dt', label), dd);
+      if (key) compared[key] = { dd, number };
+    });
     host.append(metrics, node('h3', 'Estimate classes'));
     const list = node('ul', undefined, 'class-list'), counts = Array(CLASS_NAMES.length).fill(0);
-    if (data.ffOk) members.forEach(member => {
-      const value = (data.stats.get(member.id) || {}).est;
-      const index = value == null ? CLASS_NAMES.length - 1 : CLASS_EDGES.findIndex(edge => value < edge);
-      counts[index < 0 ? CLASS_EDGES.length : index]++;
-    });
+    if (data.ffOk) members.forEach(member => { counts[classIndex((data.stats.get(member.id) || {}).est)]++; });
     CLASS_NAMES.forEach((label, i) => {
       const li = node('li'); li.append(node('span', label), node('span', data.ffOk ? String(counts[i]) : 'UNKNOWN', 'num'));
       if (data.ffOk && members.length) {
         const bar = node('span', undefined, 'bar'); bar.style.width = counts[i] / members.length * 100 + '%';
+        const tint = classTint(i);
+        if (tint) { bar.classList.add('tinted'); bar.style.setProperty('--row-rgb', tint); }
         bar.setAttribute('aria-hidden', 'true'); li.append(bar);
       }
       list.append(li);
     });
     host.append(list, node('h3', 'Top ' + STRENGTH_TOP_COUNT + ' by estimate'));
-    if (!data.ffOk) { host.append(node('p', 'UNKNOWN', 'empty')); return; }
+    if (!data.ffOk) { host.append(node('p', 'UNKNOWN', 'empty')); return compared; }
     const top = members.filter(m => (data.stats.get(m.id) || {}).est != null)
       .sort((a, b) => data.stats.get(b.id).est - data.stats.get(a.id).est || Number(a.id) - Number(b.id)).slice(0, STRENGTH_TOP_COUNT);
-    if (!top.length) { host.append(node('p', 'UNKNOWN \u2014 no estimates available.', 'empty')); return; }
+    if (!top.length) { host.append(node('p', 'UNKNOWN \u2014 no estimates available.', 'empty')); return compared; }
     const built = table(['Member', 'Level', 'EST'], 'top-table');
     top.forEach(member => {
-      const row = node('tr'), name = node('td', undefined, 'name-cell'); name.append(profile(member));
+      const row = node('tr'), name = node('td', undefined, 'name-cell'); name.append(profileSlot(member));
+      // The row takes the colour of the player's estimate class (the same scale as the bars above).
+      const tint = classTint(classIndex(data.stats.get(member.id).est));
+      if (tint) { row.classList.add('faded'); row.style.setProperty('--row-rgb', tint); }
       row.append(name, node('td', member.level, 'num'), node('td', estimateText(data.stats.get(member.id)), 'num')); built.body.append(row);
     });
     host.append(built.scroll);
+    return compared;
   }
   function renderTargetTable(host, rows) {
     host.replaceChildren(); host.className = '';
@@ -980,7 +1030,7 @@
     el.advError.textContent = lastError ? lastError + (lastCode === null ? '' : ' (Torn code ' + lastCode + (RETRY_CODES.has(lastCode) ? ', try later' : '') + ')') : 'None';
   }
   function render(data) {
-    renderStrength(el.strengthUs, data.own, data); renderStrength(el.strengthThem, data.enemies, data);
+    markLeaders(renderStrength(el.strengthUs, data.own, data), renderStrength(el.strengthThem, data.enemies, data));
     const targets = buildTargets(data.own, data.enemies, data.stats, data.me);
     const ranked = targets.filter(t => t.ff !== null).sort(priorityOrder), inRange = ranked.filter(t => inside(t.ff));
     let selected = inRange.slice(0, TOP_COUNT);
