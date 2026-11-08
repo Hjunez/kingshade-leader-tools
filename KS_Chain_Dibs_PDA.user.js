@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Chain Dibs PDA
 // @namespace    kingshade.torn.chaindibs
-// @version      0.7.1
+// @version      0.7.2
 // @description  A small floating window with your faction chain: timer, the queue for the next hit, and the Im here rule so the chain does not break. Only the member who made the hit leaves the queue. When anybody may hit, FREE HIT links to a free target. Im here is locked when you cannot hit. Stand first without pressing Im here for 5 hits and you are removed as AFK. A bonus hit is announced. The minimized window still shows who is first and who is the hitter, and a yellow frame tells you when you hold the hit. If you hold the hit and fail, the button I failed - free hit lets everybody hit at once and shows them who released it.
 // @author       Kingshade
 // @downloadURL  https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Chain_Dibs_PDA.user.js
@@ -20,8 +20,13 @@
 // ==/UserScript==
 
 /*
- * KS Chain Dibs PDA 0.7.1
+ * KS Chain Dibs PDA 0.7.2
  *
+ * PDA 0.7.2  CHANGED: a much smaller window on the phone. Smaller text and buttons, buttons two by two.
+ *        Same behavior as PDA 0.7.1; only measures and the place of the buttons
+ *        changed. Every measure is one constant in the block "The phone window".
+ *        The title row is only 26 px high, so a drag now captures the pointer at
+ *        once (a fast mouse move that leaves the row is still seen).
  * PDA 0.7.1  ADDED: Torn PDA version. The window fits the phone screen and scrolls, and the key field comes first.
  *        This file has the same core as KS Chain Dibs PC 0.7.1 (it talks to the
  *        live KS War Room server). Only the layout, the texts about the
@@ -185,7 +190,7 @@
   if (window[INSTANCE_KEY]) return;
   window[INSTANCE_KEY] = true;
 
-  var VERSION = '0.7.1';
+  var VERSION = '0.7.2';
 
   // The ONE place the server address lives.
   var SERVER_BASE = 'https://ks-war-room-claims.hans-viklund.workers.dev';
@@ -229,12 +234,35 @@
   var QUEUE_SHOWN = 3;
   var DEFAULT_LEFT = 12;
   var DEFAULT_TOP = 90;
-  var BOX_WIDTH = 240;                 // the widest the window gets (on a narrower screen: the screen minus 16 px)
-  // The phone window (PDA 0.7.1).
+  // The phone window (PDA 0.7.1, made much smaller in 0.7.2). Every measure lives here, one constant each.
+  var BOX_WIDTH = 176;                 // the widest the window gets (on a narrower screen: the screen minus 16 px)
   var SCREEN_MARGIN = 16;              // the window is at most this much smaller than the screen, both ways
+  var MAX_H_SHARE = 0.7;               // ... and never higher than this share of the screen
   var MIN_BODY_PX = 80;                // the scrolling part is never squeezed below this (a tiny screen)
-  var BUTTON_MIN_H = 40;               // every button is at least this high - the ONE place the number lives
   var DRAG_START_PX = 6;               // a finger or a mouse must move this far before it is a drag
+  var PAD_PX = 6;                      // padding inside the window
+  var TEXT_PX = 11;                    // body text, chain line, queue, messages, buttons
+  var TEXT_LINE_PX = 14;
+  var HEAD_PX = 12;                    // title row and phase row (bold)
+  var HEAD_LINE_PX = 16;
+  var TIMER_PX = 20;                   // the timer in the body (bold)
+  var TIMER_LINE_PX = 24;
+  var HEADER_H = 26;                   // the title row
+  var HEADER_PAD = '0 1px 0 4px';      // its padding: top right bottom left
+  var MINI_BONUS_PX = 10;              // the small timer when it says BONUS is this high (the title row is narrow)
+  var MINBTN_PX = 24;                  // the minimize button is this wide and high
+  var BTN_H = 26;                      // every button is at least this high
+  var BTN_GAP_PX = 3;                  // between buttons and between rows
+  var BTN_RADIUS_PX = 4;
+  var ROW_MIN_H = 22;                  // banner, notice and phase rows are at least this high
+  var KEYFIELD_H = 30;                 // the key field
+  var TOS_PX = 10;                     // the terms table
+  var TOS_LINE_PX = 13;
+  var DEBUG_PX = 10;                   // the debug row
+  var DEBUG_LINE_PX = 13;
+  var TARGETS_ROWS = 3;                // the Targets text field is this many lines high
+  var FONT = 'Arial,Helvetica,sans-serif';
+  var MONO = 'Consolas,monospace';
   var DEBUG_TAPS = 5;                  // taps on the title to turn debug on or off ...
   var DEBUG_TAP_WINDOW_MS = 3000;      // ... within this time
   var REMOTE_POLL_MS = 1000;           // no value change listener (Torn PDA): look at the shared values this often
@@ -1937,10 +1965,30 @@
 
   // ------------------------------------------------------------ UI
 
+  // A font shorthand from the measures above.
+  function fnt(bold, px, line, family) {
+    return 'font:' + (bold ? 'bold ' : '') + px + 'px/' + line + 'px ' + (family || FONT) + ';';
+  }
+
+  // A button is BTN_H high with one line of text and grows by a line for two. In a
+  // row of two it takes half of the row; alone it takes the whole row.
   function buttonStyle(bg, fg) {
-    return 'all:initial;box-sizing:border-box;display:block;width:100%;min-height:' + BUTTON_MIN_H + 'px;margin:4px 0 0 0;padding:10px 8px;' +
-      'background:' + bg + ';color:' + fg + ';border:1px solid rgba(255,255,255,0.35);border-radius:4px;' +
-      'font:bold 13px/18px Arial,Helvetica,sans-serif;text-align:center;cursor:pointer;';
+    return 'all:initial;box-sizing:border-box;display:block;flex:1 1 0;min-width:0;width:100%;min-height:' + BTN_H + 'px;margin:0;padding:' + ((BTN_H - 2 - TEXT_LINE_PX) / 2) + 'px 3px;' +
+      'background:' + bg + ';color:' + fg + ';border:1px solid rgba(255,255,255,0.35);border-radius:' + BTN_RADIUS_PX + 'px;' +
+      fnt(true, TEXT_PX, TEXT_LINE_PX) + 'text-align:center;cursor:pointer;overflow-wrap:anywhere;';
+  }
+
+  // A row of buttons: the buttons that are shown share it, one alone takes all of it.
+  function buttonRow(markName) {
+    var row = mark(el('div'), markName);
+    css(row, 'all:initial;display:none;box-sizing:border-box;width:100%;gap:' + BTN_GAP_PX + 'px;margin-top:' + BTN_GAP_PX + 'px;');
+    return row;
+  }
+
+  // A row of text that is not a button: at least ROW_MIN_H high, the text may take two lines.
+  function noticeStyle(bg, fg, bold, px, line) {
+    return 'all:initial;display:none;box-sizing:border-box;min-height:' + ROW_MIN_H + 'px;margin:0 0 ' + BTN_GAP_PX + 'px 0;padding:' + ((ROW_MIN_H - line) / 2) + 'px 4px;border-radius:' + BTN_RADIUS_PX + 'px;text-align:center;' +
+      (bg ? 'background:' + bg + ';' : '') + 'color:' + fg + ';' + fnt(bold, px, line);
   }
 
   function makeButton(text, bg, fg, onClick) {
@@ -1960,7 +2008,7 @@
     var vw = window.innerWidth;
     var vh = window.innerHeight;
     var w = Math.max(120, Math.min(BOX_WIDTH, vw - SCREEN_MARGIN));
-    var maxH = Math.max(100, vh - SCREEN_MARGIN);
+    var maxH = Math.max(100, Math.min(vh - SCREEN_MARGIN, Math.floor(vh * MAX_H_SHARE)));
     var sizeKey = w + 'x' + maxH;
     if (ui.sizeKey !== sizeKey) {
       ui.sizeKey = sizeKey;
@@ -1995,22 +2043,22 @@
     ui.box = el('div');
     mark(ui.box, 'box');
     css(ui.box, 'all:initial;display:flex;flex-direction:column;box-sizing:border-box;width:' + BOX_WIDTH + 'px;overflow:hidden;background:#1b1d21;color:#e6e6e6;' +
-      'border:' + BOX_BORDER + ';border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,0.6);font:13px/18px Arial,Helvetica,sans-serif;');
+      'border:' + BOX_BORDER + ';border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,0.6);' + fnt(false, TEXT_PX, TEXT_LINE_PX));
 
     // header: drag handle, title, mini timer, minimize
     ui.header = el('div');
     mark(ui.header, 'header');
-    css(ui.header, 'all:initial;display:flex;flex:none;box-sizing:border-box;align-items:center;justify-content:space-between;padding:2px 6px 2px 8px;' +
-      'background:#262a30;border-radius:6px 6px 0 0;cursor:move;touch-action:none;color:#e6e6e6;font:bold 13px/18px Arial,Helvetica,sans-serif;');
+    css(ui.header, 'all:initial;display:flex;flex:none;box-sizing:border-box;height:' + HEADER_H + 'px;align-items:center;justify-content:space-between;padding:' + HEADER_PAD + ';' +
+      'background:#262a30;border-radius:6px 6px 0 0;cursor:move;touch-action:none;color:#e6e6e6;' + fnt(true, HEAD_PX, HEAD_LINE_PX));
     ui.title = mark(el('span', 'KS Chain Dibs'), 'title');
-    css(ui.title, 'all:initial;color:#e6e6e6;font:bold 13px/18px Arial,Helvetica,sans-serif;');
+    css(ui.title, 'all:initial;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#e6e6e6;' + fnt(true, HEAD_PX, HEAD_LINE_PX));
     ui.mini = mark(el('span', ''), 'mini');
-    css(ui.mini, 'all:initial;color:#bdbdbd;font:13px/18px Consolas,monospace;margin-left:auto;margin-right:8px;');
+    css(ui.mini, 'all:initial;flex:none;white-space:nowrap;color:#bdbdbd;' + fnt(false, TEXT_PX, TEXT_LINE_PX, MONO) + 'margin-left:auto;padding-left:3px;');
     ui.minBtn = mark(el('button', '-'), 'minbtn');
     ui.minBtn.type = 'button';
     ui.minBtn.title = 'Minimize';
-    css(ui.minBtn, 'all:initial;box-sizing:border-box;flex:none;min-width:' + BUTTON_MIN_H + 'px;height:' + BUTTON_MIN_H + 'px;padding:0 8px;background:#3a3f45;color:#ffffff;' +
-      'border:1px solid #666b73;border-radius:4px;font:bold 18px/38px Arial,sans-serif;text-align:center;cursor:pointer;');
+    css(ui.minBtn, 'all:initial;box-sizing:border-box;flex:none;width:' + MINBTN_PX + 'px;height:' + MINBTN_PX + 'px;padding:0;background:#3a3f45;color:#ffffff;' +
+      'border:1px solid #666b73;border-radius:' + BTN_RADIUS_PX + 'px;' + fnt(true, 14, MINBTN_PX - 2) + 'text-align:center;cursor:pointer;');
     ui.minBtn.addEventListener('click', function (ev) {
       ev.stopPropagation();
       minimized = !minimized;
@@ -2025,7 +2073,7 @@
 
     // Minimized: two short rows under the header. Shown only with a usable answer.
     ui.miniInfo = mark(el('div'), 'miniinfo');
-    css(ui.miniInfo, 'all:initial;display:none;flex:none;box-sizing:border-box;padding:3px 8px 5px 8px;background:#1b1d21;border-radius:0 0 6px 6px;');
+    css(ui.miniInfo, 'all:initial;display:none;flex:none;box-sizing:border-box;padding:1px ' + PAD_PX + 'px 2px ' + PAD_PX + 'px;background:#1b1d21;border-radius:0 0 6px 6px;');
     ui.miniFirst = buildMiniRow('minifirst');
     ui.miniHitter = buildMiniRow('minihitter');
     ui.miniInfo.appendChild(ui.miniFirst.row);
@@ -2033,42 +2081,42 @@
     ui.box.appendChild(ui.miniInfo);
 
     ui.body = mark(el('div'), 'body');
-    css(ui.body, 'all:initial;display:block;flex:1 1 auto;min-height:' + MIN_BODY_PX + 'px;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;box-sizing:border-box;padding:6px 8px 8px 8px;color:#e6e6e6;font:13px/18px Arial,Helvetica,sans-serif;');
+    css(ui.body, 'all:initial;display:block;flex:1 1 auto;min-height:' + MIN_BODY_PX + 'px;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;box-sizing:border-box;padding:' + PAD_PX + 'px;color:#e6e6e6;' + fnt(false, TEXT_PX, TEXT_LINE_PX));
 
     ui.chainLine = mark(el('div', ''), 'chain');
-    css(ui.chainLine, 'all:initial;display:block;color:#bdbdbd;font:13px/18px Arial,Helvetica,sans-serif;');
+    css(ui.chainLine, 'all:initial;display:block;color:#bdbdbd;' + fnt(false, TEXT_PX, TEXT_LINE_PX));
     ui.timer = mark(el('div', '--:--'), 'timer');
-    css(ui.timer, 'all:initial;display:block;color:#ffffff;font:bold 26px/32px Consolas,monospace;text-align:center;');
+    css(ui.timer, 'all:initial;display:block;color:#ffffff;' + fnt(true, TIMER_PX, TIMER_LINE_PX, MONO) + 'text-align:center;');
     ui.bonus = mark(el('div', ''), 'bonus');
-    css(ui.bonus, 'all:initial;display:none;box-sizing:border-box;margin:2px 0 4px 0;padding:4px 6px;border-radius:4px;text-align:center;background:' + BONUS_COLOR + ';color:#000000;font:bold 13px/18px Arial,Helvetica,sans-serif;');
+    css(ui.bonus, noticeStyle(BONUS_COLOR, '#000000', true, TEXT_PX, TEXT_LINE_PX));
     ui.phase = mark(el('div', ''), 'phase');
-    css(ui.phase, 'all:initial;display:block;box-sizing:border-box;margin:2px 0 4px 0;padding:4px 6px;border-radius:4px;text-align:center;font:bold 13px/18px Arial,Helvetica,sans-serif;');
+    css(ui.phase, noticeStyle(null, '#e6e6e6', true, HEAD_PX, TEXT_LINE_PX) + 'display:block;');
     // The FREE HIT link replaces the phase row when a free target is known. It is
     // a plain link: the member clicks it himself, the script never does.
     ui.freeLink = mark(el('a', ''), 'freehit');
     ui.freeLink.target = '_blank';
     ui.freeLink.rel = 'noopener';
-    css(ui.freeLink, 'all:initial;display:none;box-sizing:border-box;min-height:' + BUTTON_MIN_H + 'px;margin:2px 0 4px 0;padding:10px 6px;background:#c0392b;color:#ffffff;' +
-      'border:2px solid #ffffff;border-radius:4px;text-align:center;text-decoration:none;cursor:pointer;font:bold 13px/18px Arial,Helvetica,sans-serif;');
+    css(ui.freeLink, noticeStyle('#c0392b', '#ffffff', true, HEAD_PX, TEXT_LINE_PX) + 'border:2px solid #ffffff;text-decoration:none;cursor:pointer;');
     // 0.6.0: the hitter banner (top of the body), the place line and the now-first line (above the queue)
     ui.hitterBanner = mark(el('div', ''), 'hitterbanner');
-    css(ui.hitterBanner, 'all:initial;display:none;box-sizing:border-box;min-height:28px;margin:0 0 4px 0;padding:5px 6px;border-radius:4px;text-align:center;background:' + HITTER_COLOR + ';color:#000000;font:bold 14px/18px Arial,Helvetica,sans-serif;');
+    css(ui.hitterBanner, noticeStyle(HITTER_COLOR, '#000000', true, TEXT_PX, TEXT_LINE_PX));
     // 0.7.0: the button of the hitter (right under the banner) and the row that says who released the hit
     ui.failBtn = mark(makeButton(FAIL_BTN_TEXT, FAIL_BTN_BG, '#ffffff', onFailClick), 'failbtn');
+    ui.failBtn.style.marginBottom = BTN_GAP_PX + 'px';
     ui.released = mark(el('div', ''), 'released');
-    css(ui.released, 'all:initial;display:none;box-sizing:border-box;margin:2px 0 4px 0;padding:4px 6px;border-radius:4px;text-align:center;background:' + REL_BG + ';color:#ffffff;font:bold 13px/18px Arial,Helvetica,sans-serif;');
+    css(ui.released, noticeStyle(REL_BG, '#ffffff', true, TEXT_PX, TEXT_LINE_PX));
     ui.movedFirst = mark(el('div', MOVED_TEXT), 'movedfirst');
-    css(ui.movedFirst, 'all:initial;display:none;box-sizing:border-box;margin:2px 0 4px 0;padding:4px 6px;border-radius:4px;text-align:center;background:' + MOVED_COLOR + ';color:#ffffff;font:bold 13px/18px Arial,Helvetica,sans-serif;');
+    css(ui.movedFirst, noticeStyle(MOVED_COLOR, '#ffffff', true, TEXT_PX, TEXT_LINE_PX));
     ui.place = mark(el('div', ''), 'place');
-    css(ui.place, 'all:initial;display:none;box-sizing:border-box;margin:0 0 2px 0;color:#bfe3ff;font:bold 13px/18px Arial,Helvetica,sans-serif;');
+    css(ui.place, 'all:initial;display:none;box-sizing:border-box;margin:0 0 2px 0;color:#bfe3ff;' + fnt(true, TEXT_PX, TEXT_LINE_PX));
     ui.queue = mark(el('div'), 'queue');
-    css(ui.queue, 'all:initial;display:block;color:#e6e6e6;font:13px/18px Arial,Helvetica,sans-serif;');
+    css(ui.queue, 'all:initial;display:block;color:#e6e6e6;' + fnt(false, TEXT_PX, TEXT_LINE_PX));
     ui.msg = mark(el('div', ''), 'msg');
-    css(ui.msg, 'all:initial;display:block;margin-top:4px;color:#ffd84d;font:12px/16px Arial,Helvetica,sans-serif;');
+    css(ui.msg, 'all:initial;display:block;margin-top:' + BTN_GAP_PX + 'px;color:#ffd84d;' + fnt(false, TEXT_PX, TEXT_LINE_PX));
 
     // PDA 0.7.1: the debug row. Hidden unless debug is on (tap the title five times).
     ui.debugRow = mark(el('div', ''), 'debugrow');
-    css(ui.debugRow, 'all:initial;display:none;box-sizing:border-box;margin-top:6px;padding:3px 4px;border:1px dashed #666b73;border-radius:3px;color:#9aa0a6;font:11px/14px Consolas,monospace;word-break:break-all;');
+    css(ui.debugRow, 'all:initial;display:none;box-sizing:border-box;margin-top:' + PAD_PX + 'px;padding:2px 4px;border:1px dashed #666b73;border-radius:3px;color:#9aa0a6;' + fnt(false, DEBUG_PX, DEBUG_LINE_PX, MONO) + 'word-break:break-all;');
 
     ui.keyPanel = buildKeyPanel();
 
@@ -2081,9 +2129,24 @@
       session = null;
       setLocalMsg('Key removed.');
     }), 'forget');
-    ui.rejoinBtn = mark(makeButton('Rejoin after my hit: OFF', '#4a4f57', '#ffffff', onRejoinClick), 'rejoin');
+    ui.rejoinBtn = mark(makeButton('Rejoin: OFF', '#4a4f57', '#ffffff', onRejoinClick), 'rejoin');
     ui.targetsBtn = mark(makeButton('Targets', '#6a4fb3', '#ffffff', onTargetsClick), 'targetsbtn');
     ui.targets = buildTargetsPanel();
+
+    // The buttons two by two. Row 1: Join queue or Leave queue, and Im here. Row 2:
+    // Rejoin and Targets. Row 3: Watch / Stop (half the row when it is Stop). Row 4:
+    // Forget key. A button that is not shown leaves no hole: its neighbour takes the row.
+    ui.row1 = buttonRow('row1');
+    ui.row1.appendChild(ui.joinBtn);
+    ui.row1.appendChild(ui.leaveBtn);
+    ui.row1.appendChild(ui.hereBtn);
+    ui.row2 = buttonRow('row2');
+    ui.row2.appendChild(ui.rejoinBtn);
+    ui.row2.appendChild(ui.targetsBtn);
+    ui.row3 = buttonRow('row3');
+    ui.row3.appendChild(ui.watchBtn);
+    ui.row4 = buttonRow('row4');
+    ui.row4.appendChild(ui.forgetBtn);
 
     ui.body.appendChild(ui.hitterBanner);
     ui.body.appendChild(ui.failBtn);
@@ -2098,14 +2161,11 @@
     ui.body.appendChild(ui.queue);
     ui.body.appendChild(ui.msg);
     ui.body.appendChild(ui.keyPanel.wrap);
-    ui.body.appendChild(ui.watchBtn);
-    ui.body.appendChild(ui.joinBtn);
-    ui.body.appendChild(ui.leaveBtn);
-    ui.body.appendChild(ui.rejoinBtn);
-    ui.body.appendChild(ui.hereBtn);
-    ui.body.appendChild(ui.forgetBtn);
-    ui.body.appendChild(ui.targetsBtn);
+    ui.body.appendChild(ui.row1);
+    ui.body.appendChild(ui.row2);
     ui.body.appendChild(ui.targets.wrap);
+    ui.body.appendChild(ui.row3);
+    ui.body.appendChild(ui.row4);
     ui.body.appendChild(ui.debugRow);
     ui.box.appendChild(ui.body);
     root.appendChild(ui.box);
@@ -2122,13 +2182,13 @@
   // One minimized row: a label, a name that is cut with ... when it is long, and a suffix.
   function buildMiniRow(markName) {
     var row = mark(el('div'), markName);
-    css(row, 'all:initial;display:flex;box-sizing:border-box;width:100%;color:#e6e6e6;font:12px/16px Arial,Helvetica,sans-serif;');
+    css(row, 'all:initial;display:flex;box-sizing:border-box;width:100%;color:#e6e6e6;' + fnt(false, TEXT_PX, TEXT_LINE_PX));
     var label = el('span', '');
-    css(label, 'all:initial;flex:none;white-space:pre;color:#e6e6e6;font:12px/16px Arial,Helvetica,sans-serif;');
+    css(label, 'all:initial;flex:none;white-space:pre;color:#e6e6e6;' + fnt(false, TEXT_PX, TEXT_LINE_PX));
     var name = el('span', '');
-    css(name, 'all:initial;display:block;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#e6e6e6;font:12px/16px Arial,Helvetica,sans-serif;');
+    css(name, 'all:initial;display:block;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#e6e6e6;' + fnt(false, TEXT_PX, TEXT_LINE_PX));
     var suffix = el('span', '');
-    css(suffix, 'all:initial;flex:none;white-space:pre;color:#e6e6e6;font:12px/16px Arial,Helvetica,sans-serif;');
+    css(suffix, 'all:initial;flex:none;white-space:pre;color:#e6e6e6;' + fnt(false, TEXT_PX, TEXT_LINE_PX));
     row.appendChild(label);
     row.appendChild(name);
     row.appendChild(suffix);
@@ -2146,14 +2206,14 @@
 
   function buildKeyPanel() {
     var wrap = mark(el('div'), 'keypanel');
-    css(wrap, 'all:initial;display:none;margin-top:4px;color:#cfcfcf;font:11px/14px Arial,Helvetica,sans-serif;');
+    css(wrap, 'all:initial;display:none;margin-top:' + BTN_GAP_PX + 'px;color:#cfcfcf;' + fnt(false, TEXT_PX, TEXT_LINE_PX));
 
     // In this order: the link to make a key, the key field with Save key, then the terms of use.
     var link = mark(el('a', 'Create a key for KS Chain Dibs'), 'keylink');
     link.href = KEY_URL;
     link.target = '_blank';
     link.rel = 'noopener';
-    css(link, 'all:initial;display:block;box-sizing:border-box;min-height:' + BUTTON_MIN_H + 'px;margin:0;padding:11px 0;color:#7fb3ff;text-decoration:underline;cursor:pointer;font:14px/18px Arial,Helvetica,sans-serif;');
+    css(link, 'all:initial;display:block;box-sizing:border-box;min-height:' + ROW_MIN_H + 'px;margin:0;padding:' + ((ROW_MIN_H - TEXT_LINE_PX) / 2) + 'px 0;color:#7fb3ff;text-decoration:underline;cursor:pointer;' + fnt(false, TEXT_PX, TEXT_LINE_PX));
     wrap.appendChild(link);
 
     var input = mark(el('input'), 'keyinput');
@@ -2162,7 +2222,7 @@
     input.autocomplete = 'off';
     input.spellcheck = false;
     input.setAttribute('autocapitalize', 'none');
-    css(input, 'all:initial;display:block;box-sizing:border-box;width:100%;height:' + (BUTTON_MIN_H + 4) + 'px;padding:2px 8px;background:#0f1013;color:#ffffff;border:1px solid #666b73;border-radius:4px;font:16px/24px Arial,sans-serif;');
+    css(input, 'all:initial;display:block;box-sizing:border-box;width:100%;height:' + KEYFIELD_H + 'px;padding:2px 6px;background:#0f1013;color:#ffffff;border:1px solid #666b73;border-radius:' + BTN_RADIUS_PX + 'px;' + fnt(false, 13, 20));
     wrap.appendChild(input);
 
     var save = mark(makeButton('Save key', '#3b6fd8', '#ffffff', function () {
@@ -2179,10 +2239,11 @@
       setLocalMsg('Key saved.');
       if (watchOn) { loadNames(); if (isLeader) cycle(); }
     }), 'keysave');
+    save.style.marginTop = BTN_GAP_PX + 'px';
     wrap.appendChild(save);
 
     var heading = mark(el('div', 'Terms of use'), 'tostitle');
-    css(heading, 'all:initial;display:block;margin:10px 0 4px 0;color:#ffffff;font:bold 13px/16px Arial,Helvetica,sans-serif;');
+    css(heading, 'all:initial;display:block;margin:' + PAD_PX + 'px 0 ' + BTN_GAP_PX + 'px 0;color:#ffffff;' + fnt(true, TEXT_PX, TEXT_LINE_PX));
     wrap.appendChild(heading);
 
     var table = mark(el('table'), 'tos');
@@ -2190,9 +2251,9 @@
     for (var i = 0; i < TOS_ROWS.length; i++) {
       var tr = el('tr');
       var th = el('th', TOS_ROWS[i][0]);
-      css(th, 'all:initial;display:table-cell;vertical-align:top;width:70px;padding:2px 4px 2px 0;border-top:1px solid #3a3f45;color:#ffffff;font:bold 10px/13px Arial,Helvetica,sans-serif;text-align:left;');
+      css(th, 'all:initial;display:table-cell;vertical-align:top;width:60px;padding:2px 4px 2px 0;border-top:1px solid #3a3f45;color:#ffffff;' + fnt(true, TOS_PX, TOS_LINE_PX) + 'text-align:left;');
       var td = el('td', TOS_ROWS[i][1]);
-      css(td, 'all:initial;display:table-cell;vertical-align:top;padding:2px 0;border-top:1px solid #3a3f45;color:#cfcfcf;font:10px/13px Arial,Helvetica,sans-serif;');
+      css(td, 'all:initial;display:table-cell;vertical-align:top;padding:2px 0;border-top:1px solid #3a3f45;color:#cfcfcf;' + fnt(false, TOS_PX, TOS_LINE_PX));
       tr.appendChild(th);
       tr.appendChild(td);
       table.appendChild(tr);
@@ -2205,25 +2266,31 @@
   // names (you.canEditTargets).
   function buildTargetsPanel() {
     var wrap = mark(el('div'), 'targetspanel');
-    css(wrap, 'all:initial;display:none;margin-top:4px;color:#cfcfcf;font:11px/14px Arial,Helvetica,sans-serif;');
+    css(wrap, 'all:initial;display:none;margin-top:' + BTN_GAP_PX + 'px;color:#cfcfcf;' + fnt(false, TEXT_PX, TEXT_LINE_PX));
     var intro = el('div', 'Torn IDs of free hit targets, separated by commas or spaces. Up to 10.');
-    css(intro, 'all:initial;display:block;margin-bottom:4px;color:#cfcfcf;font:11px/14px Arial,Helvetica,sans-serif;');
+    css(intro, 'all:initial;display:block;margin-bottom:' + BTN_GAP_PX + 'px;color:#cfcfcf;' + fnt(false, TEXT_PX, TEXT_LINE_PX));
     wrap.appendChild(intro);
 
     var input = mark(el('textarea'), 'targetsinput');
-    input.rows = 3;
+    input.rows = TARGETS_ROWS;
     input.spellcheck = false;
     input.autocomplete = 'off';
-    css(input, 'all:initial;display:block;box-sizing:border-box;width:100%;height:58px;padding:4px 6px;background:#0f1013;color:#ffffff;border:1px solid #666b73;border-radius:4px;font:13px/18px Arial,sans-serif;overflow:auto;');
+    css(input, 'all:initial;display:block;box-sizing:border-box;width:100%;height:' + (TARGETS_ROWS * TEXT_LINE_PX + 8) + 'px;padding:3px 4px;background:#0f1013;color:#ffffff;border:1px solid #666b73;border-radius:' + BTN_RADIUS_PX + 'px;' + fnt(false, TEXT_PX, TEXT_LINE_PX) + 'overflow:auto;');
     wrap.appendChild(input);
 
     var count = mark(el('div', '0 targets on the list'), 'targetscount');
-    css(count, 'all:initial;display:block;margin-top:4px;color:#cfcfcf;font:11px/14px Arial,Helvetica,sans-serif;');
+    css(count, 'all:initial;display:block;margin-top:' + BTN_GAP_PX + 'px;color:#cfcfcf;' + fnt(false, TEXT_PX, TEXT_LINE_PX));
     wrap.appendChild(count);
 
+    // Save targets and Close, two by two.
+    var row = buttonRow('targetsrow');
+    row.style.display = 'flex';
     var save = mark(makeButton('Save targets', '#3b6fd8', '#ffffff', onTargetsSave), 'targetssave');
-    wrap.appendChild(save);
-    return { wrap: wrap, input: input, count: count, save: save };
+    var close = mark(makeButton('Close', '#4a4f57', '#ffffff', onTargetsClose), 'targetsclose');
+    row.appendChild(save);
+    row.appendChild(close);
+    wrap.appendChild(row);
+    return { wrap: wrap, input: input, count: count, save: save, close: close };
   }
 
   function onTargetsClick() {
@@ -2233,6 +2300,13 @@
       var snap = (shared && shared.snap) ? shared.snap : null;
       ui.targets.input.value = snapTargets(snap).join(', ');
     }
+    render();
+  }
+
+  // Close only shuts the panel; nothing is saved or sent.
+  function onTargetsClose() {
+    if (!targetsOpen) return;
+    targetsOpen = false;
     render();
   }
 
@@ -2299,6 +2373,9 @@
       if (ev.button !== undefined && ev.button !== 0) return;
       var from = ui.shown || pos;
       drag = { sx: ev.clientX, sy: ev.clientY, dx: ev.clientX - from.left, dy: ev.clientY - from.top, started: false, onTitle: ev.target === ui.title, id: ev.pointerId };
+      // The title row is only 26 px high: capture the pointer at once, so that a fast mouse
+      // move that leaves the row is still seen (a finger is captured by the browser anyway).
+      try { ui.header.setPointerCapture(ev.pointerId); } catch (e) { /* ignore */ }
     });
     ui.header.addEventListener('pointermove', function (ev) {
       if (!drag || ev.pointerId !== drag.id) return;
@@ -2461,7 +2538,7 @@
     var snap = shared && shared.snap ? shared.snap : null;
     if (!snap || snap.queue.length === 0) {
       var empty = mark(el('div', snap ? 'Queue is empty' : ''), 'qempty');
-      css(empty, 'all:initial;display:block;color:#9aa0a6;font:13px/18px Arial,Helvetica,sans-serif;');
+      css(empty, 'all:initial;display:block;color:#9aa0a6;' + fnt(false, TEXT_PX, TEXT_LINE_PX));
       ui.queue.appendChild(empty);
       return;
     }
@@ -2471,13 +2548,13 @@
     function addRow(index) {
       var q = snap.queue[index];
       var row = mark(el('div'), 'qrow');
-      css(row, 'all:initial;display:flex;justify-content:space-between;color:#e6e6e6;font:13px/18px Arial,Helvetica,sans-serif;');
+      css(row, 'all:initial;display:flex;justify-content:space-between;color:#e6e6e6;' + fnt(false, TEXT_PX, TEXT_LINE_PX));
       var isOwner = ownerId !== null && q.tornId === ownerId;
       var label = mark(el('span', (index + 1) + '. ' + nameOf(q.tornId) + (isOwner ? ' (hitter)' : '')), 'qname');
-      css(label, 'all:initial;color:' + (isOwner ? '#ffd84d' : '#e6e6e6') + ';font:' + (isOwner ? 'bold ' : '') + '13px/18px Arial,Helvetica,sans-serif;');
+      css(label, 'all:initial;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:' + (isOwner ? '#ffd84d' : '#e6e6e6') + ';' + fnt(isOwner, TEXT_PX, TEXT_LINE_PX));
       var tick = el('span', q.confirmed ? '\u2713' : '');
       mark(tick, 'qtick');
-      css(tick, 'all:initial;color:#3ddc84;font:bold 14px/18px Arial,Helvetica,sans-serif;');
+      css(tick, 'all:initial;color:#3ddc84;' + fnt(true, HEAD_PX, TEXT_LINE_PX));
       row.appendChild(label);
       row.appendChild(tick);
       ui.queue.appendChild(row);
@@ -2503,12 +2580,13 @@
       // "you" is only added when he is hidden himself and is not the hitter shown above.
       if (myPlace !== null && myPlace > shown && myPlace !== ownerIndex + 1) text += ' (you: #' + myPlace + ')';
       var m = mark(el('div', text), 'qmore');
-      css(m, 'all:initial;display:block;color:#9aa0a6;font:12px/16px Arial,Helvetica,sans-serif;');
+      css(m, 'all:initial;display:block;color:#9aa0a6;' + fnt(false, TEXT_PX, TEXT_LINE_PX));
       ui.queue.appendChild(m);
     }
   }
 
   function show(node, visible) { node.style.display = visible ? 'block' : 'none'; }
+  function showRow(node, visible) { node.style.display = visible ? 'flex' : 'none'; }
 
   function render() {
     if (!ui.host) return;
@@ -2547,6 +2625,7 @@
     // A bonus hit next: the small timer says BONUS in gold, nothing else changes when minimized.
     ui.mini.textContent = (watchOn && d.remaining !== null) ? ((d.bonus !== null ? 'BONUS ' : '') + d.timer) : '';
     ui.mini.style.color = (watchOn && d.bonus !== null) ? BONUS_COLOR : '#bdbdbd';
+    ui.mini.style.fontSize = ((watchOn && d.bonus !== null) ? MINI_BONUS_PX : TEXT_PX) + 'px';
     ui.minBtn.textContent = minimized ? '+' : '-';
     ui.minBtn.title = minimized ? 'Restore' : 'Minimize';
     show(ui.body, !minimized);
@@ -2590,6 +2669,12 @@
       show(ui.targetsBtn, false);
       show(ui.targets.wrap, false);
       show(ui.watchBtn, true);
+      // Watch is alone and takes the whole row; Forget key has the row under it.
+      showRow(ui.row1, false);
+      showRow(ui.row2, false);
+      showRow(ui.row3, true);
+      showRow(ui.row4, hasKey);
+      ui.watchBtn.style.flex = '1 1 0';
       return;
     }
 
@@ -2655,12 +2740,17 @@
     show(ui.keyPanel.wrap, !hasKey || (shared && (shared.freeKeyBad === true || shared.hitKeyBad === true || shared.abilityKeyBad === true)));
     show(ui.forgetBtn, false);
     show(ui.watchBtn, true);
+    // Stop takes the left half of its row.
+    showRow(ui.row3, true);
+    showRow(ui.row4, false);
+    ui.watchBtn.style.flex = '0 0 calc(50% - ' + (BTN_GAP_PX / 2) + 'px)';
 
     // Targets: only for the Torn IDs the server names.
     var canEdit = !!(snap && snap.you.canEditTargets === true);
     show(ui.targetsBtn, hasKey && canEdit);
     var panelOpen = hasKey && canEdit && targetsOpen;
     show(ui.targets.wrap, panelOpen);
+    showRow(ui.row2, hasKey);
     if (panelOpen) {
       var countText = snapTargets(snap).length + ' targets on the list';
       if (ui.targets.count.textContent !== countText) ui.targets.count.textContent = countText;
@@ -2670,6 +2760,7 @@
     var inQ = !!(snap && snap.you.inQueue);
     show(ui.joinBtn, hasKey && !inQ);
     show(ui.leaveBtn, hasKey && inQ);
+    showRow(ui.row1, hasKey);
     ui.joinBtn.disabled = !connected;
     ui.leaveBtn.disabled = !connected;
 
@@ -2677,7 +2768,7 @@
     show(ui.rejoinBtn, hasKey);
     if (hasKey) {
       var rejoinOn = getRejoin();
-      var rejoinText = 'Rejoin after my hit: ' + (rejoinOn ? 'ON' : 'OFF');
+      var rejoinText = 'Rejoin: ' + (rejoinOn ? 'ON' : 'OFF');
       if (ui.rejoinBtn.textContent !== rejoinText) ui.rejoinBtn.textContent = rejoinText;
       ui.rejoinBtn.style.background = rejoinOn ? '#2e8b57' : '#4a4f57';
       ui.rejoinBtn.setAttribute('data-rejoin', rejoinOn ? 'on' : 'off');
