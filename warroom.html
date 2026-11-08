@@ -621,6 +621,40 @@
   }
   #warPanel .warbar #warLead[hidden] { display: none; }
 
+  /* ---- R30 (2026-11): both factions' total score above the war line ----
+     As on Torn's own war page: our name and total on the left in the good colour, theirs on the right in
+     the bad colour, big mono figures written as Torn writes them (2,567). Read in the same reading of the
+     war as the lead, so it is never fresher or older than the line under it. While the board shows, the
+     small "2567 - 1841" in the war line is hidden: the same figures are not shown twice. On a phone the
+     board is one short line, so the sticky head grows by about 26 px only. */
+  #warBoard {
+    display: flex; align-items: center; justify-content: center; gap: 10px 22px;
+    padding: 12px 18px 10px; border-bottom: 1px solid var(--line);
+  }
+  #warBoard[hidden] { display: none; }
+  #warBoard .side { display: flex; align-items: baseline; gap: 12px; min-width: 0; flex: 1 1 0; }
+  #warBoard .side.us { justify-content: flex-end; }
+  #warBoard .side.them { justify-content: flex-start; }
+  #warBoard .bname {
+    font-family: var(--display); font-weight: 600; font-size: 18px; letter-spacing: .02em;
+    color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+  }
+  #warBoard .bscore {
+    font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 600; font-size: 34px;
+    line-height: 1; white-space: nowrap; flex: none;
+  }
+  #warBoard .us .bscore { color: var(--good); }
+  #warBoard .them .bscore { color: var(--bad); }
+  #warBoard .bvs { font-family: var(--display); font-weight: 600; font-size: 14px; color: var(--faint); text-transform: uppercase; flex: none; }
+  #warPanel.board-on .warbar .score { display: none; }
+  @media (max-width: 700px) {
+    #warBoard { gap: 8px; padding: 6px 10px 5px; }
+    #warBoard .side { gap: 6px; }
+    #warBoard .bname { font-size: 12px; }
+    #warBoard .bscore { font-size: 18px; }
+    #warBoard .bvs { font-size: 11px; }
+  }
+
   /* ---- R27 (2026-11): the Filters button and the sort and filter panel ----
      The panel sits straight under the head of the list and is closed on every page load. It only hides
      rows and picks the sort; the table is drawn as before. Its colours are tokens of their own, as in R25:
@@ -910,7 +944,8 @@
             (Behind when they are ahead) and the figure after the slash is the lead Torn asks for
             to win the war; before the war it shows the target alone. The target is read from Torn
             with the score, so both are updated every two minutes, and nothing is shown when Torn
-            did not give them.</dd>
+            did not give them. Above the war line both factions' names and total scores are shown,
+            ours on the left, from the same reading.</dd>
           <dt>Filters</dt>
           <dd>The Filters button opens a panel with the sort (the same choice as the column headings;
             Last action with the arrow up puts the most recent first), the activity and the status you
@@ -951,6 +986,11 @@
   </section>
 
   <section class="panel" id="warPanel" hidden>
+    <div id="warBoard" hidden title="Total score of each faction, read from Torn every 2 minutes.">
+      <div class="side us"><span class="bname" id="boardUsName"></span><span class="bscore" id="boardUs"></span></div>
+      <span class="bvs">vs</span>
+      <div class="side them"><span class="bscore" id="boardThem"></span><span class="bname" id="boardThemName"></span></div>
+    </div>
     <div class="warbar">
       <span class="who" id="warWho">&mdash;</span>
       <span class="meta" id="warMeta"></span>
@@ -1767,6 +1807,7 @@
    'ffKey','toggleFfKey','forgetFfKey','ffSaid','ffBar',
    'sessionSaid','sessionState','sessionRetry',
    'warPanel','warWho','warMeta','warClock','warScore','warLead',
+   'warBoard','boardUsName','boardUs','boardThemName','boardThem',
    'targetPanel','targetHint','staleBar','targetHost','callableBtn','honorBtn','advHonors','themeBtn',
    'filterBtn','filterPanel','fSort','fDir','fDirNote','fShowing','fHidden','fPaused','fReset',
    'simBanner','simRealWar','simWireWar','simResetBar','simResetBtn','simResetNote',
@@ -5451,6 +5492,20 @@
     el.warPanel.classList.toggle('lead-on', !!label);
   }
 
+  // R30. Both factions' total score above the war line, from the same reading of the war as the lead.
+  // Shown only when Torn gave a real score for both sides - never a guessed or zeroed figure.
+  // Called by renderWar after every reading of the war; it asks Torn nothing and keeps nothing.
+  function renderWarBoard(war) {
+    var on = !el.warPanel.hidden && !!war && !!war.scoresKnown;
+    var set = function (node, value) { if (node.textContent !== value) node.textContent = value; };
+    set(el.boardUsName, on ? war.ourName : '');
+    set(el.boardUs, on ? groupDigits(war.ourScore) : '');
+    set(el.boardThemName, on ? war.opponentName : '');
+    set(el.boardThem, on ? groupDigits(war.theirScore) : '');
+    el.warBoard.hidden = !on;
+    el.warPanel.classList.toggle('board-on', on);
+  }
+
   function renderWar() {
     var identity = Roster.identity();
     var war = Roster.war();
@@ -5469,6 +5524,7 @@
       el.warScore.textContent = '';
       renderWarClock();
       renderWarLead(null);
+      renderWarBoard(null);
       return;
     }
     el.warWho.textContent = 'vs ' + war.opponentName;
@@ -5480,6 +5536,7 @@
     el.warScore.textContent = war.ourScore + ' – ' + war.theirScore;
     renderWarClock();
     renderWarLead(war);
+    renderWarBoard(war);
   }
 
   function renderAdvanced() {
