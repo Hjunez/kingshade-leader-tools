@@ -655,6 +655,32 @@
     #warBoard .bvs { font-size: 11px; }
   }
 
+  /* ---- R31 (2026-11): pace under the totals and a forecast in the Lead box ----
+     The pace is the points a faction has scored per hour over the last hour of readings ("+420/h"), written
+     small under each big figure in the figure's own colour but a little softer: weight 500 and its own two
+     tokens (--r31-good, --r31-bad), which give 4.5:1 or better on the panel in both themes. On a phone it is
+     written straight after the figure on the same line and smaller, so the board does not grow. Hidden until
+     it is known (renderWarBoard sets [hidden]). In the Lead box the forecast follows the lead text and is
+     "closing" in the warning colour when the other faction is gaining. */
+  #warPanel { --r31-good: #2f7a5f; --r31-bad: #a8403b; }
+  :root:not([data-theme="light"]) #warPanel { --r31-good: #4fa081; --r31-bad: #d77c75; }
+  #warBoard .bnum { flex: none; display: flex; flex-direction: column; align-items: flex-start; }
+  #warBoard .us .bnum { align-items: flex-end; }
+  #warBoard .bpace {
+    font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 500; font-size: 12px;
+    line-height: 1.2; margin-top: 4px; white-space: nowrap;
+  }
+  #warBoard .us .bpace { color: var(--r31-good); }
+  #warBoard .them .bpace { color: var(--r31-bad); }
+  #warBoard .bpace[hidden] { display: none; }
+  #warLead .lp { white-space: nowrap; }
+  #warLead .lp.closing { color: var(--warn); }
+  #warLead .lp[hidden] { display: none; }
+  @media (max-width: 700px) {
+    #warBoard .bnum, #warBoard .us .bnum { flex-direction: row; align-items: baseline; gap: 4px; }
+    #warBoard .bpace { font-size: 10px; line-height: 1; margin-top: 0; }
+  }
+
   /* ---- R27 (2026-11): the Filters button and the sort and filter panel ----
      The panel sits straight under the head of the list and is closed on every page load. It only hides
      rows and picks the sort; the table is drawn as before. Its colours are tokens of their own, as in R25:
@@ -908,7 +934,9 @@
             list by is kept there too, and so are your filters (activity, status, ranges and visible
             columns) once you have changed one; Reset filters removes them. For the war that is running, the honor number of each player on
             the other side is kept there as well, and removed when the war is over or when you press
-            Forget key. Your choice for Honor bars is kept there as well, once you have
+            Forget key. For the war that is running, the last hour of score readings behind the pace
+            (the time of each reading and the two total scores) is kept there too, so a reload does
+            not start over, and removed when the war is over. Your choice for Honor bars is kept there as well, once you have
             pressed that button. Your choice between the dark and the light theme is kept there as
             well, once you have pressed that button. Nothing else &mdash; and not the sign-in slip. Each key has
             its own Forget button above.</dd>
@@ -945,7 +973,11 @@
             to win the war; before the war it shows the target alone. The target is read from Torn
             with the score, so both are updated every two minutes, and nothing is shown when Torn
             did not give them. Above the war line both factions' names and total scores are shown,
-            ours on the left, from the same reading.</dd>
+            ours on the left, from the same reading. Under each total, the pace is the points that
+            faction has scored per hour over the last hour of readings; it shows once there are about
+            ten minutes of readings, and the forecast after
+            Lead is the rough time until the lead reaches the target if both factions keep that pace
+            (closing means the other faction is gaining).</dd>
           <dt>Filters</dt>
           <dd>The Filters button opens a panel with the sort (the same choice as the column headings;
             Last action with the arrow up puts the most recent first), the activity and the status you
@@ -986,17 +1018,17 @@
   </section>
 
   <section class="panel" id="warPanel" hidden>
-    <div id="warBoard" hidden title="Total score of each faction, read from Torn every 2 minutes.">
-      <div class="side us"><span class="bname" id="boardUsName"></span><span class="bscore" id="boardUs"></span></div>
+    <div id="warBoard" hidden title="Total score of each faction, read from Torn every 2 minutes. Pace = points per hour over the last hour of readings.">
+      <div class="side us"><span class="bname" id="boardUsName"></span><span class="bnum"><span class="bscore" id="boardUs"></span><span class="bpace" id="paceUs" hidden></span></span></div>
       <span class="bvs">vs</span>
-      <div class="side them"><span class="bscore" id="boardThem"></span><span class="bname" id="boardThemName"></span></div>
+      <div class="side them"><span class="bnum"><span class="bscore" id="boardThem"></span><span class="bpace" id="paceThem" hidden></span></span><span class="bname" id="boardThemName"></span></div>
     </div>
     <div class="warbar">
       <span class="who" id="warWho">&mdash;</span>
       <span class="meta" id="warMeta"></span>
       <span class="clock" id="warClock"></span>
       <span class="meta score" id="warScore"></span>
-      <span id="warLead" hidden><span class="lt"></span><span class="lbar" aria-hidden="true"><span class="lfill"></span></span></span>
+      <span id="warLead" hidden><span class="lt"></span><span class="lp" hidden></span><span class="lbar" aria-hidden="true"><span class="lfill"></span></span></span>
     </div>
   </section>
 
@@ -1807,7 +1839,7 @@
    'ffKey','toggleFfKey','forgetFfKey','ffSaid','ffBar',
    'sessionSaid','sessionState','sessionRetry',
    'warPanel','warWho','warMeta','warClock','warScore','warLead',
-   'warBoard','boardUsName','boardUs','boardThemName','boardThem',
+   'warBoard','boardUsName','boardUs','boardThemName','boardThem','paceUs','paceThem',
    'targetPanel','targetHint','staleBar','targetHost','callableBtn','honorBtn','advHonors','themeBtn',
    'filterBtn','filterPanel','fSort','fDir','fDirNote','fShowing','fHidden','fPaused','fReset',
    'simBanner','simRealWar','simWireWar','simResetBar','simResetBtn','simResetNote',
@@ -2043,6 +2075,12 @@
         theirScore: Number(theirs && theirs.score) || 0,
         target: target,
         scoresKnown: scoreKnown(ours) && scoreKnown(theirs),
+        // R31. Torn's second of this reading (the pace in the war board is counted on it), the device moment it was
+        // taken and whether the second is Torn's own. A reading made before the Torn clock was measured is told on
+        // that clock afterwards (Pace.observe), never on the device clock alone.
+        readAt: now,
+        readMs: nowMs(),
+        readTorn: Number.isSafeInteger(responseTimestamp) && responseTimestamp > 0,
         start: start,
         end: end,
         state: state
@@ -5462,12 +5500,158 @@
   // R29. 1234567 -> "1,234,567", as Torn writes its numbers. Whole, non-negative figures only.
   function groupDigits(n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 
+  // =========================================================================
+  // R31. Pace and forecast. Built only from the readings of the war the page already makes
+  // (every two minutes); it asks Torn nothing and starts no timer.
+  //
+  //   - Each reading of a live war with real scores on both sides is kept: Torn's second of the
+  //     reading (war.readAt) and the two scores. Only the last hour of them, at most
+  //     PACE_MAX_READINGS. They are also kept in this browser under PACE_STORE, for the war
+  //     that is running, so a reload does not start over: the schema version, the war ID and the
+  //     readings, nothing else. Taken in only when all of it is valid; anything else is removed
+  //     and written over. Removed when the war changes, is over, or Torn says there is none.
+  //     With storage blocked everything works in memory, just not across a reload.
+  //   - The pace of a side is (score now - score at the oldest reading) / (seconds between them)
+  //     x 3600. It is shown only when there are PACE_MIN_READINGS readings at least
+  //     PACE_MIN_SPAN_S apart, the newest not older than 3 readings' time on the Torn clock, and
+  //     no score fell inside the window (a fall is a data error). Otherwise nothing is shown.
+  //   - The forecast is the time until the lead reaches the target if both sides keep their pace:
+  //     (target - lead) / (our pace - their pace). Not given when the target is reached, when the
+  //     paces are level, or when it is more than PACE_MAX_FORECAST_H hours away. When they are
+  //     gaining on us it says "closing". The target is Torn's at the latest reading.
+  // =========================================================================
+  var PACE_STORE = 'ks-war-room-pace';
+  var PACE_SCHEMA = 1;
+  var PACE_WINDOW_S = 3600;
+  var PACE_MAX_READINGS = 40;
+  var PACE_MIN_READINGS = 5;
+  var PACE_MIN_SPAN_S = 600;
+  var PACE_MAX_AGE_S = 3 * WAR_POLL_MS / 1000;
+  var PACE_MAX_FORECAST_H = 48;
+  var PHONE_QUERY = '(max-width: 700px)';
+
+  var Pace = (function () {
+    var forWar = '';         // the war ID the readings in memory belong to
+    var readings = [];       // [readAt, ours, theirs], readAt rising
+    var seen = null;         // the reading (war object) last taken in or turned down: each is looked at once
+
+    function whole(value) { return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0; }
+
+    // The kept text as readings, or null when it is not exactly ours for this war.
+    function parse(text, warId) {
+      var data;
+      try { data = JSON.parse(text); } catch (e) { return null; }
+      if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+      if (data.schemaVersion !== PACE_SCHEMA || data.warId !== warId || !Array.isArray(data.readings)) return null;
+      if (data.readings.length > PACE_MAX_READINGS) return null;
+      var out = [], last = 0;
+      for (var i = 0; i < data.readings.length; i++) {
+        var r = data.readings[i];
+        if (!Array.isArray(r) || r.length !== 3 || !whole(r[0]) || !whole(r[1]) || !whole(r[2]) || r[0] <= last) return null;
+        last = r[0];
+        out.push([r[0], r[1], r[2]]);
+      }
+      return out;
+    }
+
+    // Torn's second of a reading, or 0 when it cannot be told yet: Torn's own second, else the device moment of the
+    // reading on the Torn clock this page has measured by now (the first reading comes before the first measure).
+    function readAtOf(war) {
+      if (war.readTorn) return war.readAt;
+      var low = clockLowMs();
+      return low === null ? 0 : Math.floor((war.readMs + low) / 1000);
+    }
+
+    function clearAll(warId) {
+      readings = [];
+      seen = null;
+      forWar = warId;
+      if (read(PACE_STORE)) write(PACE_STORE, '');
+    }
+
+    // Called by renderWar before anything is drawn. war is null when Torn has not answered yet or
+    // said there is no ranked war (then, and only then, what is kept goes).
+    function observe(war) {
+      if (!war) {
+        if (Roster.noWar() && (forWar !== '' || readings.length || read(PACE_STORE))) clearAll('');
+        return;
+      }
+      if (war.state === 'over') {
+        if (forWar !== war.warId || readings.length || read(PACE_STORE)) clearAll(war.warId);
+        return;
+      }
+      if (forWar !== war.warId) {
+        var text = read(PACE_STORE);
+        var parsed = text ? parse(text, war.warId) : null;
+        forWar = war.warId;
+        readings = parsed || [];
+        if (text && !parsed) write(PACE_STORE, '');
+      }
+      if (war === seen || war.state !== 'live' || !war.scoresKnown) return;
+      var at = readAtOf(war);
+      if (!whole(at) || at <= 0) return;
+      // The war object is redrawn every few seconds until the next reading; its second is told once, so that a
+      // finer Torn clock later on cannot make one reading into two.
+      seen = war;
+      var last = readings.length ? readings[readings.length - 1] : null;
+      // A reading that is older than the newest kept one means the clock went back (or what was kept came from
+      // ahead of it): that cannot be right, so start over from this reading.
+      if (last && at < last[0]) { readings = []; last = null; }
+      if (last && at <= last[0]) return;
+      readings.push([at, Math.round(war.ourScore), Math.round(war.theirScore)]);
+      var cutoff = at - PACE_WINDOW_S;
+      while (readings.length && readings[0][0] < cutoff) readings.shift();
+      while (readings.length > PACE_MAX_READINGS) readings.shift();
+      write(PACE_STORE, JSON.stringify({ schemaVersion: PACE_SCHEMA, warId: war.warId, readings: readings }));
+    }
+
+    // { us, them } in points per hour, whole numbers, or null while it has to stay hidden.
+    function rates(war) {
+      if (!war || war.state !== 'live' || !war.scoresKnown || forWar !== war.warId) return null;
+      if (readings.length < PACE_MIN_READINGS) return null;
+      var first = readings[0], last = readings[readings.length - 1];
+      var span = last[0] - first[0];
+      if (span < PACE_MIN_SPAN_S) return null;
+      if (Math.floor(getTornNowMs() / 1000) - last[0] > PACE_MAX_AGE_S) return null;
+      for (var i = 1; i < readings.length; i++) {
+        if (readings[i][1] < readings[i - 1][1] || readings[i][2] < readings[i - 1][2]) return null;
+      }
+      return { us: Math.round((last[1] - first[1]) / span * 3600), them: Math.round((last[2] - first[2]) / span * 3600) };
+    }
+
+    // "~45m", "~3h 10m"; on a phone whole hours only ("~3h").
+    function duration(hours, phone) {
+      var minutes = Math.max(1, Math.round(hours * 60));
+      if (minutes < 60) return '~' + minutes + 'm';
+      if (phone) return '~' + Math.round(minutes / 60) + 'h';
+      return '~' + Math.floor(minutes / 60) + 'h ' + (minutes % 60) + 'm';
+    }
+
+    // { text, closing } for the Lead box, or null for nothing.
+    function forecast(war) {
+      var r = rates(war);
+      if (!r || !war.target) return null;
+      var lead = Math.round(war.ourScore - war.theirScore);
+      if (lead >= war.target) return null;
+      var d = r.us - r.them;
+      if (d < 0) return { text: ' · closing', closing: true };
+      if (d === 0) return null;
+      var hours = (war.target - lead) / d;
+      if (hours > PACE_MAX_FORECAST_H) return null;
+      var phone = !!(window.matchMedia && window.matchMedia(PHONE_QUERY).matches);
+      return { text: ' · ' + duration(hours, phone), closing: false };
+    }
+
+    return { observe: observe, rates: rates, forecast: forecast };
+  })();
+
   // R29. The lead in the war line. Before the war: "Target 5,900". Live or over: "Lead 1,234 / 5,900", or
   // "Behind 1,234 / 5,900" when they lead, with a bar (wide screens only) filled to lead / target. Without a
   // target, or without a real score for both sides, the span is empty and hidden - never a guessed figure.
+  // R31: while the pace is known and the war is live, the forecast follows the text (see Pace).
   // Called by renderWar after every reading of the war; it asks Torn nothing and keeps nothing.
   function renderWarLead(war) {
-    var label = '', side = '', title = '', pct = 0, bar = false;
+    var label = '', side = '', title = '', pct = 0, bar = false, plan = null;
     if (!el.warPanel.hidden && war && war.target) {
       title = 'Lead needed to win: ' + groupDigits(war.target) + '. Read from Torn every ' + (WAR_POLL_MS / 60000) + ' minutes.';
       if (war.state === 'prewar') {
@@ -5479,11 +5663,17 @@
         side = lead > 0 ? 'ahead' : (lead < 0 ? 'behind' : 'even');
         pct = lead > 0 ? Math.min(lead / war.target, 1) * 100 : 0;
         bar = true;
+        plan = Pace.forecast(war);
+        if (plan) title += ' Forecast: the rough time until the lead reaches it if both factions keep their pace of the last hour.';
       }
     }
     var parts = el.warLead.children;
     if (parts[0].textContent !== label) parts[0].textContent = label;
-    var fill = parts[1].firstElementChild;
+    var forecastText = plan ? plan.text : '';
+    if (parts[1].textContent !== forecastText) parts[1].textContent = forecastText;
+    parts[1].className = plan && plan.closing ? 'lp closing' : 'lp';
+    parts[1].hidden = !plan;
+    var fill = parts[2].firstElementChild;
     var width = bar ? pct.toFixed(2) + '%' : '0%';
     if (fill.style.width !== width) fill.style.width = width;
     el.warLead.className = label ? side + (bar ? '' : ' nobar') : '';
@@ -5502,6 +5692,14 @@
     set(el.boardUs, on ? groupDigits(war.ourScore) : '');
     set(el.boardThemName, on ? war.opponentName : '');
     set(el.boardThem, on ? groupDigits(war.theirScore) : '');
+    // R31. The pace under each total, once it is known (see Pace); otherwise the line is hidden.
+    var rates = on ? Pace.rates(war) : null;
+    var setPace = function (node, value) {
+      set(node, value === null ? '' : '+' + groupDigits(value) + '/h');
+      node.hidden = value === null;
+    };
+    setPace(el.paceUs, rates ? rates.us : null);
+    setPace(el.paceThem, rates ? rates.them : null);
     el.warBoard.hidden = !on;
     el.warPanel.classList.toggle('board-on', on);
   }
@@ -5517,6 +5715,7 @@
     }
     el.warPanel.hidden = !identity;
     if (!identity) return;
+    Pace.observe(war);   // R31: the reading goes into the pace before anything is drawn
     if (!war) {
       el.warWho.textContent = 'No Ranked War running';
       el.warMeta.textContent = 'Torn reports no ranked war for this faction right now, so there is ' +
