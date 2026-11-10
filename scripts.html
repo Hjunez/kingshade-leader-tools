@@ -351,13 +351,13 @@
       <div class="card">
         <span class="tag">PC</span>
         <span class="name">KS Torn War Dibs</span>
-        <span class="ver">Version 1.1.19</span>
+        <span class="ver">Version 2.0.0</span>
         <span class="what">Shared DIBS for ranked war, drawn straight into Torn's own Attack column.
           One target, one caller, no double hits. The PC and Torn PDA versions share the same DIBS
           through the faction's own KS War Room server.</span>
         <div class="facts">
           <div class="row"><span class="k">Runs on</span><span class="v">Torn faction pages</span></div>
-          <div class="row"><span class="k">Network</span><span class="v"><code>api.torn.com</code>, <code>ffscouter.com</code> (FF and Est only) and the KS War Room server <code>ks-war-room-claims.hans-viklund.workers.dev</code> (DIBS, and Share with KS if you turn it on). Nothing else.</span></div>
+          <div class="row"><span class="k">Network</span><span class="v"><code>api.torn.com</code>, <code>ffscouter.com</code> (FF and Est only) and the KS War Room server <code>warroom.kingshadeprotocol.com</code> (DIBS, and Share with KS if you turn it on). Nothing else.</span></div>
           <div class="row"><span class="k">Stores</span><span class="v">Your keys (encrypted) and settings in your own browser. Your Torn key is sent to the KS War Room server only to sign you in; the server asks Torn who you are and does not store the key. The server keeps the claims (target, your Torn ID, times) and deletes them when the war has been untouched for 12 hours. Share with KS is off by default; when you turn it on, your own battle stats (strength, defense, speed, dexterity, total) and your Torn ID go to the KS War Room server every 6 hours while your own war page is open, are used only for the faction's stat estimates and are never shown to anyone.</span></div>
           <div class="row"><span class="k">Torn key</span><span class="v">Yes. Faction members and wars, user basic and profile, and user battlestats (used only by Share with KS).</span></div>
         </div>
@@ -409,14 +409,14 @@
       <div class="card">
         <span class="tag">PC</span>
         <span class="name">KS Chain Dibs</span>
-        <span class="ver">Version 0.7.1</span>
+        <span class="ver">Version 0.7.3</span>
         <span class="what">A small chain window on every Torn page: the chain timer, a queue for the next hit
           and the Im here rule, so the chain does not break. Only the member who made the hit leaves the queue.
           When anybody may hit, FREE HIT links to a free target, and if the hitter fails his attack one button
           lets everybody hit at once. For members of PoIitically Incorrect only.</span>
         <div class="facts">
           <div class="row"><span class="k">Runs on</span><span class="v">Any Torn page (a small window, top left)</span></div>
-          <div class="row"><span class="k">Network</span><span class="v"><code>api.torn.com</code> and the KS War Room server <code>ks-war-room-claims.hans-viklund.workers.dev</code>. Nothing else, and no requests to torn.com pages.</span></div>
+          <div class="row"><span class="k">Network</span><span class="v"><code>api.torn.com</code> and the KS War Room server <code>warroom.kingshadeprotocol.com</code>. Nothing else, and no requests to torn.com pages.</span></div>
           <div class="row"><span class="k">Reads</span><span class="v">The chain bar in Torn's side menu (hits and time left), read only, on the page you have open.</span></div>
           <div class="row"><span class="k">Stores</span><span class="v">Your Torn key in Tampermonkey on this PC. It is sent to the KS War Room server once per sign-in to confirm your Torn ID and faction; the server never stores it. The server keeps the chain queue (Torn IDs, join time, Im here, and how many hits in a row you stood first without pressing it), who released the current hit and why, and the latest chain reading, deleted 12 hours after the last change, for one minute the Torn IDs of members it removed as AFK, and the free hit list set by the faction leader. Your own attacks, energy and status are read only to see if you made the chain hit or can hit; only the fact that you made the hit is sent to the server.</span></div>
           <div class="row"><span class="k">Torn key</span><span class="v">Yes. A custom key with user basic, attacks and bars, and faction chain and members. The window has a link that creates exactly that key.</span></div>
@@ -437,13 +437,13 @@
       <div class="card">
         <span class="tag">Torn PDA</span>
         <span class="name">KS Torn War Dibs</span>
-        <span class="ver">Version 1.5.195</span>
+        <span class="ver">Version 2.0.0</span>
         <span class="what">The same shared DIBS as the computer version, built for the phone, so
           the whole faction can call targets from wherever they are playing. The Filters button sorts and filters
           the war list by FF, stats, level, status, activity and last action.</span>
         <div class="facts">
           <div class="row"><span class="k">Runs on</span><span class="v">Torn faction pages</span></div>
-          <div class="row"><span class="k">Network</span><span class="v"><code>api.torn.com</code>, <code>ffscouter.com</code> (FF and Est only) and the KS War Room server <code>ks-war-room-claims.hans-viklund.workers.dev</code> (DIBS, and Share with KS if you turn it on). Nothing else.</span></div>
+          <div class="row"><span class="k">Network</span><span class="v"><code>api.torn.com</code>, <code>ffscouter.com</code> (FF and Est only) and the KS War Room server <code>warroom.kingshadeprotocol.com</code> (DIBS, and Share with KS if you turn it on). Nothing else.</span></div>
           <div class="row"><span class="k">Stores</span><span class="v">Your keys (encrypted) and settings in your own browser. Your Torn key is sent to the KS War Room server only to sign you in; the server asks Torn who you are and does not store the key. The server keeps the claims (target, your Torn ID, times) and deletes them when the war has been untouched for 12 hours. Share with KS is off by default; when you turn it on, your own battle stats (strength, defense, speed, dexterity, total) and your Torn ID go to the KS War Room server every 6 hours while your own war page is open, are used only for the faction's stat estimates and are never shown to anyone.</span></div>
           <div class="row"><span class="k">Torn key</span><span class="v">Yes. Faction members and wars, user basic and profile, and user battlestats (used only by Share with KS).</span></div>
           <div class="row"><span class="k">Read this</span><span class="v">If you were given a test build with <strong>TEST</strong> in its name, turn that one off before you install this. Two copies at once and only one of them draws.</span></div>
@@ -485,13 +485,13 @@
       <div class="card">
         <span class="tag">Torn PDA</span>
         <span class="name">KS Chain Dibs</span>
-        <span class="ver">Version 0.7.2</span>
+        <span class="ver">Version 0.7.3</span>
         <span class="what">The same chain window as the computer version, built for the phone: a small window that fits the
           screen and scrolls, and the key field comes first. Same queue as everybody on the computer.
           For members of PoIitically Incorrect only.</span>
         <div class="facts">
           <div class="row"><span class="k">Runs on</span><span class="v">Any Torn page (a small window, top left)</span></div>
-          <div class="row"><span class="k">Network</span><span class="v"><code>api.torn.com</code> and the KS War Room server <code>ks-war-room-claims.hans-viklund.workers.dev</code>. Nothing else, and no requests to torn.com pages.</span></div>
+          <div class="row"><span class="k">Network</span><span class="v"><code>api.torn.com</code> and the KS War Room server <code>warroom.kingshadeprotocol.com</code>. Nothing else, and no requests to torn.com pages.</span></div>
           <div class="row"><span class="k">Reads</span><span class="v">The chain bar in Torn's side menu (hits and time left), read only, on the page you have open.</span></div>
           <div class="row"><span class="k">Stores</span><span class="v">Your Torn key in Torn PDA on this phone. It is sent to the KS War Room server once per sign-in to confirm your Torn ID and faction; the server never stores it. The server keeps the chain queue (Torn IDs, join time, Im here, and how many hits in a row you stood first without pressing it), who released the current hit and why, and the latest chain reading, deleted 12 hours after the last change, for one minute the Torn IDs of members it removed as AFK, and the free hit list set by the faction leader. Your own attacks, energy and status are read only to see if you made the chain hit or can hit; only the fact that you made the hit is sent to the server.</span></div>
           <div class="row"><span class="k">Torn key</span><span class="v">Yes. A custom key with user basic, attacks and bars, and faction chain and members. The window has a link that creates exactly that key.</span></div>
@@ -546,13 +546,13 @@
       <div class="card">
         <span class="tag">PC + Torn PDA</span>
         <span class="name">KS Scout</span>
-        <span class="ver">Version 0.9.6</span>
+        <span class="ver">Version 0.9.7</span>
         <span class="what">Fair fight and estimated battle stats on the faction lists you open,
           live status with hospital and travel countdowns, filters and sorting.
           The same file works on the computer and on the phone. Never runs on Ranked War lists.</span>
         <div class="facts">
           <div class="row"><span class="k">Runs on</span><span class="v">Torn faction pages, except Ranked War lists</span></div>
-          <div class="row"><span class="k">Network</span><span class="v"><code>api.torn.com</code> (faction basic, and user battlestats for Share with KS), <code>ffscouter.com</code> and, only if you turn Share with KS on, the KS War Room server <code>ks-war-room-claims.hans-viklund.workers.dev</code>. Nothing else.</span></div>
+          <div class="row"><span class="k">Network</span><span class="v"><code>api.torn.com</code> (faction basic, and user battlestats for Share with KS), <code>ffscouter.com</code> and, only if you turn Share with KS on, the KS War Room server <code>warroom.kingshadeprotocol.com</code>. Nothing else.</span></div>
           <div class="row"><span class="k">Stores</span><span class="v">Your key (unencrypted), settings, manual values and a short cache in your own browser or Torn PDA only. Share with KS is off by default; when you turn it on, your own battle stats (strength, defense, speed, dexterity, total) and your Torn ID go to the KS War Room server every 6 hours while the faction page is open, are used only for the faction's stat estimates and are never shown to anyone. Your key is sent there only to sign you in and is not stored.</span></div>
           <div class="row"><span class="k">Torn key</span><span class="v">Yes. A custom key: user <code>basic</code>, <code>battlestats</code>, <code>hof</code>, <code>attacks</code>, <code>personalstats</code> and faction <code>basic</code>, as FFScouter requires. KS Scout itself only reads faction <code>basic</code>, and user <code>battlestats</code> when Share with KS is on.</span></div>
         </div>
