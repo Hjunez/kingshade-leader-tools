@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PDA
 // @namespace    kingshade.torn
-// @version      1.5.195
+// @version      2.0.0
 // @description  Roster-local PDA presentation with v1.5.145 authority and shared-claim safety.
 // @author       Kingshade
 // @match        https://www.torn.com/factions.php*
@@ -9,12 +9,17 @@
 // @grant        GM_xmlhttpRequest
 // @connect      ffscouter.com
 // @connect      api.torn.com
-// @connect      ks-war-room-claims.hans-viklund.workers.dev
+// @connect      warroom.kingshadeprotocol.com
 // @run-at       document-idle
 // @noframes
 // ==/UserScript==
 
 /*
+ * 2.0.0 (2026-11-10): the KS server has its own address.
+ * ONE MAIN CHANGE: the KS server address is now https://warroom.kingshadeprotocol.com.
+ * Nothing else changed. Name, namespace, update address and every storage name
+ * are those of 1.5.195. War Dibs PC and PDA share one version number from 2.0.0.
+ *
  * 1.5.195 (2026-11-05): a Filters panel with sorting and filters on FF, stats,
  * activity, status and last action, like War Room's and FFScouter's. ONE MAIN
  * CHANGE, presentation only. Name, namespace, update address and every
@@ -391,7 +396,7 @@
  * 1.5.186 (2026-10-05): DIBS moves to the KS War Room server.
  * CHANGED
  *   - The claim board, claim and release go to the KS War Room server
- *     (ks-war-room-claims.hans-viklund.workers.dev; POST only, JSON body)
+ *     (warroom.kingshadeprotocol.com; POST only, JSON body)
  *     instead of FFScouter's claim endpoints, which are gone from this file
  *     together with their allowlist. FF/Est still come from FFScouter
  *     get-stats, unchanged. The war on the wire is Torn's ranked war id.
@@ -628,8 +633,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs",
-    version: "1.5.195",
-    instanceKey: "__ksTornWarDibsPdaV15195Test",
+    version: "2.0.0",
+    instanceKey: "__ksTornWarDibsPdaV200Test",
     layerId: "ks-twd-pda-layer",
     rowHostPrefix: "ks-twd-pda-row-",
     panelId: "ks-twd-pda-panel",
@@ -668,7 +673,7 @@
   // the board of the real war on screen. (true is for a test build only.)
   const KS_SERVER_TEST_BUILD = false;
   const KS_SERVER = Object.freeze({
-    origin: "https://ks-war-room-claims.hans-viklund.workers.dev",
+    origin: "https://warroom.kingshadeprotocol.com",
     sessionPath: "/session",
     warOps: Object.freeze(["claims", "claim", "unclaim", "report"]),
     simPrefix: "sim-"
@@ -6348,7 +6353,7 @@
               <strong>FFScouter key/integration:</strong> key stored only locally, encrypted in this browser; sent only to FFScouter. Visible target IDs from the actively viewed war page are sent to FFScouter for FF/Est lookup only.
               <a data-role="ff-terms" target="_blank" rel="noopener noreferrer">FFScouter terms/data policy</a> · <a data-role="ff-privacy" target="_blank" rel="noopener noreferrer">Privacy</a>.
               <br>
-              <strong>KS War Room (shared DIBS):</strong> claim/release data is shared with faction members through the KS War Room server (ks-war-room-claims.hans-viklund.workers.dev). Signing in returns a temporary sign-in token that is kept only in this page's memory and is never stored. Sent to the server: that token, the war ID, the target's Torn ID and the target's hospital end time. Calls: sign in, read the claim board (every 2.5 s on your own war page), claim, release, and a report when a claimed target is back in hospital. Kept on the server: target ID, the claimer's Torn ID, claim time and hospital end time, removed once the war has been untouched for 12 hours.
+              <strong>KS War Room (shared DIBS):</strong> claim/release data is shared with faction members through the KS War Room server (warroom.kingshadeprotocol.com). Signing in returns a temporary sign-in token that is kept only in this page's memory and is never stored. Sent to the server: that token, the war ID, the target's Torn ID and the target's hospital end time. Calls: sign in, read the claim board (every 2.5 s on your own war page), claim, release, and a report when a claimed target is back in hospital. Kept on the server: target ID, the claimer's Torn ID, claim time and hospital end time, removed once the war has been untouched for 12 hours.
               <br>
               <strong>Share with KS (opt-in, off by default):</strong> when on, your own battle stats (strength, defense, speed, dexterity, total) and your Torn ID go to the KS War Room server every 6 hours. The server holds them until the KS server has fetched them (at most 7 days); the KS server keeps them to compute stat estimates for the faction. They are never shown to anyone, inside or outside the faction. Nothing is sent or stored on any server while it is off.
               <br>
