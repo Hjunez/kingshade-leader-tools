@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PC
 // @namespace    kingshade.torn
-// @version      1.1.19
+// @version      2.0.0
 // @downloadURL  https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @description  PC TEST: DIBS as a native roster column beside Torn's Attack cell; FF and Est from FFScouter's get-stats API. War Stuff Enhanced is detected and shown read-only; it never blocks.
@@ -11,12 +11,17 @@
 // @grant        GM_xmlhttpRequest
 // @connect      ffscouter.com
 // @connect      api.torn.com
-// @connect      ks-war-room-claims.hans-viklund.workers.dev
+// @connect      warroom.kingshadeprotocol.com
 // @run-at       document-idle
 // @noframes
 // ==/UserScript==
 
 /*
+ * KS Torn War Dibs PC v2.0.0 (2026-11-10) -- the KS server has its own address.
+ * ONE MAIN CHANGE: the KS server address is now https://warroom.kingshadeprotocol.com.
+ * Nothing else changed. Name, namespace, update address and every storage name
+ * are those of 1.1.19. War Dibs PC and PDA share one version number from 2.0.0.
+ *
  * KS Torn War Dibs PC v1.1.19 (2026-11-08) -- a target in a hospital ABROAD is
  * not DIBS-able. ONE MAIN CHANGE. Name, namespace, update address and every
  * storage name are those of 1.1.18.
@@ -353,7 +358,7 @@
  *
  * ONE MAIN CHANGE: the DIBS transport. The claim board, claim, release and
  * the hospital report go to the KS War Room server
- * (https://ks-war-room-claims.hans-viklund.workers.dev) instead of FFScouter's
+ * (https://warroom.kingshadeprotocol.com) instead of FFScouter's
  * claim endpoints. FF and Est still come from FFScouter's get-stats API,
  * unchanged. Built from the 0.2.0-0.2.2 trial versions of this transport, with
  * everything that existed only for the trial removed. Name, namespace, update
@@ -775,8 +780,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs PC",
-    version: "1.1.19",
-    instanceKey: "__ksTornWarDibsPcV1119",
+    version: "2.0.0",
+    instanceKey: "__ksTornWarDibsPcV200",
     rowHostPrefix: "ks-twd-wse-row-v010-",
     rosterStyleId: "ks-twd-wse-roster-style-v010",
     panelId: "ks-twd-wse-panel",
@@ -896,7 +901,7 @@
   // The KS War Room server (contract: KS War Room 3C rapport avsnitt 10).
   // POST only, JSON body, the sign-in slip in the body field "session".
   const KS_SERVER = Object.freeze({
-    origin: "https://ks-war-room-claims.hans-viklund.workers.dev",
+    origin: "https://warroom.kingshadeprotocol.com",
     sessionPath: "/session",
     warOps: Object.freeze(["claims", "claim", "unclaim", "report"]),
     // Renew the sign-in this long before the server lets it run out.
@@ -6654,7 +6659,7 @@
         <div class="api-policy">
           <strong>Torn API key:</strong> stored only locally, encrypted in this browser; sent to api.torn.com and, when signing in, to the KS War Room server, which asks Torn who the key belongs to and does not store or log it. Purpose: key-owner identity, own-faction Ranked War state, one opponent-members status batch while the roster is visible, and one final target basic check immediately before DIBS, and life of opponents who are about to leave hospital (low-life DIBS), and the names of your own faction's members for the DIBS column (one request at most every 5 minutes, kept in memory only). Required selections: faction → members,wars and user → basic, profile (and battlestats, for Share with KS only).
           <br>
-          <strong>KS War Room (shared DIBS):</strong> the claim board, claim and release go to the KS War Room server (ks-war-room-claims.hans-viklund.workers.dev). Signing in returns a temporary sign-in slip that is held only in this page's memory and is never stored. While your own war roster is visible the claim board is read every 2.5 seconds; when a claimed target is back in hospital its new hospital time is reported so the claim can be released. What is sent: your Torn API key (sign-in only), the war ID, target IDs and hospital times. The server keeps claims (target, your Torn ID, times) for less than a day.
+          <strong>KS War Room (shared DIBS):</strong> the claim board, claim and release go to the KS War Room server (warroom.kingshadeprotocol.com). Signing in returns a temporary sign-in slip that is held only in this page's memory and is never stored. While your own war roster is visible the claim board is read every 2.5 seconds; when a claimed target is back in hospital its new hospital time is reported so the claim can be released. What is sent: your Torn API key (sign-in only), the war ID, target IDs and hospital times. The server keeps claims (target, your Torn ID, times) for less than a day.
           <br>
           Data Storage: Temporary (&lt; 1 day) · Data Sharing: Faction · Purpose of Use: Competitive advantage · Key Storage &amp; Sharing: Not stored/shared · Key Access Level: Public
           <br>
