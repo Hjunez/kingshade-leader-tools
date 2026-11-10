@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kingshade Scout for Torn PDA
 // @namespace    https://kingshade.tools/
-// @version      0.9.6
+// @version      0.9.7
 // @downloadURL  https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/Kingshade_Scout_Torn_PDA.user.js
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/Kingshade_Scout_Torn_PDA.user.js
 // @description  KS Scout for Torn PDA: FF/EST, live faction status, countdowns, filters and sorting. Never runs on Ranked War lists.
@@ -10,11 +10,24 @@
 // @match        https://torn.com/factions.php*
 // @connect      ffscouter.com
 // @connect      api.torn.com
-// @connect      ks-war-room-claims.hans-viklund.workers.dev
+// @connect      warroom.kingshadeprotocol.com
 // @grant        GM_xmlhttpRequest
 // @run-at       document-idle
 // @noframes
 // ==/UserScript==
+//
+// 0.9.7: ONE MAIN CHANGE: the KS server address is now warroom.kingshadeprotocol.com. Nothing else changed.
+//
+// CHANGED
+// - @connect, the address constant and the two texts that name the address (the header disclosure and the
+//   "Data sharing" line) now say warroom.kingshadeprotocol.com (the KS War Room server). Nothing else is different: the same
+//   requests, the same storage, the same texts, the same switch (off by default).
+// VERIFICATION
+// - Synthetic only (KS PDA Testrigg). Acceptance test:
+// - 1. Torn PDA: update KS Scout to 0.9.7. The sub line in the panel reads "KS · PDA · v0.9.7".
+// - 2. Gear: the key and the settings are kept, and "Share with KS" shows the same state as before the update.
+//
+// HISTORY. The text of 0.9.6, which this version replaces:
 //
 // 0.9.6: ONE MAIN CHANGE: the switch "Share with KS". Off by default. With it on, KS Scout sends YOUR OWN battle stats (five
 // numbers) to the KS War Room server, so that KS can turn Fair Fight results into stat estimates for the faction. No other
@@ -38,7 +51,7 @@
 //   tried again until it is saved again (only a hash of the key is kept for that).
 // - The stats are never written to the page, the console (also with the debug log on), localStorage or a message.
 // CHANGED
-// - @connect: ks-war-room-claims.hans-viklund.workers.dev (the KS War Room server, a Cloudflare worker). Used only with the
+// - @connect: warroom.kingshadeprotocol.com (the KS War Room server, a Cloudflare worker). Used only with the
 //   switch on.
 // - The last sentence of the footer follows the switch: "Share with KS is off: KS receives nothing." or "Share with KS is on:
 //   every 6 hours your own battle stats (five numbers) go to the KS War Room server, never shown to anyone."
@@ -336,7 +349,7 @@
 //   mounted; they pause when hidden or unfocused. Nothing is requested on a Ranked War list.
 // - The entered key is sent over HTTPS to FFScouter for a user-triggered /register request and documented /check-key, /get-stats and /player-flights requests; visible target IDs are sent where those lookups require them.
 // - The entered key is also sent over HTTPS to Torn's official API for faction/basic member status and mapping and, with Share with KS on, for user/battlestats.
-// - With Share with KS on (off by default), the key is also sent over HTTPS, once per send, to the KS War Room server (ks-war-room-claims.hans-viklund.workers.dev) to confirm your Torn ID, and your own battle stats (five numbers) and Torn ID are sent there. The server never stores or logs the key and shows the numbers to nobody.
+// - With Share with KS on (off by default), the key is also sent over HTTPS, once per send, to the KS War Room server (warroom.kingshadeprotocol.com) to confirm your Torn ID, and your own battle stats (five numbers) and Torn ID are sent there. The server never stores or logs the key and shows the numbers to nobody.
 // - KS Scout stores the key (unencrypted), settings, manual values, notes and caches only in this Torn PDA webview.
 // - With Share with KS off, KS Scout sends nothing to any KS server. With it on, the KS War Room server (a Cloudflare worker run by the developer) holds the submitted numbers until the KS server has fetched them, at most 7 days; the KS server keeps them to compute faction estimates.
 // - FFScouter is an independent third-party service and may store/use registered keys and related data under its own terms and data policy.
@@ -373,7 +386,7 @@
     }
 
     const NAME = "KS Scout";
-    const VERSION = "0.9.6";
+    const VERSION = "0.9.7";
     // Where the script runs, read once at start: Torn PDA injects PDA_httpGet (and its flutter bridge) before userscripts run;
     // Tampermonkey on a computer has neither. Only used for words on the screen ("PDA" / "PC", "this browser").
     const ON_TORN_PDA = typeof window.PDA_httpGet === "function" || typeof window.flutter_inappwebview !== "undefined";
@@ -438,7 +451,7 @@
     // ---------------------------------------------------------------------------------------------
     // The KS War Room server (a Cloudflare worker). With "Share with KS" off, nothing is ever sent to it. Same address as
     // KS_SERVER.origin in War Dibs PDA.
-    const KS_WAR_ROOM_ORIGIN = "https://ks-war-room-claims.hans-viklund.workers.dev";
+    const KS_WAR_ROOM_ORIGIN = "https://warroom.kingshadeprotocol.com";
     // Least time between two accepted sends (an accepted send and a duplicate both count). The same limit for every KS script.
     const SHARE_INTERVAL_SECONDS = 21600;
     // How often a page that stays open asks whether a send is due. The question itself makes no request.
@@ -5159,7 +5172,7 @@
 
     const DISCLOSURE_ITEMS = [
         ["Data storage", `KS Scout stores the key, settings, manual values, notes, cached FF/EST response data (including estimate/source/spy metadata), status data and travel data locally in ${STORE_PLACE} until cleared or removed. The key is stored unencrypted in ${STORE_PLACE}. FFScouter separately stores/uses registered key data under its own policy. With Share with KS on, the KS War Room server (Cloudflare) holds your submitted battle stats until the KS server has fetched them, at most 7 days; the KS server keeps them to compute faction estimates. Nothing is stored on any server while it is off.`],
-        ["Data sharing", "Torn API receives the key for faction/basic and, with Share with KS on, for user/battlestats. FFScouter receives the key for a registration request you explicitly trigger, plus /check-key, /get-stats and /player-flights; visible target IDs are included for stats and flight lookups. With Share with KS on, your own battle stats and Torn ID go to the KS War Room server (ks-war-room-claims.hans-viklund.workers.dev). They are never shown to anyone, inside or outside the faction. With it off, KS receives nothing."],
+        ["Data sharing", "Torn API receives the key for faction/basic and, with Share with KS on, for user/battlestats. FFScouter receives the key for a registration request you explicitly trigger, plus /check-key, /get-stats and /player-flights; visible target IDs are included for stats and flight lookups. With Share with KS on, your own battle stats and Torn ID go to the KS War Room server (warroom.kingshadeprotocol.com). They are never shown to anyone, inside or outside the faction. With it off, KS receives nothing."],
         ["Purpose of use", "Register a new key with FFScouter only when you press the registration button; display FF/EST values; check FFScouter registration status/premium entitlement; show estimated flight landing/window/method; map visible faction members; and show faction status/timers, filters and sorting. Share with KS (opt-in, off by default): turn Fair Fight results into stat estimates for the faction."],
         ["Key storage & sharing", "KS Scout stores the key locally and sends it over HTTPS only to Torn API, FFScouter and, with Share with KS on, the KS War Room server to confirm your Torn ID at sign-in. The KS War Room server never stores or logs the key. FFScouter key storage/access is governed by its own terms and data policy."],
         ["Key access level", "Custom key selections: user/basic, battlestats, hof, attacks, personalstats and faction/basic. Limited or Full access is not required. Share with KS needs user/battlestats (included in the link below)."],
