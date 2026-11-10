@@ -371,11 +371,17 @@
     <span class="stamp">Updated Nov 2026</span>
   </header>
 
+  <p class="note">About the pictures. The pictures of the war page were taken on another faction's ranked war,
+    because we had no war running while this guide was updated. On another faction's war the KS
+    panel is read-only and nothing can be DIBSed: on PC it says <strong>VIEW</strong>, on Torn PDA it says
+    &ldquo;Viewing another faction's war &mdash; read only&rdquo;. On your own war page you see <strong>DIBS</strong>,
+    <strong>PREWAR</strong> or a hospital time instead.</p>
+
   <div class="keynote">
     <span class="title">Before you start</span>
     <div class="versions">
-      <div class="row"><span class="k">Torn PDA</span><span class="v">KS Torn War Dibs PDA <strong>v1.5.195</strong></span></div>
-      <div class="row"><span class="k">Computer</span><span class="v">KS Torn War Dibs PC <strong>v1.1.18</strong> (in Tampermonkey)</span></div>
+      <div class="row"><span class="k">Torn PDA</span><span class="v">KS Torn War Dibs PDA <strong>v2.0.0</strong></span></div>
+      <div class="row"><span class="k">PC</span><span class="v">KS Torn War Dibs PC <strong>v2.0.0</strong> (in Tampermonkey)</span></div>
     </div>
     <p><strong>DIBS now runs on our own KS War Room server.</strong> FFScouter's Hit Calling is no longer
       used for DIBS, and <strong>KS FFScouter Call Guard is retired</strong> &mdash; remove it from every device
@@ -392,12 +398,25 @@
       <ul class="steps newlist">
         <li><strong>Share with KS.</strong> A button under <strong>Settings</strong> in the KS panel, <strong>off</strong> by default.
           When you turn it on, your own five battle stats and your Torn ID are sent every 6 hours while your own war page is open.
-          They are used only for the faction's stat estimates and are never shown to anyone. It is your choice.</li>
+          They are used only for the faction's stat estimates and are never shown to anyone. It is your choice.
+          <div class="figs">
+            <figure><img src="pda-settings-2.0.0.jpg" alt="KS panel Settings on Torn PDA with the Share with KS switch, on another faction's war"><figcaption>Settings in the KS panel on Torn PDA, where Share with KS is switched on or off (this
+              phone has it on). Another faction's war, so the rows say VIEW.</figcaption></figure>
+          </div></li>
         <li><strong>Filters</strong> (Torn PDA only). The <strong>Filters</strong> button in the KS panel sorts and hides rows on the war page by
-          FF, stats, level, status, activity and last action. It works only on the page, nothing is sent, and your own DIBS is never hidden.</li>
-        <li><strong>Hospital 48 hours or more.</strong> The target shows its real time instead of an unknown mark and is locked. On the computer the
+          FF, stats, level, status, activity and last action. It works only on the page, nothing is sent, and your own DIBS is never hidden. On PC, FFScouter's <em>Filter &amp; Sort Controls</em> already do this, so KS War Dibs PC
+          has no Filters button of its own.
+          <div class="figs">
+            <figure><img src="pda-filters-2.0.0.jpg" alt="Filters panel of the KS panel on Torn PDA with the war list below it"><figcaption>Filters on Torn PDA. Showing 100 of 100 means no row is hidden.</figcaption></figure>
+            <figure class="wide"><img src="pc-ffscouter-controls.png" alt="FFScouter's Filter and Sort Controls above the KS panel on the Torn Ranked War page on PC"><figcaption>On PC: FFScouter's Filter &amp; Sort Controls above the KS panel. Another faction's war.</figcaption></figure>
+          </div></li>
+        <li><strong>Hospital 48 hours or more.</strong> The target shows its real time instead of an unknown mark and is locked. On PC the
           button shows the time, for example <strong>2d20h</strong>, with <strong>HOSP</strong> underneath. On Torn PDA it shows, for example,
           <strong>2d 20h 0m</strong>, with <strong>LOCKED</strong> underneath. DIBS opens only at 2:00 or less, as before.</li>
+        <li><strong>Hospital abroad.</strong> A target lying in a hospital abroad, for example &ldquo;In a South African
+          hospital&rdquo;, cannot be attacked by anyone at home in Torn, so it is never DIBS-able. On PC the
+          button shows <strong>ABROAD</strong> with <strong>hosp</strong> underneath and cannot be pressed. Torn PDA does
+          not check this yet: on Torn PDA, do not DIBS a target you know is in a hospital abroad.</li>
         <li><strong>War Room.</strong> <a href="warroom.html">War Room</a> is the same DIBS board in the browser, with landing times, filters,
           honor bars, a war clock and the lead against the target.</li>
       </ul>
@@ -412,16 +431,16 @@
         <li>Open Torn PDA. Open <strong>Settings</strong> &rarr; <strong>Advanced browser settings</strong> &rarr; <strong>Manage scripts</strong>.</li>
         <li>Tap the <strong>pencil</strong> next to <strong>KS Torn War Dibs PDA</strong>.</li>
         <li>Tap <strong>Configure</strong>, the button next to <em>Remote load/update</em>.</li>
-        <li>Tap <strong>Check for Update</strong>. When it offers 1.5.195, tap <strong>Update</strong>.</li>
+        <li>Tap <strong>Check for Update</strong>. When it offers 2.0.0, tap <strong>Update</strong>.</li>
         <li>In the same Manage scripts list, switch <strong>KS FFScouter Call Guard</strong> off, or delete it.</li>
         <li>Close Torn PDA completely and open it again.</li>
-        <li>Open your faction's Ranked War page. The KS panel must show <strong>v1.5.195</strong> in the top right corner.</li>
+        <li>Open your faction's Ranked War page. The KS panel must show <strong>v2.0.0</strong> in the top right corner.</li>
         <li>Once your faction's war is matched, tap <strong>Settings</strong> in the KS panel. The War Room row says <strong>War Room: SIGNED IN</strong>.</li>
       </ol>
       <div class="figs">
-        <figure><img src="pda-edit-script.jpg" alt="Torn PDA edit script dialog with the Configure button next to Remote load/update"><figcaption>Step 3: the <strong>Configure</strong> button sits next to <em>Remote load/update</em>.</figcaption></figure>
-        <figure><img src="pda-remote-update.jpg" alt="Torn PDA remote script update dialog with Check for Update and Update buttons"><figcaption>Step 4: <strong>Check for Update</strong>, then <strong>Update</strong>. This phone was already on an older version, so it says no newer version &mdash; yours will offer 1.5.195.</figcaption></figure>
-        <figure><img src="pda-panel-1.5.167.jpg" alt="KS Torn War Dibs panel on the Ranked War page"><figcaption>Step 7: the panel on the Ranked War page with the version top right (older version shown).</figcaption></figure>
+        <figure><img src="pda-edit-script-2.0.0.jpg" alt="Torn PDA edit script dialog with the Configure button next to Remote load/update"><figcaption>Step 3: the <strong>Configure</strong> button sits next to <em>Remote load/update</em>.</figcaption></figure>
+        <figure><img src="pda-remote-update-2.0.0.jpg" alt="Torn PDA remote script update dialog with Check for Update and Update buttons"><figcaption>Step 4: <strong>Check for Update</strong>, then <strong>Update</strong>. This phone is already on 2.0.0, so it says &ldquo;No newer version found. Current: 2.0.0&rdquo;. If yours is older, it offers 2.0.0.</figcaption></figure>
+        <figure><img src="pda-panel-2.0.0.jpg" alt="KS Torn War Dibs panel on the Ranked War page"><figcaption>Step 7: the panel with v2.0.0 top right. Taken on another faction's war, so it says &ldquo;Viewing another faction's war &mdash; read only&rdquo;.</figcaption></figure>
       </div>
 
       <h3>If Check for Update finds nothing, or you never installed it</h3>
@@ -435,28 +454,32 @@
           </div>
         </li>
         <li>Press <strong>Fetch</strong>, then <strong>Load</strong>, then <strong>Continue</strong>.</li>
-        <li>Close Torn PDA completely and open it again. Check the panel says <strong>v1.5.195</strong>.</li>
+        <li>Close Torn PDA completely and open it again. Check the panel says <strong>v2.0.0</strong>.</li>
       </ol>
     </div>
   </section>
 
   <section>
-    <h2>Computer (Tampermonkey)</h2>
+    <h2>PC (Tampermonkey)</h2>
     <div class="card">
       <h3>KS Torn War Dibs PC</h3>
       <ol class="steps">
         <li>Click the Tampermonkey icon in your browser toolbar &rarr; <strong>Utilities</strong> &rarr; <strong>Check for userscript updates</strong>.</li>
-        <li>Open the Tampermonkey dashboard and look at the <strong>Version</strong> column: <strong>KS Torn War Dibs PC</strong> must say <strong>1.1.18</strong>. Only one version may be enabled.</li>
+        <li>Open the Tampermonkey dashboard and look at the <strong>Version</strong> column: <strong>KS Torn War Dibs PC</strong> must say <strong>2.0.0</strong>. Only one version may be enabled.</li>
         <li>If it still shows an older number: open <a href="scripts.html">Kingshade Scripts</a>, press <strong>Install</strong> on the PC card, and confirm the update in the Tampermonkey window that opens.</li>
         <li>In the same dashboard, find <strong>KS FFScouter Call Guard</strong> and delete it with the trash-can icon in its row.</li>
-        <li>Open Torn's Ranked War page. The KS panel must say <strong>v1.1.18 TEST</strong>. The word TEST is part of the label and is expected.</li>
+        <li>Open Torn's Ranked War page. If the KS panel is a single bar that says <strong>KS DIBS PC</strong>, press <strong>Expand</strong> at its right end. The panel must say <strong>v2.0.0 TEST</strong>. The word TEST is part of the label and is expected.</li>
         <li>If Tampermonkey asks whether the script may connect to <code>warroom.kingshadeprotocol.com</code>, choose <strong>Always allow domain</strong>. That is the KS War Room server.</li>
         <li>Once your faction's war is matched, the panel's War Room row says <strong>War Room: SIGNED IN</strong>.</li>
       </ol>
-      <p class="note">Your saved Torn key and FFScouter key stay in place after the update. Do not change anything in
-        FFScouter's <em>Filter &amp; Sort Controls</em> on the war page. Leave <strong>Sort: Default</strong> and all
-        filters as they are. The only thing you may change is the <strong>Show</strong> dropdown &mdash; FF Score or
-        BS Estimate, nothing else.</p>
+      <div class="figs">
+        <figure class="wide"><img src="pc-panel-expanded-2.0.0.png" alt="The expanded KS Torn War Dibs PC panel showing v2.0.0 TEST and War Room: VIEW read-only"><figcaption>The expanded panel with v2.0.0 TEST top right. This picture is from another
+          faction's war, so it says VIEW and War Room: VIEW read-only. On your own war page it says
+          War Room: SIGNED IN once the war is matched.</figcaption></figure>
+      </div>
+      <p class="note">Your saved Torn key and FFScouter key stay in place after the update. FFScouter's
+        <em>Filter &amp; Sort Controls</em> on the war page work as usual next to the KS panel: use the
+        filters and the <strong>Show</strong> dropdown (FF Score or BS Estimate) as you like.</p>
       <p class="note">Sorting by hospital time: click Torn's own <strong>Status</strong> column header. One direction
         puts Okay first, then hospital with the shortest time first. Click Status again for the other direction:
         hospital (shortest first) at the top. Torn remembers your last choice, so the first click can give either
@@ -464,7 +487,9 @@
         Score used to be; Score in the other list works too, since Torn's sorting applies to both lists at once). If FFScouter's Sort is set to anything other than
         <strong>Sort: Default</strong>, FFScouter decides the order instead.</p>
       <div class="figs">
-        <figure class="wide"><img src="pc-panel-1.0.40.png" alt="Torn Ranked War page on a computer with the KS Torn War Dibs PC panel above the war roster"><figcaption>The PC panel sits between FFScouter's controls and the war roster. Version top right, DIBS column inside Torn's own table (older version shown).</figcaption></figure>
+        <figure class="wide"><img src="pc-panel-folded.png" alt="Torn Ranked War page on PC with the KS Torn War Dibs PC panel above the war roster"><figcaption>The PC panel sits between FFScouter's controls and the war roster, here
+          folded to one bar (press Expand to open it). The DIBS column is inside
+          Torn's own table. Another faction's war, so the column shows VIEW.</figcaption></figure>
       </div>
     </div>
   </section>
@@ -496,7 +521,7 @@
   <section>
     <h2>Other scripts</h2>
     <div class="card">
-      <p>On the computer, KS Torn War Dibs PC runs alongside the <strong>FF Scouter V2</strong> userscript from
+      <p>On PC, KS Torn War Dibs PC runs alongside the <strong>FF Scouter V2</strong> userscript from
         ffscouter.com on the war page. It fetches Fair Fight itself from FFScouter. Torn PDA works the same way.</p>
       <p class="note">War Stuff Enhanced can stay on. The PC panel shows <strong>WSE: detected</strong> and War Dibs keeps working.</p>
       <p class="note">TornTools and other war scripts are untested. If the KS panel does not show or looks wrong,
@@ -509,7 +534,7 @@
     <div class="card">
       <ul class="steps">
         <li>DIBS stays locked until the war is actually <strong>LIVE</strong>. Before that every button says PREWAR.</li>
-        <li>A target opens for DIBS when it is in Hospital with <strong>2:00 or less</strong> left and its FF is between <strong>2.00 and 3.40</strong>.</li>
+        <li>A target opens for DIBS when it is in hospital in Torn (not abroad) with <strong>2:00 or less</strong> left and its FF is between <strong>2.00 and 3.40</strong>.</li>
         <li>Targets that are Online are free for all and cannot be DIBSed. DIBS is only for Idle or Offline targets.</li>
         <li>If a target in hospital has 20% life or less, DIBS allows FF up to 4.50 and the button turns pink and shows the target's life, for example <strong>HP 12%</strong>.</li>
         <li>First claim wins. You see <strong>DIBBED / RELEASE</strong>; everyone else sees <strong>TAKEN</strong> and your name.</li>
