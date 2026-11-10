@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Black Market PDA
 // @namespace    kingshade.ks-black-market
-// @version      0.4.1
+// @version      0.4.2
 // @description  Travel advisor: the best runs abroad for every item sold abroad, and when to leave Torn to land right after a restock, for members of Politically Incorrect. Reads from the KS Black Market server and, for your cash, travel method and item slots, from the Torn page you have open. Never clicks, navigates or contacts Torn.
 // @author       Kingshade
 // @match        https://www.torn.com/*
@@ -10,12 +10,12 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue
-// @connect      ks-blackmarket.hans-viklund.workers.dev
+// @connect      blackmarket.kingshadeprotocol.com
 // @downloadURL  https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Black_Market_PDA.user.js
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Black_Market_PDA.user.js
 // ==/UserScript==
 /*
- * KS Black Market 0.4.1 (PDA) — disclosure
+ * KS Black Market 0.4.2 (PDA) — disclosure
  * What it does : your travel advisor. It lists the best runs abroad for every item sold abroad, not only drugs (best
  *                trips, sell abroad, bring home) for the travel method and the number of item slots you pick, strictly
  *                ordered by the profit you can expect per hour of flying. For goods you bring home it also says WHEN to
@@ -29,7 +29,7 @@
  *                The numbers (also the restock times) are calculated by the KS server from public price and stock data
  *                and sent to this script. For members of Politically Incorrect only. Measurement, not advice; there
  *                are no buy or travel buttons, and no sound or notification.
- * Requests     : only https://ks-blackmarket.hans-viklund.workers.dev — POST /login (your Torn key, once per sign-in) and
+ * Requests     : only https://blackmarket.kingshadeprotocol.com — POST /login (your Torn key, once per sign-in) and
  *                POST /latest when you open the panel and then every 60 seconds, but only while the panel is open and
  *                the tab is visible. The server asks Torn once per sign-in whose key it is (/v2/key/info). This script
  *                itself makes no request to torn.com or api.torn.com.
@@ -53,6 +53,9 @@
  * API key      : your own Torn key at access level Public is enough (no selections needed). It is used only for the
  *                faction membership check. If Torn rejects the key, or it does not belong to the faction, the saved
  *                key is removed and not tried again.
+ *
+ * CHANGELOG 0.4.2
+ * CHANGED      : ONE MAIN CHANGE: the KS server address is now blackmarket.kingshadeprotocol.com. Nothing else changed.
  *
  * CHANGELOG 0.4.1
  * CHANGED      : sorting is now a 'Sort:' menu with four choices: most profit per hour, safest landing,
@@ -108,7 +111,7 @@
  */
 (function () {
 'use strict';
-var KSBM_VERSION = '0.4.1';
+var KSBM_VERSION = '0.4.2';
 var KSBM_PLATFORM = 'PDA';
 
 /* ================= KS Black Market — core (shared by PC and PDA) =================
@@ -1058,7 +1061,7 @@ var KSBM_CORE = (function () {
 var KSBM_API = (function () {
   'use strict';
 
-  var ORIGIN = 'https://ks-blackmarket.hans-viklund.workers.dev';
+  var ORIGIN = 'https://blackmarket.kingshadeprotocol.com';
   var PATHS = ['/login', '/latest'];
   var KEY_RE = /^[A-Za-z0-9]{16}$/;
 
