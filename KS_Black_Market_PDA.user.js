@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Black Market PDA
 // @namespace    kingshade.ks-black-market
-// @version      0.4.2
+// @version      0.4.3
 // @description  Travel advisor: the best runs abroad for every item sold abroad, and when to leave Torn to land right after a restock, for members of Politically Incorrect. Reads from the KS Black Market server and, for your cash, travel method and item slots, from the Torn page you have open. Never clicks, navigates or contacts Torn.
 // @author       Kingshade
 // @match        https://www.torn.com/*
@@ -15,7 +15,7 @@
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Black_Market_PDA.user.js
 // ==/UserScript==
 /*
- * KS Black Market 0.4.2 (PDA) — disclosure
+ * KS Black Market 0.4.3 (PDA) — disclosure
  * What it does : your travel advisor. It lists the best runs abroad for every item sold abroad, not only drugs (best
  *                trips, sell abroad, bring home) for the travel method and the number of item slots you pick, strictly
  *                ordered by the profit you can expect per hour of flying. For goods you bring home it also says WHEN to
@@ -31,28 +31,36 @@
  *                are no buy or travel buttons, and no sound or notification.
  * Requests     : only https://blackmarket.kingshadeprotocol.com — POST /login (your Torn key, once per sign-in) and
  *                POST /latest when you open the panel and then every 60 seconds, but only while the panel is open and
- *                the tab is visible. The server asks Torn once per sign-in whose key it is (/v2/key/info). This script
- *                itself makes no request to torn.com or api.torn.com.
+ *                the tab is visible. While the sidebar box is shown it also asks the KS Black Market server for new prices:
+ *                at most once every 5 minutes, and it signs in again at most once every 10 minutes. The server asks Torn
+ *                once per sign-in whose key it is (/v2/key/info). This script itself makes no request to torn.com or api.torn.com.
  * Reads        : from the Torn page you have open and are looking at, only while the tab is visible, nothing else and never
  *                a captcha: (1) your cash, the data-money number of the sidebar (kept in memory, never saved or sent);
  *                (2) on the Travel Agency page (page.php?sid=travel): the travel method that is picked, which methods can
  *                be picked, the flight times to the destination that is picked, the number of inventory slots and how many
  *                are in use. This is saved on your device (ksBm.v1.travel) and used for your travel method, your item
  *                slots (slots minus what is in use) and, when Torn's flight times differ from the table (an event), for
- *                the flight times. It is never sent anywhere.
+ *                the flight times. It is never sent anywhere. (3) The colours and the font of Torn's own page and sidebar, so
+ *                that the panel looks like Torn and follows its light or dark mode (kept in memory only, never saved or sent).
  * Clicks       : none. It never clicks, submits or navigates. Besides what is listed under "Reads", the only thing it looks
  *                for on the page is whether a captcha is VISIBLE; then its own button hides (and nothing is read) until the
  *                captcha is gone. It never touches a captcha.
- *                It runs in the top page only, never inside iframes.
+ *                It runs in the top page only, never inside iframes. On PC it adds a small 'KS Black Market' box to Torn's
+ *                left sidebar on your own screen. It never clicks or changes anything else on Torn's page.
  * Storage      : script manager storage, keys starting with "ksBm.v1." (your Torn key, travel method, item slots, list
- *                filter, selected tab, sort order, whether Torn's values or your own are used, the last reading of the
- *                Travel Agency page, your starred and hidden rows (at most 200 each)). The sign-in token and your cash
- *                are kept in memory only. Nothing is written to Torn's page or to localStorage.
+ *                filter, selected tab, sort order, whether the sidebar box is folded, whether Torn's values or your own are used, the last reading of the
+ *                Travel Agency page, your starred and hidden rows (at most 200 each), the sign-in (valid 10 minutes) and the
+ *                latest prices, so the box works on every page). Your cash is kept in memory only. Nothing is stored in
+ *                Torn's page or in localStorage.
  * Sharing      : your Torn key is sent to the KS Black Market server (a Cloudflare Worker) when you sign in. The server
  *                checks it with Torn, does not store it and does not log it. Nothing else is sent anywhere.
  * API key      : your own Torn key at access level Public is enough (no selections needed). It is used only for the
  *                faction membership check. If Torn rejects the key, or it does not belong to the faction, the saved
  *                key is removed and not tried again.
+ *
+ * CHANGELOG 0.4.3
+ * CHANGED      : KS Black Market now looks like Torn and follows Torn's light or dark mode. On PC, when minimized it
+ *                sits as a box in Torn's left sidebar with the 3 best trips. The box updates itself every 5 minutes.
  *
  * CHANGELOG 0.4.2
  * CHANGED      : ONE MAIN CHANGE: the KS server address is now blackmarket.kingshadeprotocol.com. Nothing else changed.
@@ -111,7 +119,7 @@
  */
 (function () {
 'use strict';
-var KSBM_VERSION = '0.4.2';
+var KSBM_VERSION = '0.4.3';
 var KSBM_PLATFORM = 'PDA';
 
 /* ================= KS Black Market — core (shared by PC and PDA) =================
@@ -695,6 +703,7 @@ var KSBM_CORE = (function () {
   var NO_RANGE_EXPORT = 'Not enough price history yet, so no range or chance.';
   var NO_RANGE_IMPORT = 'No price range yet (price history too short)';
   var UNKNOWN_GROUP_TITLE = 'Not enough history yet';
+  var EMPTY_TEXT = 'Nothing pays right now.';
   // The line under the lists: what the chosen sort does, and always "Tap a row for details." last.
   var TAP_HINT = 'Tap a row for details.';
   function legendFor(sort) { return SORT_HELP[validSort(sort)] + ' ' + TAP_HINT; }
@@ -721,6 +730,63 @@ var KSBM_CORE = (function () {
     if (isNum(cash) && isNum(en.cashNeeded) && en.cashNeeded > cash) parts.push('needs ' + fmtCompact(en.cashNeeded - cash) + ' more');
     return { left: left, big: big, mark: mark, line2: parts.join(' · '), positive: group === 'ranked' ? en.perHour >= 0 : en.basis >= 0,
       starred: !!en.starred };
+  }
+
+  /* ---------- the box in Torn's left sidebar (PC, 0.4.3) ----------
+   * Three lines at most: the three best trips of "Best trips" with "Most profit per hour" and the filter "All" (starred first, like the panel),
+   * whatever the panel itself is set to. Fail-closed: without a key, while fetching, when the server cannot be reached and when the prices are
+   * old it says so in one line and never shows numbers. o: { hasKey, fetching, failure (the code of the last failed fetch or null), view }
+   * where view is buildView(...) made with sort 'profit' and group 'all'. Returns { status: text or null, rows: [{ name, now, amount, title }] }.
+   * name: the destination in a short form that fits Torn's narrow sidebar (the full name is in the title); now: true when the row says
+   * LEAVE NOW (drawn as a small green mark before the amount); amount: expected profit per hour with three digits ("+$100k/h", "+$39.6k/h",
+   * "+$1.25M/h"); title: the full destination and the second line of the row. */
+  var SIDE_SHORT = { 'South Africa': 'S. Africa', 'United Kingdom': 'UK', 'Cayman Islands': 'Cayman', 'Switzerland': 'Switz.' };
+  function sideName(full) { return SIDE_SHORT.hasOwnProperty(full) ? SIDE_SHORT[full] : full; }
+  // Three digits: "$734", "$39.6k", "$100k", "$1.25M". The largest unit in which the rounded number stays under 1000.
+  function fmtCompact3(x) {
+    var a = Math.abs(x);
+    if (a < 1000) return '$' + Math.round(a);
+    var units = [[1e3, 'k'], [1e6, 'M'], [1e9, 'B']];
+    var i = 0;
+    while (i + 1 < units.length && a >= units[i + 1][0]) i++;
+    var digits = function (u) { var v = a / u; return v >= 100 ? Math.round(v) : parseFloat(v.toPrecision(3)); };
+    if (digits(units[i][0]) >= 1000 && i + 1 < units.length) i++;
+    var v = a / units[i][0];
+    return '$' + (v >= 100 ? String(Math.round(v)) : v.toPrecision(3)) + units[i][1];
+  }
+  function fmtPerHour3(x) { return (x < 0 ? '-' : '+') + fmtCompact3(x) + '/h'; }
+  var SIDE_ROWS = 3;
+  var SIDE_SIGN_IN = 'Sign in', SIDE_CHECKING = 'CHECKING', SIDE_OFFLINE = 'OFFLINE', SIDE_STALE = 'STALE';
+  var OFFLINE_CODES = ['SERVER', 'RETRY', 'AUTH', 'BAD_DATA', 'BLOCKED'];
+  function sideBox(o) {
+    var none = function (s) { return { status: s, rows: [] }; };
+    var v = o && o.view;
+    if (!o || !o.hasKey || !v) return none(SIDE_SIGN_IN);
+    if (v.state === 'STALE') return none(o.fetching ? SIDE_CHECKING : SIDE_STALE);
+    if (v.state === 'NO_DATA') return none(o.fetching ? SIDE_CHECKING : (has(OFFLINE_CODES, o.failure) ? SIDE_OFFLINE : v.headline));
+    if (v.state !== 'OK') return none(v.headline);
+    var ranked = v.lists.trips.ranked.slice(0, SIDE_ROWS);
+    if (!ranked.length) return none(EMPTY_TEXT);
+    return { status: null, rows: ranked.map(function (en) {
+      var rv = rowView(en, v.nowS, 'ranked', v.cash, 'profit');
+      return { name: sideName(rv.left), now: !!(rv.mark && rv.mark.kind === 'now'), amount: fmtPerHour3(en.perHour), title: rv.left + ' · ' + rv.line2 };
+    }) };
+  }
+
+  /* ---------- the latest answer, kept in the script manager (ksBm.v1.latestCache) so that the box can be drawn at once on the next page ----------
+   * {v:1, fetchedAt (ms, local clock), generatedAt (seconds, the server's file), schema, body (the answer of /latest as it came)}.
+   * readCache gives { env, fetchedAt } or null for anything that is not exactly that and readable now. */
+  var CACHE_V = 1;
+  var CACHE_FUTURE_MS = 60000;
+  function makeCache(raw, env, fetchedAtMs) {
+    return { v: CACHE_V, fetchedAt: fetchedAtMs, generatedAt: env.latest.generated_at, schema: env.latest.schema, body: raw };
+  }
+  function readCache(c, nowMs) {
+    if (!isPlainObject(c) || c.v !== CACHE_V || !isNum(c.fetchedAt) || !isNum(c.generatedAt) || !has(SCHEMAS, c.schema)) return null;
+    if (c.fetchedAt > nowMs + CACHE_FUTURE_MS || c.fetchedAt <= 0) return null;       // from the future: the clock was moved
+    var s = sanitizeEnvelope(c.body);
+    if (!s.ok || s.env.latest.generated_at !== c.generatedAt || s.env.latest.schema !== c.schema) return null;
+    return { env: s.env, fetchedAt: c.fetchedAt };
   }
 
   // "Cash needed: $1.2M" and, when Torn's sidebar gave the cash, "(you have $3.4M)".
@@ -1045,6 +1111,7 @@ var KSBM_CORE = (function () {
     rowView: rowView, detailLines: detailLines, legendFor: legendFor, SORT_HELP: SORT_HELP, perTrip: perTrip, UNKNOWN_GROUP_TITLE: UNKNOWN_GROUP_TITLE, FIXED_PROFIT: FIXED_PROFIT,
     FIXED_LOSS: FIXED_LOSS,
     clampSeats: clampSeats, validMethod: validMethod, buildView: buildView,
+    EMPTY_TEXT: EMPTY_TEXT, sideBox: sideBox, sideName: sideName, fmtCompact3: fmtCompact3, fmtPerHour3: fmtPerHour3, makeCache: makeCache, readCache: readCache, CACHE_V: CACHE_V, SIDE_ROWS: SIDE_ROWS, SIDE_SIGN_IN: SIDE_SIGN_IN, SIDE_CHECKING: SIDE_CHECKING, SIDE_OFFLINE: SIDE_OFFLINE, SIDE_STALE: SIDE_STALE,
     NO_DATA_TEXT: NO_DATA_TEXT, fmtSigned: fmtSigned, fmtSignedCompact: fmtSignedCompact,
     fmtMoney: fmtMoney, fmtCompact: fmtCompact, fmtHM: fmtHM, fmtAge: fmtAge, countryName: countryName
   };
@@ -1054,8 +1121,9 @@ var KSBM_CORE = (function () {
  * The ONLY thing this script talks to is the KS Black Market worker, with two requests:
  *   POST /login   {"key": "<your Torn key>"}        -> {"session": "...", "expiresAt": ...}
  *   POST /latest  {"session": "<from /login>"}       -> the newest numbers from ks-server
- * Both are POST with a JSON body. The sign-in lives in memory only and travels in the body, never in a header or
- * the URL. The Torn key is sent to /login and nowhere else. No request ever goes to Torn.
+ * Both are POST with a JSON body. The sign-in travels in the body, never in a header or the URL; it is kept (ksBm.v1.session, valid 10
+ * minutes) so that it is reused on the next page instead of signing in again, and it is used until 60 seconds before it ends.
+ * The Torn key is sent to /login and nowhere else. No request ever goes to Torn.
  * This part has no DOM and no GM_* calls: the transport is passed in, so it can be tested without a browser.
  */
 var KSBM_API = (function () {
@@ -1064,6 +1132,8 @@ var KSBM_API = (function () {
   var ORIGIN = 'https://blackmarket.kingshadeprotocol.com';
   var PATHS = ['/login', '/latest'];
   var KEY_RE = /^[A-Za-z0-9]{16}$/;
+  var SESSION_MARGIN_MS = 60000;      // a sign-in is not used in its last minute: a new one is made instead
+  var SESSION_DEFAULT_MS = 540000;    // when the server does not say when it ends
 
   function validKey(k) { return typeof k === 'string' && KEY_RE.test(k); }
 
@@ -1088,7 +1158,7 @@ var KSBM_API = (function () {
     var reason = body && typeof body.reason === 'string' ? body.reason : '';
     var error = body && typeof body.error === 'string' ? body.error : '';
     if (status === 200 && body && body.ok === true && typeof body.session === 'string' && body.session.length > 0 && body.session.length < 4096) {
-      return { ok: true, session: body.session, expiresAt: typeof body.expiresAt === 'number' ? body.expiresAt : null };
+      return { ok: true, session: body.session, expiresAt: typeof body.expiresAt === 'number' && isFinite(body.expiresAt) ? body.expiresAt : null };
     }
     var retryAfterS = body && typeof body.retryAfterSeconds === 'number' ? Math.min(3600, Math.max(0, body.retryAfterSeconds)) : 0;
     if (status === 429) {
@@ -1113,22 +1183,49 @@ var KSBM_API = (function () {
     return { ok: false, code: 'SERVER', message: 'The server gave an unexpected answer (' + status + ').', dropKey: false };
   }
 
-  /* deps: { post(path, bodyObject) -> Promise<{status, json}>, getKey() -> string, forgetKey(), now() -> ms }
-   * fetchLatest() -> Promise<{ok:true, env} | {ok:false, code, message, retryAfterS?}> and never throws. */
+  // A kept sign-in: {v:1, token, expiresAt (ms)}. Anything else is nothing.
+  function cleanSession(x) {
+    if (typeof x !== 'object' || x === null || x.v !== 1 || typeof x.token !== 'string' || x.token.length === 0 || x.token.length >= 4096) return null;
+    if (typeof x.expiresAt !== 'number' || !isFinite(x.expiresAt)) return null;
+    return { v: 1, token: x.token, expiresAt: x.expiresAt };
+  }
+
+  /* deps: { post(path, bodyObject) -> Promise<{status, json}>, getKey() -> string, forgetKey(), now() -> ms,
+   *         loadSession() -> kept sign-in or null (may be a promise), saveSession(object or null) }  (the last two are optional)
+   * fetchLatest() -> Promise<{ok:true, env, raw} | {ok:false, code, message, retryAfterS?}> and never throws. raw is the answer as it came. */
   function createClient(deps) {
     var session = null;
+    var sessionEnds = 0;
     var rejected = false;           // set when the key was rejected for good: no more tries until a new key is saved
     var blockedUntil = 0;
 
-    function reset() { session = null; }
-    function unblock() { rejected = false; blockedUntil = 0; session = null; }
+    function keep(token, endsAt) {
+      session = token;
+      sessionEnds = endsAt;
+      if (deps.saveSession) { try { deps.saveSession({ v: 1, token: token, expiresAt: endsAt }); } catch (e) { /* kept in memory only */ } }
+    }
+    function drop() {
+      session = null;
+      sessionEnds = 0;
+      if (deps.saveSession) { try { deps.saveSession(null); } catch (e) { /* nothing to do */ } }
+    }
+    function usable() { return session !== null && sessionEnds - SESSION_MARGIN_MS > deps.now(); }
+    // The sign-in of an earlier page, when it is still good for more than a minute.
+    async function adopt() {
+      if (!deps.loadSession) return;
+      var k;
+      try { k = cleanSession(await Promise.resolve(deps.loadSession())); } catch (e) { k = null; }
+      if (k && k.expiresAt - SESSION_MARGIN_MS > deps.now()) { session = k.token; sessionEnds = k.expiresAt; }
+    }
+    function reset() { drop(); }
+    function unblock() { rejected = false; blockedUntil = 0; drop(); }
 
     async function login(key) {
       var res;
       try { res = await deps.post('/login', { key: key }); } catch (e) { res = { status: 0, json: null }; }
       var c = classifyLogin(res.status, res.json);
-      if (c.ok) { session = c.session; return c; }
-      if (c.dropKey) { rejected = true; try { deps.forgetKey(); } catch (e2) { /* nothing to do */ } }
+      if (c.ok) { keep(c.session, c.expiresAt !== null ? c.expiresAt : deps.now() + SESSION_DEFAULT_MS); return c; }
+      if (c.dropKey) { rejected = true; drop(); try { deps.forgetKey(); } catch (e2) { /* nothing to do */ } }
       if (c.code === 'BLOCKED') blockedUntil = deps.now() + c.retryAfterS * 1000;
       return c;
     }
@@ -1142,7 +1239,8 @@ var KSBM_API = (function () {
           return { ok: false, code: 'BLOCKED', message: 'Too many sign-in attempts. Waiting before trying again.', retryAfterS: Math.ceil((blockedUntil - deps.now()) / 1000) };
         }
         var freshLogin = false;
-        if (session === null) {
+        if (!usable()) await adopt();
+        if (!usable()) {
           var l = await login(key);
           if (!l.ok) return l;
           freshLogin = true;
@@ -1151,7 +1249,7 @@ var KSBM_API = (function () {
           var res;
           try { res = await deps.post('/latest', { session: session }); } catch (e3) { res = { status: 0, json: null }; }
           if (res.status === 401) {
-            session = null;
+            drop();
             // One new sign-in per fetch, and none right after a sign-in that was just issued.
             if (attempt === 0 && !freshLogin) {
               var l2 = await login(key);
@@ -1167,7 +1265,7 @@ var KSBM_API = (function () {
           if (res.status === 200) {
             var s = KSBM_CORE.sanitizeEnvelope(res.json);
             if (!s.ok) return { ok: false, code: 'BAD_DATA', message: 'The server sent data this script cannot read (' + s.reason + '). Nothing is shown.' };
-            return { ok: true, env: s.env };
+            return { ok: true, env: s.env, raw: res.json };
           }
           if (res.status === 0) return { ok: false, code: 'SERVER', message: 'The server could not be reached. Trying again in a minute.' };
           return { ok: false, code: 'SERVER', message: 'The server gave an unexpected answer (' + res.status + ').' };
@@ -1178,7 +1276,7 @@ var KSBM_API = (function () {
       }
     }
 
-    return { fetchLatest: fetchLatest, reset: reset, unblock: unblock, hasSession: function () { return session !== null; } };
+    return { fetchLatest: fetchLatest, reset: reset, unblock: unblock, hasSession: function () { return usable(); } };
   }
 
   return { ORIGIN: ORIGIN, PATHS: PATHS, validKey: validKey, urlFor: urlFor, classifyLogin: classifyLogin, createClient: createClient };
@@ -1220,6 +1318,9 @@ var KSBM_IO = (function () {
     return v;
   }
   function saveJson(name, value) { save(name, JSON.stringify(value)); }
+  async function loadJson(name) { return parseStored(await load(name, null)); }
+  // Is there anything stored under the name (other than nothing, "" or the text "null")? Used to remove a kept answer that cannot be read.
+  async function hasValue(name) { var v = await load(name, null); return v !== null && v !== '' && v !== 'null'; }
 
   async function loadSettings() {
     var key = await load('key', '');
@@ -1229,6 +1330,7 @@ var KSBM_IO = (function () {
     var tab = await load('tab', KSBM_CORE.DEFAULT_TAB);
     var sort = await load('sort', KSBM_CORE.DEFAULT_SORT);
     var mode = await load('mode', KSBM_CORE.DEFAULT_MODE);
+    var side = await load('side', 'open');
     var travel = parseStored(await load('travel', null));
     var starred = parseStored(await load('starred', null));
     var hidden = parseStored(await load('hidden', null));
@@ -1240,6 +1342,7 @@ var KSBM_IO = (function () {
       tab: KSBM_CORE.validTab(tab),
       sort: KSBM_CORE.validSort(sort),
       mode: KSBM_CORE.validMode(mode),
+      side: side === 'closed' ? 'closed' : 'open',                 // the box in Torn's sidebar (PC): folded in or out
       travel: KSBM_CORE.sanitizeTravel(travel),
       starred: KSBM_CORE.cleanKeys(starred),
       hidden: KSBM_CORE.cleanKeys(hidden)
@@ -1278,7 +1381,7 @@ var KSBM_IO = (function () {
     });
   }
 
-  return { persistent: persistent, loadSettings: loadSettings, save: save, saveJson: saveJson, post: post };
+  return { persistent: persistent, loadSettings: loadSettings, load: load, save: save, saveJson: saveJson, loadJson: loadJson, hasValue: hasValue, post: post };
 })();
 
 /* ================= KS Black Market — what is read from Torn's page (shared by PC and PDA) =================
@@ -1474,9 +1577,371 @@ var KSBM_PAGE = (function () {
     watchTravel: watchTravel, watchMoney: watchMoney, DEBOUNCE_MS: DEBOUNCE_MS };
 })();
 
+/* ================= KS Black Market — Torn's look and the box in Torn's left sidebar (0.4.3) =================
+ * Two jobs, both only about how things LOOK on the user's own screen:
+ *   1. readTheme: reads colours and the font from Torn's own elements (getComputedStyle) so that the panel and the BM button look like Torn and
+ *      follow Torn's light or dark mode. Anything missing falls back to fixed values for the dark and the light mode.
+ *   2. create (PC only): one small box in Torn's left sidebar, right after the block that holds the "Areas" list, built with the SAME class names
+ *      as Torn's "Lists" block (copied at run time), with the three best trips. It is marked data-ks-bm-side="1". Its rows are not links: no
+ *      href, role="button", Enter and Space work. It clicks nothing on Torn's page, navigates nowhere and sends nothing.
+ * Class names of Torn's page end in a random suffix (name___xxxxx) that changes when Torn rebuilds the page: elements are found by the START of
+ * a class name, by id and by structure, never by a whole class name. The only thing watched is the child list of #sidebar (not its subtree, not
+ * attributes), after 250 ms of quiet. While #sidebar or the Areas block is not drawn yet there is no observer: it looks again a few times
+ * (0.25 s, then doubling, about a minute in all) with plain timeouts. The observer is disconnected and the timers stopped by destroy().
+ */
+var KSBM_SIDE = (function () {
+  'use strict';
+
+  var ATTR = 'data-ks-bm-side';
+  var ATTR_NOW = 'data-ks-bm-now';
+  var FIT_GAP_PX = 14;               // the icon (8 px) and the name's own margin, and 4 px of air before the amount
+  var FIT_GAP_NOW_PX = 10;           // with the "now" mark the 4 px of air before it are the mark's own margin
+  var FIT_PX = 92, FIT_NOW_PX = 128; // the room kept for the amount without and with the "now" mark when it cannot be measured
+  var DEBOUNCE_MS = 250;
+  var RETRY_MS = [250, 500, 1000, 2000, 4000, 8000, 16000, 32000];      // about a minute in all, while the sidebar is not there yet
+  var TITLE = 'KS Black Market';
+  var OPEN_ROW = 'Open panel';
+  // State words that Torn puts on single elements ("active___xxxxx"); they are never copied.
+  var STATE_WORDS = ['active', 'attention', 'disabled', 'selected', 'hover', 'collapsed', 'full', 'open', 'closed', 'expanded', 'current', 'highlighted', 'hidden', 'mobile'];
+
+  /* ---- the look of Torn ---- */
+
+  var FALLBACK = {
+    dark: { text: '#dddddd', bg: '#191919', headBg: '', headImage: 'repeating-linear-gradient(90deg, #222222, #222222 2px, #2d2d2d 0px, #2d2d2d 4px)', headText: '#dddddd', link: '#dddddd' },
+    light: { text: '#333333', bg: '#f2f2f2', headBg: '', headImage: 'repeating-linear-gradient(90deg, #e6e6e6, #e6e6e6 2px, #d6d6d6 0px, #d6d6d6 4px)', headText: '#333333', link: '#333333' }
+  };
+  var FONT_FALLBACK = 'Arial, Helvetica, sans-serif';
+  var SERIF_FIRST = ['serif', 'times new roman', 'times', 'georgia', 'garamond', 'palatino', 'palatino linotype', 'book antiqua', 'cambria'];
+  // A font list whose first font is a serif font, or that ends in the generic "serif" (a page that is not styled, as on a phone): not used.
+  function isSerif(list) {
+    var l = String(list || '').toLowerCase();
+    var first = l.split(',')[0].replace(/['"]/g, '').trim();
+    return SERIF_FIRST.indexOf(first) >= 0 || /(^|,)\s*serif\s*$/.test(l);
+  }
+
+  // "rgba(0, 0, 0, 0)" and "transparent" count as nothing.
+  function solid(c) {
+    var s = String(c || '').trim().toLowerCase();
+    if (s === '' || s === 'transparent' || /^rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*0(\.0+)?\s*\)$/.test(s)) return '';
+    return s;
+  }
+  function styleOf(win, el) {
+    try { return el ? win.getComputedStyle(el) : null; } catch (e) { return null; }
+  }
+  // "name___xxxxx" at the start of one class name of the element or of a descendant: the first such element in the document order.
+  function hasToken(el, prefix) {
+    var cn = typeof el.className === 'string' ? el.className : '';
+    var list = cn.split(/\s+/);
+    for (var i = 0; i < list.length; i++) if (list[i].indexOf(prefix + '___') === 0) return true;
+    return false;
+  }
+  function findToken(root, prefix) {
+    if (!root) return null;
+    if (hasToken(root, prefix)) return root;
+    var found = root.querySelectorAll('[class*="' + prefix + '___"]');
+    for (var i = 0; i < found.length; i++) if (hasToken(found[i], prefix)) return found[i];
+    return null;
+  }
+
+  /* The look of Torn right now: { dark, font, text, bg, headBg, headImage, headText, link, torn:{...} } where torn says per value whether it was
+   * read from Torn (true) or is a fallback (false). doc/win: the page. Nothing is written. */
+  function readTheme(doc, win) {
+    var body = doc && doc.body;
+    var dark = !!body && /(^|\s)dark-mode(\s|$)/.test(String(body.className || ''));
+    var fb = dark ? FALLBACK.dark : FALLBACK.light;
+    var sidebar = doc ? doc.getElementById('sidebar') : null;
+    var bodyCs = styleOf(win, body);
+    var blockCs = styleOf(win, findToken(sidebar, 'sidebar-block'));
+    var headCs = styleOf(win, findToken(sidebar, 'header'));
+    var linkCs = styleOf(win, findToken(sidebar, 'desktopLink'));
+    var torn = {};
+    var pick = function (key, fromTorn, fallback) { torn[key] = !!fromTorn; return fromTorn || fallback; };
+    var bodyFont = bodyCs ? String(bodyCs.fontFamily || '').trim() : '';
+    var font = pick('font', bodyFont && !isSerif(bodyFont) ? bodyFont : '', FONT_FALLBACK);
+    var bgTorn = (blockCs && solid(blockCs.backgroundColor)) || (bodyCs && solid(bodyCs.backgroundColor));
+    var bg = pick('bg', bgTorn, fb.bg);
+    // text and background are used as a pair: when Torn gives no background, the fixed one comes with the fixed text colour
+    var text = pick('text', bgTorn && bodyCs && solid(bodyCs.color), fb.text);
+    var headBg = headCs ? solid(headCs.backgroundColor) : '';
+    var headImage = headCs && headCs.backgroundImage && headCs.backgroundImage !== 'none' ? headCs.backgroundImage : '';
+    var headFromTorn = !!(headBg || headImage);
+    torn.head = headFromTorn;
+    if (!headFromTorn) { headBg = fb.headBg; headImage = fb.headImage; }
+    var headText = pick('headText', headCs && solid(headCs.color), fb.headText);
+    var link = pick('link', linkCs && solid(linkCs.color), fb.link);
+    return { dark: dark, font: font, text: text, bg: bg, headBg: headBg, headImage: headImage, headText: headText, link: link, torn: torn };
+  }
+
+  /* ---- the box ---- */
+
+  // The classes of Torn that are copied from an element: "name___xxxxx" ones without a state word.
+  function tornClasses(el) {
+    var out = [];
+    if (!el || typeof el.className !== 'string') return out;
+    el.className.split(/\s+/).forEach(function (c) {
+      var m = /^([A-Za-z][A-Za-z0-9-]*)___[A-Za-z0-9_-]+$/.exec(c);
+      if (m && STATE_WORDS.indexOf(m[1]) < 0) out.push(c);
+    });
+    return out;
+  }
+
+  // Where the box goes: right after the block of #sidebar that holds the Areas list. null when there is none (yet).
+  function locate(doc) {
+    var sb = doc.getElementById('sidebar');
+    if (!sb) return null;
+    var found = sb.querySelectorAll('[class*="areas___"]');
+    for (var i = 0; i < found.length; i++) {
+      if (found[i].closest('[' + ATTR + ']')) continue;
+      var a = found[i];
+      while (a && a.parentElement !== sb) a = a.parentElement;
+      if (a) return { sidebar: sb, anchor: a };
+    }
+    return null;
+  }
+
+  // The class lists of the parts of Torn's "Lists" block (the block with the amounts); without it, of the Areas block (no info and amount).
+  function readTemplate(sidebar, anchor) {
+    var scope = null;
+    var amount = findToken(sidebar, 'amount');
+    if (amount) {
+      scope = amount;
+      while (scope && scope.parentElement !== sidebar) scope = scope.parentElement;
+    }
+    if (!scope || scope === anchor) scope = anchor;
+    var toggle = findToken(scope, 'toggle-block');
+    var header = toggle && findToken(toggle, 'header');
+    var area = toggle && findToken(toggle, 'area-desktop');
+    var row = area && findToken(area, 'area-row');
+    var tpl = {
+      block: tornClasses(scope),
+      content: tornClasses(findToken(scope.firstElementChild, 'content')),
+      toggle: tornClasses(toggle),
+      header: tornClasses(header),
+      title: tornClasses(header && findToken(header, 'title')),
+      body: tornClasses(toggle && findToken(toggle, 'toggle-content')),
+      area: tornClasses(area),
+      row: tornClasses(row),
+      link: tornClasses(row && findToken(row, 'desktopLink')),
+      icon: tornClasses(row && findToken(row, 'svgIconWrap')),
+      name: tornClasses(row && findToken(row, 'linkName')),
+      info: tornClasses(row && findToken(row, 'info')),
+      amount: tornClasses(row && findToken(row, 'amount'))
+    };
+    if (scope === anchor) { tpl.info = []; tpl.amount = []; }
+    return tpl;
+  }
+
+  function el(doc, tag, classes, text) {
+    var e = doc.createElement(tag);
+    if (classes && classes.length) e.className = classes.join(' ');
+    if (text !== undefined && text !== null) e.textContent = text;
+    return e;
+  }
+  function pressable(e, onPress) {
+    e.setAttribute('role', 'button');
+    e.setAttribute('tabindex', '0');
+    e.addEventListener('click', function () { onPress(); });
+    e.addEventListener('keydown', function (ev) {
+      if (ev.target !== e) return;
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); onPress(); }
+    });
+  }
+
+  /* deps: { doc, win, onOpen(), onFold(collapsed), onPresence(present) }
+   * api: ensure() looks again (and puts the box back), update(model) shows { status, rows }, setCollapsed(bool), present(), destroy(). */
+  function create(deps) {
+    var doc = deps.doc, win = deps.win;
+    var block = null, parts = null, tplKey = '';
+    var sidebar = null, obs = null, retryTimer = null, retryIdx = 0, debTimer = null;
+    var stopped = false, reported = null, collapsed = false;
+    var model = { status: null, rows: [] };
+
+    function report(p) {
+      if (reported === p) return;
+      reported = p;
+      deps.onPresence(p);
+    }
+    function removeBlock() {
+      if (block && block.parentNode) block.parentNode.removeChild(block);
+      block = null; parts = null; tplKey = '';
+    }
+    function dedupe() {
+      var all = doc.querySelectorAll('[' + ATTR + ']');
+      for (var i = 0; i < all.length; i++) if (all[i] !== block && all[i].parentNode) all[i].parentNode.removeChild(all[i]);
+    }
+    function applyFold() {
+      if (!parts) return;
+      parts.body.style.display = collapsed ? 'none' : '';
+      parts.header.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      parts.arrow.textContent = collapsed ? '▸' : '▾';
+      if (!collapsed) fit();
+    }
+    function fold() {
+      collapsed = !collapsed;
+      applyFold();
+      deps.onFold(collapsed);
+    }
+
+    function build(tpl) {
+      var b = el(doc, 'div', tpl.block);
+      b.setAttribute(ATTR, '1');
+      var content = el(doc, 'div', tpl.content);
+      var toggle = el(doc, 'div', tpl.toggle);
+      var header = el(doc, 'div', tpl.header);
+      pressable(header, fold);
+      var title = el(doc, 'h2', tpl.title, TITLE);
+      var arrow = el(doc, 'span', null, '');
+      arrow.setAttribute('aria-hidden', 'true');
+      arrow.style.cssText = 'padding:0 8px;font-size:10px;line-height:1;opacity:.85;align-self:center';
+      header.appendChild(title);
+      header.appendChild(arrow);
+      var body = el(doc, 'div', tpl.body);
+      toggle.appendChild(header);
+      toggle.appendChild(body);
+      content.appendChild(toggle);
+      b.appendChild(content);
+      parts = { header: header, body: body, arrow: arrow, tpl: tpl };
+      return b;
+    }
+
+    // One row, built like a row of Torn's "Lists" (Torn's own CSS puts the amount at the right edge, on top of the row). The name is given the room
+    // that is left of the amount, so that a long destination is cut with "..." and never runs into it. A small green "now" mark sits inside the
+    // amount, before the number, with 4 px of air on both sides. full: the whole destination, for the tooltip.
+    function row(name, amount, title, onPress, now) {
+      var tpl = parts.tpl;
+      var area = el(doc, 'div', tpl.area);
+      var r = el(doc, 'div', tpl.row);
+      var link = el(doc, 'a', tpl.link);                                  // no href: not a link, only the look of one
+      var icon = el(doc, 'span', tpl.icon);                               // keeps the height of Torn's rows; narrow, there is no icon
+      icon.style.cssText = 'flex:none;width:8px';
+      var nm = el(doc, 'span', tpl.name);
+      nm.style.cssText = 'display:flex;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' + (amount ? ';max-width:calc(100% - ' + (now ? FIT_NOW_PX : FIT_PX) + 'px)' : '');
+      nm.textContent = name;
+      link.appendChild(icon);
+      link.appendChild(nm);
+      r.appendChild(link);
+      if (amount) {
+        var info = el(doc, 'div', tpl.info);
+        var am = el(doc, 'span', tpl.amount);
+        if (now) {
+          var mark = el(doc, 'span', null, 'now');
+          mark.setAttribute(ATTR_NOW, '1');
+          mark.style.cssText = 'display:inline-block;margin:0 4px;padding:0 4px;border-radius:3px;background:#3d8f2f;color:#fff;font-size:10px;font-weight:700;line-height:13px;vertical-align:1px';
+          am.appendChild(mark);
+        }
+        am.appendChild(doc.createTextNode(amount));
+        info.appendChild(am);
+        r.appendChild(info);
+        fits.push({ nm: nm, info: info, now: !!now });
+      }
+      area.appendChild(r);
+      area.setAttribute('aria-label', title ? name + (now ? ', leave now' : '') + ', ' + amount : name);
+      if (title) area.setAttribute('title', title);
+      pressable(area, onPress);
+      return area;
+    }
+
+    // The room of a name is what is left of the row after the amount (and the mark): measured when the rows are on the page, so that nothing
+    // runs into anything; the fixed values (FIT_PX, FIT_NOW_PX) hold when the box is folded in and cannot be measured.
+    var fits = [];
+    function fit() {
+      if (!parts || collapsed) return;
+      fits.forEach(function (f) {
+        var w = f.info.getBoundingClientRect().width;
+        if (w > 0) f.nm.style.maxWidth = 'calc(100% - ' + (Math.ceil(w) + (f.now ? FIT_GAP_NOW_PX : FIT_GAP_PX)) + 'px)';
+      });
+    }
+    function draw() {
+      if (!block || !parts) return;
+      var body = parts.body;
+      fits = [];
+      body.textContent = '';
+      if (model.status) body.appendChild(row(model.status, '', '', deps.onOpen));
+      model.rows.forEach(function (r) { body.appendChild(row(r.name, r.amount, r.title, deps.onOpen, r.now)); });
+      body.appendChild(row(OPEN_ROW, '', '', deps.onOpen));
+      applyFold();
+      fit();
+    }
+
+    // No sidebar yet: look again later, a limited number of times.
+    function scheduleRetry() {
+      if (stopped || retryTimer || retryIdx >= RETRY_MS.length) return;
+      retryTimer = setTimeout(function () { retryTimer = null; ensure(); }, RETRY_MS[retryIdx++]);
+    }
+    function stopRetry() {
+      if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+    }
+    function detach() {
+      if (obs) { obs.disconnect(); obs = null; }
+      sidebar = null;
+    }
+    function attach(sb) {
+      detach();
+      sidebar = sb;
+      try {
+        obs = new MutationObserver(schedule);
+        obs.observe(sb, { childList: true });                              // the direct children only: not the subtree, not attributes
+      } catch (e) { obs = null; }
+    }
+    function schedule() {
+      if (stopped || debTimer) return;
+      debTimer = setTimeout(function () { debTimer = null; ensure(); }, DEBOUNCE_MS);
+    }
+
+    function ensure() {
+      if (stopped) return;
+      var loc = locate(doc);
+      if (!loc) {                                                           // no #sidebar or no Areas block: no box
+        removeBlock();
+        detach();
+        report(false);
+        scheduleRetry();
+        return;
+      }
+      stopRetry();
+      retryIdx = 0;
+      if (loc.sidebar !== sidebar) attach(loc.sidebar);
+      var tpl = readTemplate(loc.sidebar, loc.anchor);
+      var key = JSON.stringify(tpl);
+      var fresh = !block || key !== tplKey;
+      if (fresh) {                                                          // first time, or Torn rebuilt its class names
+        if (block && block.parentNode) block.parentNode.removeChild(block);
+        block = build(tpl);
+        tplKey = key;
+      }
+      dedupe();
+      if (block.parentNode !== loc.sidebar || block.previousElementSibling !== loc.anchor) loc.sidebar.insertBefore(block, loc.anchor.nextSibling);
+      if (fresh) draw();
+      report(true);
+    }
+
+    function destroy() {
+      stopped = true;
+      stopRetry();
+      detach();
+      if (debTimer) { clearTimeout(debTimer); debTimer = null; }
+      removeBlock();
+      dedupe();
+      report(false);
+    }
+
+    ensure();
+    return {
+      ensure: ensure,
+      update: function (m) { model = m; draw(); },
+      setCollapsed: function (c) { collapsed = !!c; applyFold(); },
+      present: function () { return !!block && block.isConnected; },
+      destroy: destroy
+    };
+  }
+
+  return { readTheme: readTheme, isSerif: isSerif, create: create, locate: locate, tornClasses: tornClasses, FALLBACK: FALLBACK, ATTR: ATTR, TITLE: TITLE, OPEN_ROW: OPEN_ROW };
+})();
+
 /* ================= KS Black Market — panel (Shadow DOM) =================
  * One small "BM" button and one panel, both inside their own shadow root on a host element that is a direct child of
- * <html>. Nothing of Torn's page is moved, hidden or styled (what is read from it is in 35-page.js). Every piece of text is set with textContent from
+ * <html>. Nothing of Torn's page is moved, hidden or styled by the panel (what is read from it is in 35-page.js; the look of Torn and the box in
+ * Torn's sidebar are in 36-side.js). Every piece of text is set with textContent from
  * our own formatting of numbers; nothing from the server is ever put in as HTML.
  * The text of every row comes from KSBM_CORE.rowView / detailLines (pure functions, tested against the Python numbers);
  * this file only puts it on the screen.
@@ -1486,55 +1951,70 @@ var KSBM_UI = (function () {
 
   var C = KSBM_CORE;
 
+  // Colours: variables on .wrap. The dark set is the default, .wrap.light the light set; setTheme() puts the values read from Torn's own page
+  // (36-side.js readTheme) over them: --font --text --bg --head-bg --head-image --head-text --link.
   var CSS = [
     ':host{all:initial}',
-    '*{box-sizing:border-box;font-family:Arial,Helvetica,sans-serif}',
-    '.wrap{position:fixed;left:8px;bottom:84px;z-index:2147483000;color:#e8e8e8;font-size:13px;line-height:1.35}',
+    '*{box-sizing:border-box;font-family:var(--font)}',
+    '.wrap{--font:Arial,Helvetica,sans-serif;--text:#ddd;--bg:#191919;--link:#ddd;--head-bg:#2a2a2a;--head-image:none;--head-text:#ddd;--head-shadow:#333;',
+    '--muted:#aaa;--faint:#9a9a9a;--line:#444;--row-line:#2c2c2c;--detail:#cfcfcf;--input-bg:#262626;--input-line:#555;--input-text:#eee;',
+    '--btn-bg:#2f3f2b;--btn-line:#577a4b;--btn-text:#e6f2e0;--btn2-bg:#2a2a2a;--btn2-line:#555;--btn2-text:#ddd;',
+    '--on-bg:#3d6a2f;--on-line:#8fd16f;--on-text:#fff;--accent:#8fd16f;--pos:#8fd16f;--neg:#e8827f;',
+    '--chip-bg:#2d4a24;--chip-text:#cfe8c4;--warn-bg:#5a4514;--warn-text:#f3dca3;--bad-bg:#5a2321;--bad-text:#f1b3b1;',
+    '--green-bg:#2d5a24;--green-text:#d8f5cc;--grey-bg:#333;--grey-text:#aaa;--msg-bg:#3a2b12;--msg-text:#f3dca3;--msg-bad-bg:#3a1816;--msg-bad-text:#f1b3b1}',
+    '.wrap.light{--head-bg:#dcdcdc;--head-shadow:transparent;--muted:#666;--faint:#6f6f6f;--line:#b5b5b5;--row-line:#dadada;--detail:#444;--input-bg:#fff;--input-line:#a8a8a8;--input-text:#222;',
+    '--btn-bg:#e3eedd;--btn-line:#7aa06b;--btn-text:#25421b;--btn2-bg:#e8e8e8;--btn2-line:#a8a8a8;--btn2-text:#333;',
+    '--on-bg:#4f8f3a;--on-line:#3e7a2b;--on-text:#fff;--accent:#3e7a2b;--pos:#2f7a1d;--neg:#b5322e;',
+    '--chip-bg:#d6ecc9;--chip-text:#25421b;--warn-bg:#f6e4b0;--warn-text:#5a4514;--bad-bg:#f3c9c6;--bad-text:#6b1d1a;',
+    '--green-bg:#cfe9c2;--green-text:#1f4515;--grey-bg:#e0e0e0;--grey-text:#555;--msg-bg:#f6e4b0;--msg-text:#5a4514;--msg-bad-bg:#f3c9c6;--msg-bad-text:#6b1d1a}',
+    '.wrap{position:fixed;left:8px;bottom:84px;z-index:2147483000;color:var(--text);font-size:13px;line-height:1.35}',
     '.wrap.hidden{display:none}',
-    '.bm{display:flex;align-items:center;justify-content:center;width:38px;height:38px;margin-right:auto;border-radius:19px;border:2px solid #6aa84f;background:#1d2a1a;color:#cfe8c4;font-weight:700;font-size:13px;cursor:pointer;padding:0}',
-    '.bm.warn{border-color:#d9a441;color:#f3dca3;background:#2b2412}.bm.bad{border-color:#c0504d;color:#f1b3b1;background:#2b1615}',
-    '.panel{display:none;width:min(430px,calc(100vw - 16px));max-height:76vh;overflow:auto;margin-bottom:8px;border:1px solid #444;border-radius:8px;background:#1b1b1b;box-shadow:0 4px 18px rgba(0,0,0,.6);padding:8px}',
+    '.wrap.nobtn .bm{display:none}',
+    '.bm{display:flex;align-items:center;justify-content:center;width:38px;height:38px;margin-right:auto;border-radius:5px;border:2px solid #6aa84f;background-color:var(--head-bg);background-image:var(--head-image);color:var(--head-text);text-shadow:0 1px 0 var(--head-shadow);font-weight:700;font-size:13px;cursor:pointer;padding:0}',
+    '.bm.warn{border-color:#d9a441}.bm.bad{border-color:#c0504d}',
+    '.panel{display:none;width:min(430px,calc(100vw - 16px));max-height:76vh;overflow:auto;margin-bottom:8px;border:1px solid var(--line);border-radius:5px;background:var(--bg);box-shadow:0 4px 18px rgba(0,0,0,.45);padding:8px}',
     '.wrap.open .panel{display:block}',
-    '.head{display:flex;align-items:center;gap:8px;margin-bottom:4px}.title{font-weight:700;font-size:14px;flex:1}',
-    '.chip{padding:1px 8px;border-radius:9px;font-size:11px;font-weight:700;background:#2d4a24;color:#cfe8c4}',
-    '.chip.warn{background:#5a4514;color:#f3dca3}.chip.bad{background:#5a2321;color:#f1b3b1}',
-    '.close{background:none;border:0;color:#bbb;font-size:20px;line-height:1;cursor:pointer;padding:0 4px}',
-    '.meta{color:#aaa;font-size:11.5px;margin-bottom:4px}',
-    '.msg{display:none;margin:4px 0;padding:6px 8px;border-radius:6px;background:#3a2b12;color:#f3dca3}.msg.show{display:block}',
-    '.msg.bad{background:#3a1816;color:#f1b3b1}',
-    'details.settings{margin:6px 0;border:1px solid #333;border-radius:6px;padding:4px 8px}',
-    'details.settings summary{cursor:pointer;color:#ccc}',
-    '.field{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:6px 0}.field label{min-width:92px;color:#bbb}',
-    '.field input,.field select{background:#262626;color:#eee;border:1px solid #555;border-radius:4px;padding:4px 6px;font-size:13px}',
+    '.head{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin:-8px -8px 8px;padding:3px 8px;min-height:26px;border-radius:4px 4px 0 0;background-color:var(--head-bg);background-image:var(--head-image);color:var(--head-text)}',
+    '.title{font-weight:700;font-size:13px;flex:1;min-width:0;text-shadow:0 1px 0 var(--head-shadow)}',
+    '.chip{padding:1px 8px;border-radius:9px;font-size:11px;font-weight:700;background:var(--chip-bg);color:var(--chip-text)}',
+    '.chip.warn{background:var(--warn-bg);color:var(--warn-text)}.chip.bad{background:var(--bad-bg);color:var(--bad-text)}',
+    '.min{background:none;border:1px solid var(--line);color:var(--head-text);border-radius:4px;font-size:11.5px;font-weight:700;line-height:1.2;cursor:pointer;padding:2px 8px}',
+    '.meta{color:var(--muted);font-size:11.5px;margin-bottom:4px}',
+    '.msg{display:none;margin:4px 0;padding:6px 8px;border-radius:6px;background:var(--msg-bg);color:var(--msg-text)}.msg.show{display:block}',
+    '.msg.bad{background:var(--msg-bad-bg);color:var(--msg-bad-text)}',
+    'details.settings{margin:6px 0;border:1px solid var(--line);border-radius:6px;padding:4px 8px}',
+    'details.settings summary{cursor:pointer;color:var(--link)}',
+    '.field{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:6px 0}.field label{min-width:92px;color:var(--muted)}',
+    '.field input,.field select{background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-line);border-radius:4px;padding:4px 6px;font-size:13px}',
     '.field input.key{flex:1;min-width:140px}.field input.seats{width:72px}',
-    'button.btn{background:#2f3f2b;color:#e6f2e0;border:1px solid #577a4b;border-radius:4px;padding:4px 10px;font-size:12.5px;cursor:pointer}',
-    'button.btn.sec{background:#2a2a2a;border-color:#555;color:#ddd}',
-    '.note{color:#9a9a9a;font-size:11.5px}.settings .note{margin:6px 0}',
-    'h3{font-size:12.5px;line-height:1.3;margin:12px 0 2px;color:#9a9a9a;font-weight:700}',
+    'button.btn{background:var(--btn-bg);color:var(--btn-text);border:1px solid var(--btn-line);border-radius:4px;padding:4px 10px;font-size:12.5px;cursor:pointer}',
+    'button.btn.sec{background:var(--btn2-bg);border-color:var(--btn2-line);color:var(--btn2-text)}',
+    '.note{color:var(--faint);font-size:11.5px}.settings .note{margin:6px 0}',
+    'h3{font-size:12.5px;line-height:1.3;margin:12px 0 2px;color:var(--faint);font-weight:700}',
     '.filters{display:none;flex-wrap:wrap;gap:6px;margin:10px 0 0}.filters.show{display:flex}',
-    '.filters button{background:#2a2a2a;color:#ddd;border:1px solid #555;border-radius:15px;padding:5px 12px;font-size:12.5px;cursor:pointer}',
-    '.filters button.on{background:#3d6a2f;border-color:#8fd16f;color:#fff;font-weight:700}',
-    '.tabs{display:none;gap:4px;margin:8px 0 2px;border-bottom:1px solid #333}.tabs.show{display:flex}',
-    '.tabs button{flex:1;background:none;color:#aaa;border:0;border-bottom:3px solid transparent;padding:7px 4px;font-size:13px;cursor:pointer}',
-    '.tabs button.on{color:#fff;font-weight:700;border-bottom-color:#8fd16f}',
-    '.sorts{display:none;gap:8px;margin:8px 0 0;align-items:center}.sorts.show{display:flex}.sorts label{color:#bbb;font-weight:700}',
-    '.sorts select{flex:1;min-width:0;height:40px;background:#262626;color:#eee;border:1px solid #555;border-radius:6px;padding:0 8px;font-size:14px}',
-    '.row{padding:7px 2px;border-top:1px solid #2c2c2c;cursor:pointer}.row:first-child{border-top:0}',
-    '.starbadge{display:inline-block;margin-left:6px;padding:0 5px;border-radius:3px;font-size:10.5px;font-weight:700;background:#5a4514;color:#f3dca3;vertical-align:1px}',
-    '.acts{display:flex;gap:6px;margin:6px 0 2px}.acts button{background:#2a2a2a;color:#ddd;border:1px solid #555;border-radius:4px;padding:3px 10px;font-size:12px;cursor:pointer}',
-    '.row:focus-visible{outline:2px solid #8fd16f;outline-offset:-2px}',
+    '.filters button{background:var(--btn2-bg);color:var(--btn2-text);border:1px solid var(--btn2-line);border-radius:15px;padding:5px 12px;font-size:12.5px;cursor:pointer}',
+    '.filters button.on{background:var(--on-bg);border-color:var(--on-line);color:var(--on-text);font-weight:700}',
+    '.tabs{display:none;gap:4px;margin:8px 0 2px;border-bottom:1px solid var(--line)}.tabs.show{display:flex}',
+    '.tabs button{flex:1;background:none;color:var(--muted);border:0;border-bottom:3px solid transparent;padding:7px 4px;font-size:13px;cursor:pointer}',
+    '.tabs button.on{color:var(--text);font-weight:700;border-bottom-color:var(--accent)}',
+    '.sorts{display:none;gap:8px;margin:8px 0 0;align-items:center}.sorts.show{display:flex}.sorts label{color:var(--muted);font-weight:700}',
+    '.sorts select{flex:1;min-width:0;height:40px;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-line);border-radius:6px;padding:0 8px;font-size:14px}',
+    '.row{padding:7px 2px;border-top:1px solid var(--row-line);cursor:pointer}.row:first-child{border-top:0}',
+    '.starbadge{display:inline-block;margin-left:6px;padding:0 5px;border-radius:3px;font-size:10.5px;font-weight:700;background:var(--warn-bg);color:var(--warn-text);vertical-align:1px}',
+    '.acts{display:flex;gap:6px;margin:6px 0 2px}.acts button{background:var(--btn2-bg);color:var(--btn2-text);border:1px solid var(--btn2-line);border-radius:4px;padding:3px 10px;font-size:12px;cursor:pointer}',
+    '.row:focus-visible,.min:focus-visible,.bm:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}',
     '.r1{display:flex;justify-content:space-between;align-items:baseline;gap:8px}',
     '.name{font-weight:700;min-width:0;overflow-wrap:anywhere}',
-    '.big{font-weight:700;font-size:16px;white-space:nowrap}.pos{color:#8fd16f}.neg{color:#e8827f}',
-    '.r2{color:#b5b5b5;font-size:12px;margin-top:1px}',
+    '.big{font-weight:700;font-size:16px;white-space:nowrap}.pos{color:var(--pos)}.neg{color:var(--neg)}',
+    '.r2{color:var(--muted);font-size:12px;margin-top:1px}',
     '.mark{display:inline-block;padding:0 6px;border-radius:3px;font-weight:700;font-size:11.5px}',
-    '.mark.green{background:#2d5a24;color:#d8f5cc}.mark.yellow{background:#5a4514;color:#f3dca3}.mark.grey{background:#333;color:#aaa;font-weight:400}',
-    '.details{display:none;margin:5px 0 2px;padding-left:8px;border-left:2px solid #444}.row.open .details{display:block}',
-    '.details .d{color:#cfcfcf;font-size:12px;margin:2px 0}',
-    '.empty{color:#999;padding:6px 0}',
-    '.foot{margin-top:8px;color:#aaa;font-size:11.5px;border-top:1px solid #333;padding-top:6px}',
+    '.mark.green{background:var(--green-bg);color:var(--green-text)}.mark.yellow{background:var(--warn-bg);color:var(--warn-text)}.mark.grey{background:var(--grey-bg);color:var(--grey-text);font-weight:400}',
+    '.details{display:none;margin:5px 0 2px;padding-left:8px;border-left:2px solid var(--line)}.row.open .details{display:block}',
+    '.details .d{color:var(--detail);font-size:12px;margin:2px 0}',
+    '.empty{color:var(--faint);padding:6px 0}',
+    '.foot{margin-top:8px;color:var(--muted);font-size:11.5px;border-top:1px solid var(--line);padding-top:6px}',
     '.legend{margin-top:8px}',
-    '.pda .bm{width:44px;height:44px;border-radius:22px}.pda button.btn{padding:8px 12px}.pda .close{font-size:26px;padding:0 8px}',
+    '.pda .bm{width:44px;height:44px}.pda button.btn{padding:8px 12px}.pda .min{font-size:13px;padding:7px 12px}',
     '.pda .filters button{padding:10px 14px}.pda .tabs button{padding:11px 2px}.pda .row{padding:10px 2px}',
     '.pda .sorts select{height:44px;font-size:15px}.pda .acts button{padding:8px 12px}'
   ].join('');
@@ -1556,7 +2036,7 @@ var KSBM_UI = (function () {
   var SLOTS_HELP = 'How many items you can carry when you travel. Airstrip, WLT and Business give 15; suitcase, the Excursion faction perk, job specials and the Smuggling For Beginners book add more. Highest possible: ' + KSBM_CORE.MAX_SEATS + '.';
   var PRIVACY = 'Your key is sent only to the KS Black Market server, which checks with Torn that you are in Politically Incorrect. The server does not store it. A Public key is enough. This script never contacts Torn.';
   var NOTE = 'Measurement, not advice. Prices abroad change about every 5 minutes.';
-  var EMPTY_TEXT = 'Nothing pays right now.';
+  var EMPTY_TEXT = C.EMPTY_TEXT;
   var THIN_TITLE = 'Thin market';
 
   /* cb: { onToggle(open), onSaveKey(text), onRemoveKey(), onMethod(m), onSeats(n), onGroup(g), onTab(t), onSort(s), onUseTorn(),
@@ -1579,10 +2059,9 @@ var KSBM_UI = (function () {
 
     var head = h('div', 'head');
     var chip = h('span', 'chip', 'NO DATA YET');
-    var closeBtn = h('button', 'close', '×');
-    closeBtn.type = 'button';
-    closeBtn.setAttribute('aria-label', 'Close');
-    add(head, h('span', 'title', 'KS Black Market ' + platform + ' ' + KSBM_VERSION), chip, closeBtn);
+    var minBtn = h('button', 'min', 'Minimize');
+    minBtn.type = 'button';
+    add(head, h('span', 'title', 'KS Black Market ' + platform + ' ' + KSBM_VERSION), chip, minBtn);
 
     var meta = h('div', 'meta');
     var msg = h('div', 'msg');
@@ -1675,7 +2154,7 @@ var KSBM_UI = (function () {
     shadow.appendChild(wrap);
 
     btn.addEventListener('click', function () { cb.onToggle(!wrap.classList.contains('open')); });
-    closeBtn.addEventListener('click', function () { cb.onToggle(false); });
+    minBtn.addEventListener('click', function () { cb.onToggle(false); });
     retryBtn.addEventListener('click', function () { cb.onRetry(); });
     saveKey.addEventListener('click', function () { var v = keyInput.value; keyInput.value = ''; cb.onSaveKey(v); });
     removeKey.addEventListener('click', function () { cb.onRemoveKey(); });
@@ -1834,6 +2313,20 @@ var KSBM_UI = (function () {
       unmount: function () { if (host.parentNode) host.parentNode.removeChild(host); },
       setOpen: function (open) { wrap.classList.toggle('open', !!open); },
       setHidden: function (hidden) { wrap.classList.toggle('hidden', !!hidden); },
+      // the box in Torn's sidebar is there: the floating BM button is not shown
+      setBoxMode: function (on) { wrap.classList.toggle('nobtn', !!on); },
+      // the look of Torn (36-side.js readTheme): the values read from Torn go over the fixed colours, the light set is used in Torn's light mode
+      setTheme: function (t) {
+        wrap.classList.toggle('light', !t.dark);
+        var set = function (name, value) { if (value) wrap.style.setProperty(name, value); else wrap.style.removeProperty(name); };
+        set('--font', t.font);
+        set('--text', t.text);
+        set('--bg', t.bg);
+        set('--link', t.link);
+        set('--head-bg', t.headBg);
+        set('--head-image', t.headImage || 'none');
+        set('--head-text', t.headText);
+      },
       collapseSettings: function () { settings.open = false; },
       render: render,
       tickMarks: tickMarks
@@ -1848,6 +2341,10 @@ var KSBM_UI = (function () {
  * The script only reads from the KS Black Market worker. No clicks, no navigation, no requests to Torn.
  * It also READS two things from the page the user has open and is looking at (35-page.js): the cash in the sidebar, and on the Travel
  * Agency page the travel method, flight times and item slots. Only while the tab is visible; kept in memory / ksBm.v1.travel; never sent.
+ * 0.4.3: it also reads the colours and the font of Torn's own page (36-side.js) so that the panel looks like Torn, and on PC it keeps one small
+ * box in Torn's left sidebar with the three best trips. While the box is shown the script also asks OUR server for new prices: at most once every
+ * 5 minutes, only while the tab is visible, and the sign-in (valid 10 minutes) is kept and reused so that it signs in at most once every 10 minutes.
+ * The sign-in and the latest answer are kept in the script manager (ksBm.v1.session, ksBm.v1.latestCache), so the box is drawn at once on every page.
  */
 (function () {
   'use strict';
@@ -1855,6 +2352,9 @@ var KSBM_UI = (function () {
   var POLL_MS = 60000;
   var TICK_MS = 1000;              // the little time labels count down on the server's clock, once a second, only while the panel is open
   var CAPTCHA_CHECK_DEBOUNCE_MS = 2000;
+  var BOX_FETCH_MS = 300000;       // while the box is shown: new prices when the last answer is this old (the server renews them every 5 minutes)
+  var BOX_RETRY_MS = 300000;       // after a failed request: no new try from the box before this has passed
+  var SIDE_REFRESH_MS = 30000;     // the box in Torn's sidebar is redrawn from the data it already has (no request), so that old data turns STALE
   var CAPTCHA_SELECTOR = 'iframe[src*="captcha" i],iframe[src*="turnstile" i],iframe[title*="captcha" i],[id*="captcha" i],[class*="captcha" i]';
 
   // ---- BOOT: never twice on one page
@@ -1867,8 +2367,9 @@ var KSBM_UI = (function () {
     open: false, disposed: false, env: null, fetchedAt: 0, message: null, seq: 0, appliedSeq: 0, epoch: 0, inflight: 0,
     retryAt: 0, captcha: false, clockOffsetS: 0, cash: null, travelWatch: null, moneyWatch: null,
     settings: { key: '', method: KSBM_CORE.DEFAULT_METHOD, seats: KSBM_CORE.DEFAULT_SEATS, group: KSBM_CORE.DEFAULT_GROUP, tab: KSBM_CORE.DEFAULT_TAB,
-      sort: KSBM_CORE.DEFAULT_SORT, mode: KSBM_CORE.DEFAULT_MODE, travel: null, starred: [], hidden: [] },
-    timer: null, staleTimer: null, clockTimer: null, captchaTimer: null, lastStart: 0, observer: null
+      sort: KSBM_CORE.DEFAULT_SORT, mode: KSBM_CORE.DEFAULT_MODE, travel: null, starred: [], hidden: [], side: 'open' },
+    timer: null, staleTimer: null, clockTimer: null, captchaTimer: null, lastStart: 0, observer: null,
+    side: null, sideTimer: null, lastCode: null, boxRetryAt: 0, boxInflight: false, boxBusy: false
   };
   var ui = null;
   var client = null;
@@ -1881,10 +2382,12 @@ var KSBM_UI = (function () {
   // Time on the server's clock: the local clock plus the difference measured when the last answer came (C5).
   function serverNow() { return KSBM_CORE.serverNowS(state.clockOffsetS, now()); }
 
-  function view() {
+  // over (optional): { group, tab, sort } to use instead of the user's choices (the box in Torn's sidebar always shows the best trips by profit per hour)
+  function view(over) {
     var elapsed = state.env ? (now() - state.fetchedAt) / 1000 : 0;
     var st = state.settings;
-    return KSBM_CORE.buildView(state.env, { method: st.method, seats: st.seats, group: st.group, tab: st.tab, sort: st.sort, mode: st.mode,
+    var o = over || {};
+    return KSBM_CORE.buildView(state.env, { method: st.method, seats: st.seats, group: o.group || st.group, tab: o.tab || st.tab, sort: o.sort || st.sort, mode: st.mode,
       travel: st.travel, starred: st.starred, hidden: st.hidden, cash: state.cash, localS: now() / 1000, elapsedS: elapsed, nowS: serverNow() });
   }
 
@@ -1917,10 +2420,36 @@ var KSBM_UI = (function () {
     if (state.moneyWatch) { state.moneyWatch.stop(); state.moneyWatch = null; }
   }
 
+  // The look of Torn (colours and font of its own page), read only while the tab is visible and no captcha is shown. Not readable: the last look stays.
+  function applyTheme() {
+    if (!ui || !pageReadable()) return;
+    ui.setTheme(KSBM_SIDE.readTheme(document, window));
+  }
+
+  // ---- the box in Torn's sidebar (PC only)
+  function updateSide() {
+    if (!state.side || state.disposed) return;
+    state.side.update(KSBM_CORE.sideBox({ hasKey: !!state.settings.key, fetching: state.inflight > 0, failure: state.lastCode,
+      view: view({ group: 'all', tab: 'trips', sort: 'profit' }) }));
+  }
+  function stopSideTimer() {
+    if (state.sideTimer) { clearTimeout(state.sideTimer); state.sideTimer = null; }
+  }
+  function scheduleSide() {
+    stopSideTimer();
+    if (!state.side || state.disposed) return;
+    state.sideTimer = setTimeout(function () { state.sideTimer = null; if (state.side) state.side.ensure(); updateSide(); scheduleSide(); boxTick(); }, SIDE_REFRESH_MS);
+  }
+  function onSidePresence(present) {
+    if (ui) ui.setBoxMode(present);
+    if (present) { updateSide(); scheduleSide(); boxTick(); } else stopSideTimer();
+  }
+
   // ---- RENDER
   function render() {
     if (state.disposed || !ui) return;
     syncCash();
+    applyTheme();
     var v = view();
     var message = state.message;
     if (!canFetch && !message) message = { text: 'This script manager does not provide GM_xmlhttpRequest, so nothing can be fetched.', tone: 'bad' };
@@ -1930,6 +2459,7 @@ var KSBM_UI = (function () {
     });
     scheduleStale(v);
     scheduleTicks(v);
+    updateSide();
   }
 
   // One timer for the labels, started when the lists are on screen and stopped when the panel closes or the page goes
@@ -1955,34 +2485,81 @@ var KSBM_UI = (function () {
     if (wait > 0 && wait < 3600000) state.staleTimer = setTimeout(render, wait);
   }
 
+  // ---- the latest answer, kept in the script manager so the next page can draw it at once
+  function applyEnv(env, fetchedAt) {
+    state.env = env;
+    state.fetchedAt = fetchedAt;
+    state.clockOffsetS = KSBM_CORE.clockOffsetS(env, fetchedAt);
+  }
+  function clearCache() { KSBM_IO.saveJson('latestCache', null); }
+  // The answer another page of this browser kept, when it is newer than ours (and not older as a file). Not usable: nothing changes.
+  async function adoptStoredCache() {
+    var c = KSBM_CORE.readCache(await KSBM_IO.loadJson('latestCache'), now());
+    if (!c || state.disposed) return false;
+    if (state.env && (c.fetchedAt <= state.fetchedAt || c.env.latest.generated_at < state.env.latest.generated_at)) return false;
+    applyEnv(c.env, c.fetchedAt);
+    return true;
+  }
+
   // ---- UPDATE
-  async function fetchNow() {
-    if (state.disposed || !state.open || state.captcha || !canFetch) return;
+  // fromBox: the request is made for the box in Torn's sidebar (the panel is not open). Only one request of the box at a time; a request of the
+  // panel does not start while one of the box is on its way (its answer serves the panel too).
+  async function fetchNow(fromBox) {
+    if (state.disposed || state.captcha || !canFetch) return;
+    if (fromBox ? !boxActive() : (!state.open || state.boxInflight)) return;
     var mySeq = ++state.seq;
     var myEpoch = state.epoch;
     state.lastStart = now();
     state.inflight++;
+    if (fromBox) state.boxInflight = true;
+    updateSide();                                                            // the box says CHECKING while the answer is awaited
     var result;
-    try { result = await client.fetchLatest(); } finally { state.inflight--; }
-    if (state.disposed || myEpoch !== state.epoch || !state.open) return;   // the panel was closed meanwhile
+    try { result = await client.fetchLatest(); } finally { state.inflight--; if (fromBox) state.boxInflight = false; }
+    // an answer counts while the panel it was asked for is still open, or while the box is shown (it is our own server's answer either way)
+    if (state.disposed || !((myEpoch === state.epoch && state.open) || boxActive())) { updateSide(); return; }
     if (mySeq < state.appliedSeq) return;                                    // a newer answer is already on screen
+    if (result.ok && state.env && result.env.latest.generated_at < state.env.latest.generated_at) {      // an older file never replaces a newer one
+      state.boxRetryAt = now() + BOX_RETRY_MS;
+      render();
+      return;
+    }
     state.appliedSeq = mySeq;
     if (result.ok) {
-      state.env = result.env;
-      state.fetchedAt = now();
-      state.clockOffsetS = KSBM_CORE.clockOffsetS(result.env, state.fetchedAt);
+      applyEnv(result.env, now());
       state.message = null;
       state.retryAt = 0;
+      state.boxRetryAt = 0;
+      state.lastCode = null;
+      if (result.raw) KSBM_IO.saveJson('latestCache', KSBM_CORE.makeCache(result.raw, result.env, state.fetchedAt));
     } else {
+      state.lastCode = result.code;
+      state.boxRetryAt = now() + BOX_RETRY_MS;
       if (result.code === 'NO_DATA') { state.message = { text: KSBM_CORE.NO_DATA_TEXT, tone: 'warn' }; }
       else state.message = { text: result.message, tone: result.code === 'BLOCKED' || result.code === 'SERVER' || result.code === 'RETRY' ? 'warn' : 'bad', retry: result.code === 'AUTH' || result.code === 'SERVER' || result.code === 'RETRY' };
       if (result.code === 'BLOCKED') state.retryAt = now() + (result.retryAfterS || 60) * 1000;
       if (result.code === 'KEY_REJECTED' || result.code === 'NOT_MEMBER') {
         state.settings.key = '';          // the client already removed it from storage
         KSBM_IO.save('key', '');
+        clearCache();
       }
     }
     render();
+  }
+
+  // The box needs new prices: the box is shown, the tab is visible, there is a key, nothing is on its way, the last answer is at least 5 minutes
+  // old and the last try did not fail less than 5 minutes ago. Looks first at what another page of this browser has already fetched.
+  function boxActive() { return !!state.side && !state.disposed && state.side.present(); }
+  async function boxTick() {
+    if (!boxActive() || state.boxBusy || state.inflight > 0 || state.captcha || !canFetch) return;
+    if (document.visibilityState !== 'visible' || !KSBM_API.validKey(state.settings.key)) return;
+    if (state.retryAt > now() || state.boxRetryAt > now()) return;
+    state.boxBusy = true;
+    try {
+      if (await adoptStoredCache()) render();
+      if (!boxActive() || state.inflight > 0 || state.captcha || document.visibilityState !== 'visible') return;
+      if (state.env && now() - state.fetchedAt < BOX_FETCH_MS) return;
+      await fetchNow(true);
+    } finally { state.boxBusy = false; }
   }
 
   function tick(forced) {
@@ -2050,6 +2627,7 @@ var KSBM_UI = (function () {
   function onVisibility() {
     if (state.disposed) return;
     if (document.visibilityState === 'visible' && state.travelWatch) state.travelWatch.refresh();
+    if (document.visibilityState === 'visible') { applyTheme(); if (state.side) { state.side.ensure(); updateSide(); boxTick(); } }
     if (!state.open) return;
     checkCaptcha();
     if (document.visibilityState === 'visible') {
@@ -2084,6 +2662,8 @@ var KSBM_UI = (function () {
     stopTicks();
     if (state.captchaTimer) { clearTimeout(state.captchaTimer); state.captchaTimer = null; }
     if (state.observer) { state.observer.disconnect(); state.observer = null; }
+    stopSideTimer();
+    if (state.side) { state.side.destroy(); state.side = null; }
     stopPageWatchers();
     document.removeEventListener('visibilitychange', onVisibility);
     window.removeEventListener('pagehide', onPageHide);
@@ -2114,7 +2694,9 @@ var KSBM_UI = (function () {
     client = KSBM_API.createClient({
       post: KSBM_IO.post,
       getKey: function () { return state.settings.key; },
-      forgetKey: function () { state.settings.key = ''; KSBM_IO.save('key', ''); },
+      forgetKey: function () { state.settings.key = ''; KSBM_IO.save('key', ''); clearCache(); },
+      loadSession: function () { return KSBM_IO.loadJson('session'); },
+      saveSession: function (s) { KSBM_IO.saveJson('session', s); },
       now: now
     });
     ui = KSBM_UI.create(KSBM_PLATFORM, {
@@ -2139,6 +2721,7 @@ var KSBM_UI = (function () {
         state.settings.key = '';
         KSBM_IO.save('key', '');
         client.reset();
+        clearCache();
         state.env = null;
         state.message = { text: 'The saved key was removed.', tone: 'warn' };
         render();
@@ -2160,7 +2743,28 @@ var KSBM_UI = (function () {
       onTab: function (t) { state.settings.tab = KSBM_CORE.validTab(t); KSBM_IO.save('tab', state.settings.tab); render(); },
       onRetry: function () { client.reset(); state.retryAt = 0; tick(true); }
     });
+    // the latest answer of an earlier page (only with a key): drawn at once, with its real age
+    if (KSBM_API.validKey(state.settings.key)) {
+      var stored = await KSBM_IO.loadJson('latestCache');
+      if (state.disposed) return;
+      if (stored !== null) {
+        var c = KSBM_CORE.readCache(stored, now());
+        if (c) applyEnv(c.env, c.fetchedAt); else clearCache();             // not readable (other format, from the future): removed
+      } else if (await KSBM_IO.hasValue('latestCache')) {
+        clearCache();                                                       // damaged text: removed
+      }
+    }
     ui.mount();
+    if (KSBM_PLATFORM === 'PC') {                                            // Torn's sidebar is hidden on a phone: no box on PDA
+      state.side = KSBM_SIDE.create({
+        doc: document, win: window,
+        onOpen: function () { setOpen(true); },
+        onFold: function (collapsed) { state.settings.side = collapsed ? 'closed' : 'open'; KSBM_IO.save('side', state.settings.side); },
+        onPresence: onSidePresence
+      });
+      state.side.setCollapsed(state.settings.side === 'closed');
+      if (state.side.present()) { updateSide(); scheduleSide(); boxTick(); }   // (the callback ran before state.side was set)
+    }
     state.moneyWatch = KSBM_PAGE.watchMoney({ doc: document, visible: pageReadable, onChange: onMoney });
     render();
     startTravelWatch();
