@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Chain Dibs PC
 // @namespace    kingshade.torn.chaindibs
-// @version      0.7.1
+// @version      0.7.3
 // @description  A small floating window with your faction chain: timer, the queue for the next hit, and the Im here rule so the chain does not break. Only the member who made the hit leaves the queue. When anybody may hit, FREE HIT links to a free target. Im here is locked when you cannot hit. Stand first without pressing Im here for 5 hits and you are removed as AFK. A bonus hit is announced. The minimized window still shows who is first and who is the hitter, and a yellow frame tells you when you hold the hit. If you hold the hit and fail, the button I failed - free hit lets everybody hit at once and shows them who released it.
 // @author       Kingshade
 // @downloadURL  https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Chain_Dibs_PC.user.js
@@ -16,12 +16,14 @@
 // @grant        GM_addValueChangeListener
 // @grant        GM_removeValueChangeListener
 // @connect      api.torn.com
-// @connect      ks-war-room-claims.hans-viklund.workers.dev
+// @connect      warroom.kingshadeprotocol.com
 // ==/UserScript==
 
 /*
- * KS Chain Dibs PC 0.7.1
+ * KS Chain Dibs PC 0.7.3
  *
+ * 0.7.3  ONE MAIN CHANGE: the KS server address is now warroom.kingshadeprotocol.com.
+ *        Nothing else changed.
  * 0.7.1  CHANGED: talks to the live KS War Room server instead of the test
  *        server. Nothing else changed.
  * 0.7.0  ADDED: "I failed - free hit" button for the hitter. Everyone sees
@@ -162,10 +164,10 @@
   if (window[INSTANCE_KEY]) return;
   window[INSTANCE_KEY] = true;
 
-  var VERSION = '0.6.0';
+  var VERSION = '0.7.3';
 
   // The ONE place the server address lives.
-  var SERVER_BASE = 'https://ks-war-room-claims.hans-viklund.workers.dev';
+  var SERVER_BASE = 'https://warroom.kingshadeprotocol.com';
 
   var TORN_CHAIN_URL = 'https://api.torn.com/v2/faction/chain';
   var TORN_MEMBERS_URL = 'https://api.torn.com/v2/faction/members';
