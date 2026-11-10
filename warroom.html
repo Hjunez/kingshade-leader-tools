@@ -681,6 +681,29 @@
     #warBoard .bpace { font-size: 10px; line-height: 1; margin-top: 0; }
   }
 
+  /* ---- R33 (2026-11): our chain in the war line ----
+     "Chain 123 · 2:41": the hits of our faction's chain and the time left before it breaks, between the clock and
+     the Lead box. Set like the clock (mono, tabular figures, no jitter). The time left is the page's ink colour
+     from 2:00 up, the page's warning colour from 1:59 to 1:00 and the bad colour below 1:00 (the same --r31-bad
+     the pace uses, which gives 4.5:1 or better on the panel in both themes); "?" - the countdown ran out and the
+     next reading has not come - is the muted colour. Hidden when there is no chain. On a phone it is the short
+     form "C 123 · 2:41" on a row of its own straight under the war line, only while a chain shows (the panel gets
+     chain-on): the war line itself is left exactly as it was - the chain is taken out of its flow and the room for
+     it is added under the line - so nothing in the line is cut. 17 px high, so the head grows by 17 px at most. */
+  #warChain {
+    font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 14px; font-weight: 600;
+    color: var(--r26-clock); white-space: nowrap;
+  }
+  #warChain.warn { color: var(--warn); }
+  #warChain.bad { color: var(--r31-bad); }
+  #warChain.unk { color: var(--muted); }
+  #warPanel .warbar #warChain[hidden] { display: none; }
+  @media (max-width: 700px) {
+    #warPanel.chain-on .warbar { position: relative; padding-bottom: 24px; }
+    #warPanel .warbar #warChain { position: absolute; left: 10px; bottom: 7px; font-size: 11px; line-height: 17px; overflow: visible; }
+    #warPanel.lead-on .warbar #warChain { left: 8px; }
+  }
+
   /* ---- R27 (2026-11): the Filters button and the sort and filter panel ----
      The panel sits straight under the head of the list and is closed on every page load. It only hides
      rows and picks the sort; the table is drawn as before. Its colours are tokens of their own, as in R25:
@@ -861,6 +884,8 @@
           <dt>Torn calls</dt>
           <dd><code>/v2/key/info</code> once, for your own Torn ID and faction.
             <code>/v2/faction/wars</code> for the war that is running right now.
+            <code>/v2/faction/chain</code> for our faction's chain (the hits and the time left), every 30 seconds
+            and only while the war is live and this page is on screen.
             <code>/v2/faction/{opponent}/members</code> for the other side's roster: their
             hospital, jail and travel state (with the plane a traveller is on), when they were
             last active, and whether they are online.
@@ -977,7 +1002,13 @@
             faction has scored per hour over the last hour of readings; it shows once there are about
             ten minutes of readings, and the forecast after
             Lead is the rough time until the lead reaches the target if both factions keep that pace
-            (closing means the other faction is gaining).</dd>
+            (closing means the other faction is gaining). Chain, between the clock and Lead, is our
+            faction's chain: the hits so far and the time left before it breaks, for example Chain 123
+            &middot; 2:41 (C 123 &middot; 2:41 on a phone). It is read from Torn every 30 seconds while the
+            war is live and this page is on screen, and counted down with the Torn clock in between, so a
+            hit shows only at the next reading; when the time runs out first it says ? because the page
+            cannot tell whether someone hit. It turns to the warning colour below 2:00 and to red below
+            1:00, and is hidden when there is no chain or Torn did not answer.</dd>
           <dt>Filters</dt>
           <dd>The Filters button opens a panel with the sort (the same choice as the column headings;
             Last action with the arrow up puts the most recent first), the activity and the status you
@@ -1028,6 +1059,7 @@
       <span class="meta" id="warMeta"></span>
       <span class="clock" id="warClock"></span>
       <span class="meta score" id="warScore"></span>
+      <span id="warChain" hidden></span>
       <span id="warLead" hidden><span class="lt"></span><span class="lp" hidden></span><span class="lbar" aria-hidden="true"><span class="lfill"></span></span></span>
     </div>
   </section>
@@ -1261,6 +1293,7 @@
   // alone (PC: CONFIG.tornStatusErrorBackoffMs).
   var TORN_ERROR_BACKOFF_MS = 15000;
   var WAR_POLL_MS = 120000;    // which war is running changes twice a week, not twice a minute
+  var CHAIN_POLL_MS = 30000;   // R33: our chain, while the war is live and the page is on screen
   var OWN_MEMBERS_MS = 300000; // our own names, used only to label a claim holder
   var FF_POLL_MS = 300000;     // FFScouter caches for 5 minutes; asking sooner only spends calls
   var FF_CHECK_MS = 30000;     // how often the page asks itself whether FF_POLL_MS has passed
@@ -1839,7 +1872,7 @@
    'createKey','lifeSaid','aboutServer','advLife','advClock','advWipeNote',
    'ffKey','toggleFfKey','forgetFfKey','ffSaid','ffBar',
    'sessionSaid','sessionState','sessionRetry',
-   'warPanel','warWho','warMeta','warClock','warScore','warLead',
+   'warPanel','warWho','warMeta','warClock','warScore','warChain','warLead',
    'warBoard','boardUsName','boardUs','boardThemName','boardThem','paceUs','paceThem',
    'targetPanel','targetHint','staleBar','targetHost','callableBtn','honorBtn','advHonors','themeBtn',
    'filterBtn','filterPanel','fSort','fDir','fDirNote','fShowing','fHidden','fPaused','fReset',
@@ -2152,6 +2185,11 @@
       };
     }
 
+    // R33. Our faction's chain, whole: what it means is decided in ChainView.
+    function loadChain(options) {
+      return get('/faction/chain', options);
+    }
+
     // One target's life, for low-life DIBS. The answer is handed back whole:
     // what it means, and how often it may be asked for, is decided in Life,
     // just below. This is only the call.
@@ -2197,6 +2235,7 @@
       loadWar: loadWar,
       loadTargets: loadTargets,
       loadOwnNames: loadOwnNames,
+      loadChain: loadChain,
       loadLife: loadLife,
       loadBasic: loadBasic,
       forget: function () {
@@ -5646,6 +5685,154 @@
     return { observe: observe, rates: rates, forecast: forecast };
   })();
 
+  // =========================================================================
+  // R33. Our chain in the war line: "Chain 123 · 2:41" (hits, and the time left before it breaks).
+  //
+  //   - One reading of GET /v2/faction/chain (Roster.loadChain, the member's own key, the page's own limit
+  //     per minute, the same time limit as the war reading), every CHAIN_POLL_MS, and once at once when the
+  //     war becomes live and when the page becomes visible again. Only while the member is signed in, the war is
+  //     live (or the page simulates) and the page is on screen; the moment any of that stops, what was read is
+  //     dropped. The asking is done from the second hand that is already running (kick); there is no timer of
+  //     its own, and nothing is kept in this browser.
+  //   - The time left is Torn's timeout at the reading counted down on the Torn clock this page has measured
+  //     (getTornNowMs), from the moment the reading was STARTED - a slow answer cannot make it read longer than
+  //     it is. A hit shows only at the next reading. When the countdown has run out before that, the page does not
+  //     know whether a hit came: "Chain 123 · ?".
+  //   - Every call has a number. An answer (or a failure) older than one already taken in is dropped, and so is
+  //     one that comes after what it was asked for has stopped counting (generation).
+  //   - It stands back for the regular polling: while that has an error standing, or its pause after one (tornBackoffUntil),
+  //     or a dead key (tornHalted), the chain asks nothing, so trouble with Torn is never made worse by it.
+  //   - Fail-closed: a failure, a reading of a shape not expected or a dead key leaves no chain on screen for that
+  //     attempt. The failure goes to Advanced like the others; the box at the top is left alone. A key Torn says is
+  //     no good (2, 10, 13, 18) is not asked with again until Load the war.
+  //   - Shown only with at least one hit, time left, and no cooldown. Called by renderWar and the second hand;
+  //     it asks Torn nothing but through kick.
+  // =========================================================================
+  var CHAIN_MIN_GAP_MS = 2000;   // no two readings start closer than this, whatever asks (a page flipping hidden / visible)
+
+  var ChainView = (function () {
+    var data = null;        // { current, timeout, cooldown, atMs } of the newest reading taken in, or null
+    var lastStart = 0;      // the device moment the last reading was started; 0 = none since it last stopped counting
+    var lastAsk = 0;        // the same moment, but never dropped: a page that flips hidden / visible does not ask each time
+    var generation = 0;     // bumped whenever what is out or kept stops counting
+    var started = 0;        // the number of the newest call
+    var applied = 0;        // the number of the newest call whose outcome (an answer or a failure) was taken in
+    var halted = false;     // Torn said the key is no good
+
+    function ready() {
+      var war = Roster.war();
+      return !!(el.apiKey.value.trim() && Roster.identity() && war && (SIM || war.state === 'live') &&
+        !document.hidden && tornClockReady());
+    }
+
+    function clear() {
+      if (data === null && lastStart === 0) return;
+      data = null;
+      lastStart = 0;
+      generation += 1;
+    }
+
+    function whole(value) { return typeof value === 'number' && Number.isFinite(value) && value >= 0; }
+
+    // Torn's chain as this page keeps it, or null when it is not the shape Torn documents.
+    function parse(payload, atMs) {
+      var chain = payload && payload.chain;
+      if (!chain || typeof chain !== 'object') return null;
+      var cooldown = (chain.cooldown === null || chain.cooldown === undefined) ? 0 : chain.cooldown;
+      if (!Number.isSafeInteger(chain.current) || chain.current < 0 || !whole(chain.timeout) || !whole(cooldown)) return null;
+      return { current: chain.current, timeout: Math.floor(chain.timeout), cooldown: cooldown, atMs: atMs };
+    }
+
+    async function start(now) {
+      lastStart = now;
+      lastAsk = now;
+      started += 1;
+      var mine = started;
+      var gen = generation;
+      var key = el.apiKey.value.trim();
+      var atMs = getTornNowMs();
+      var outcome;
+      try {
+        outcome = parse(await Roster.loadChain({ timeoutMs: CONFIG.requestTimeoutMs }), atMs);
+      } catch (error) {
+        if (gen !== generation || mine < applied) return;
+        applied = mine;
+        data = null;
+        Roster.setError(error.message, error.diagnostic);
+        if (error.tornCode === 2 || error.tornCode === 10 || error.tornCode === 13 || error.tornCode === 18) halted = true;
+        renderWarChain();
+        renderAdvanced();
+        return;
+      }
+      if (gen !== generation || mine < applied || key !== el.apiKey.value.trim() || !ready()) return;
+      applied = mine;
+      data = outcome;
+      renderWarChain();
+    }
+
+    // Called once a second by the second hand, and with force when the page becomes visible again.
+    function kick(force) {
+      if (!ready()) { clear(); return; }
+      // While the regular polling is in trouble with Torn (its own error is still standing) the chain adds nothing to it.
+      if (halted || tornHalted || nowMs() < tornBackoffUntil || Roster.lastError() !== '') return;
+      var now = nowMs();
+      var sinceAsk = now - lastAsk;
+      if (lastAsk !== 0 && sinceAsk >= 0 && sinceAsk < CHAIN_MIN_GAP_MS) return;
+      var gap = now - lastStart;
+      if (!force && lastStart !== 0 && gap >= 0 && gap < CHAIN_POLL_MS) return;
+      start(now);
+    }
+
+    // { text, title, tone } for the war line, or null while nothing is to be shown.
+    function view() {
+      if (!ready()) { clear(); return null; }
+      if (data === null || data.current < 1 || data.timeout <= 0) return null;
+      var tornNow = getTornNowMs();
+      if (data.cooldown * 1000 > tornNow) return null;
+      var left = data.timeout - Math.floor(Math.max(0, tornNow - data.atMs) / 1000);
+      var phone = !!(window.matchMedia && window.matchMedia(PHONE_QUERY).matches);
+      var head = (phone ? 'C ' : 'Chain ') + groupDigits(data.current);
+      var hits = 'Our chain: ' + data.current + (data.current === 1 ? ' hit' : ' hits');
+      if (left <= 0) {
+        return {
+          text: head + ' · ?', tone: 'unk',
+          title: hits + '. The time ran out before the next reading, so the page cannot tell whether someone hit.'
+        };
+      }
+      var clock = Math.floor(left / 60) + ':' + (left % 60 < 10 ? '0' : '') + (left % 60);
+      return {
+        text: head + ' · ' + clock, tone: left >= 120 ? '' : (left >= 60 ? 'warn' : 'bad'),
+        title: hits + ', breaks in ' + clock + ' unless someone hits'
+      };
+    }
+
+    return {
+      kick: kick,
+      view: view,
+      // The page stopped counting (hidden, left, a key removed): drop what was read and what is out.
+      sync: function () { if (!ready()) clear(); },
+      // Load the war was pressed: a key Torn refused may be tried again.
+      reset: function () { halted = false; },
+      forget: function () { halted = false; clear(); generation += 1; }
+    };
+  })();
+
+  // R33. Our chain in the war line (see ChainView). Called by renderWar and the second hand.
+  function renderWarChain() {
+    var shown = el.warPanel.hidden ? null : ChainView.view();
+    var text = shown ? shown.text : '';
+    if (el.warChain.textContent !== text) el.warChain.textContent = text;
+    var tone = shown ? shown.tone : '';
+    if (el.warChain.className !== tone) el.warChain.className = tone;
+    if (shown) {
+      if (el.warChain.getAttribute('title') !== shown.title) el.warChain.setAttribute('title', shown.title);
+    } else if (el.warChain.hasAttribute('title')) {
+      el.warChain.removeAttribute('title');
+    }
+    el.warChain.hidden = !shown;
+    el.warPanel.classList.toggle('chain-on', !!shown);   // a phone makes room for the chain's own row only while it shows
+  }
+
   // R29. The lead in the war line. Before the war: "Target 5,900". Live or over: "Lead 1,234 / 5,900", or
   // "Behind 1,234 / 5,900" when they lead, with a bar (wide screens only) filled to lead / target. Without a
   // target, or without a real score for both sides, the span is empty and hidden - never a guessed figure.
@@ -5715,7 +5902,7 @@
       el.simWireWar.textContent = war ? Claims.wireWarId(war.warId, 'claims') : 'sim-<war>';
     }
     el.warPanel.hidden = !identity;
-    if (!identity) return;
+    if (!identity) { renderWarChain(); return; }   // R33: no chain is left behind in a panel that is shut
     Pace.observe(war);   // R31: the reading goes into the pace before anything is drawn
     if (!war) {
       el.warWho.textContent = 'No Ranked War running';
@@ -5723,6 +5910,7 @@
         'nothing to call.';
       el.warScore.textContent = '';
       renderWarClock();
+      renderWarChain();
       renderWarLead(null);
       renderWarBoard(null);
       return;
@@ -5735,6 +5923,7 @@
       + ' · war ' + war.warId;
     el.warScore.textContent = war.ourScore + ' – ' + war.theirScore;
     renderWarClock();
+    renderWarChain();
     renderWarLead(war);
     renderWarBoard(war);
   }
@@ -6346,6 +6535,7 @@
       // stopped the polling for the key before it no longer applies.
       tornHalted = false;
       tornBackoffUntil = 0;
+      ChainView.reset();
       await Roster.loadIdentity();
       await Roster.loadWar();
       if (Roster.war()) {
@@ -6478,7 +6668,7 @@
   }
 
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) ffStop(); else ffStart();
+    if (document.hidden) { ffStop(); ChainView.sync(); renderWarChain(); } else { ffStart(); ChainView.kick(true); }
   });
   window.addEventListener('pagehide', ffStop);
   window.addEventListener('pageshow', function () { if (!document.hidden) ffStart(); });
@@ -6505,6 +6695,8 @@
     Honors.forget();
     // R28: what the KS server said about the landings goes with the key too.
     LandingView.forget();
+    // R33: and our chain, read with that key.
+    ChainView.forget();
     // The sign-in was made from that key. It goes with it.
     Session.forget();
     Claims.drop();
@@ -6592,6 +6784,9 @@
     el.advClock.textContent = tornClockLabel();
     el.advLanding.textContent = LandingView.line();
     renderWarClock();
+    // R33: our chain counts down on this second hand and is asked for from it (no timer of its own).
+    ChainView.kick(false);
+    renderWarChain();
   }
   function startTargetClock() {
     if (targetClock === null) targetClock = setInterval(secondHand, 1000);
