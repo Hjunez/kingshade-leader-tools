@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         KS Chain Dibs PDA
 // @namespace    kingshade.torn.chaindibs
-// @version      0.7.3
-// @description  A small floating window with your faction chain: timer, the queue for the next hit, and the Im here rule so the chain does not break. Only the member who made the hit leaves the queue. When anybody may hit, FREE HIT links to a free target. Im here is locked when you cannot hit. Stand first without pressing Im here for 5 hits and you are removed as AFK. A bonus hit is announced. The minimized window still shows who is first and who is the hitter, and a yellow frame tells you when you hold the hit. If you hold the hit and fail, the button I failed - free hit lets everybody hit at once and shows them who released it.
+// @version      0.8.0
+// @description  A small floating window with your faction chain: timer, the queue for the next hit, and the Im here rule so the chain does not break. Only the member who made the hit leaves the queue. When anybody may hit, FREE HIT links to a free target. Im here is locked when you cannot hit. Stand first without pressing Im here for 5 hits and you are removed as AFK. A bonus hit is announced. The minimized window still shows who is first and who is the hitter, and a yellow frame tells you when you hold the hit. If you hold the hit and fail, the button I failed - free hit lets everybody hit at once and shows them who released it. Minimized, the window becomes one Dibs row right under Torns own Energy, Nerve, Happy, Life and Chain row; tap it to open.
 // @author       Kingshade
 // @downloadURL  https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Chain_Dibs_PDA.user.js
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Chain_Dibs_PDA.user.js
@@ -20,8 +20,9 @@
 // ==/UserScript==
 
 /*
- * KS Chain Dibs PDA 0.7.3
+ * KS Chain Dibs PDA 0.8.0
  *
+ * 0.8.0  ONE MAIN CHANGE: looks like Torn. Minimized, the window becomes a Dibs row right under Torns own Energy, Nerve, Happy, Life and Chain row. Tap it to open. Without that row it stays a small floating window. Nothing else changed.
  * PDA 0.7.3  ONE MAIN CHANGE: the KS server address is now warroom.kingshadeprotocol.com.
  *        Nothing else changed.
  * PDA 0.7.2  CHANGED: a much smaller window on the phone. Smaller text and buttons, buttons two by two.
@@ -88,6 +89,18 @@
  * press Im here. For these two the window opens itself if it was minimized (your
  * saved choice is not changed).
  *
+ * 0.8.0: the window is drawn like the boxes of Torns phone page (dark panel, the
+ * grey title bar, Arial, white title text). Minimized, and with Torns own bars
+ * row on the page (Energy, Nerve, Happy, Life and Chain), the floating window is
+ * hidden and ONE row called Dibs sits directly under that bars row: First,
+ * Hitter and a small + (or BONUS +). A tap on the row opens the window again.
+ * The row is a plain element in its own shadow root: it makes no request, clicks
+ * nothing on the page and goes nowhere. If there is no such bars row (another
+ * page layout, the phone turned so the row is gone, or Torn changed its class
+ * names) the small floating window stays, as before. The row has no timer of
+ * its own: Torns Chain bar is right above it. The measures of the window
+ * (width 176, buttons two by two) are those of 0.7.2.
+ *
  * Network (and nothing else):
  *  - api.torn.com, every 3 s while Watch is on and only from ONE open tab:
  *    /v2/faction/chain (20 calls a minute) and /v2/faction/members once per
@@ -95,8 +108,9 @@
  *  - the KS server (@connect above): sign-in once per 10 minutes and a state
  *    call every 3 s from the same tab, plus Join, Leave and Im here when you
  *    press them. The server never calls Torn and never stores your key.
- *  - No request to any torn.com page. No clicks, no navigation. The window is
- *    the only thing added to the page. The only thing read from the page is
+ *  - No request to any torn.com page. No clicks, no navigation. The window (and,
+ *    minimized, the Dibs row under Torns bars row) is the only thing added to
+ *    the page. The only thing read from the page is
  *    Torn's own chain bar in the side menu (hits and time left), read only, on
  *    the page you have open. It makes a new hit show up at once and lets the
  *    timer follow Torn's. Extra rounds for a new hit are limited to one a
@@ -192,7 +206,7 @@
   if (window[INSTANCE_KEY]) return;
   window[INSTANCE_KEY] = true;
 
-  var VERSION = '0.7.3';
+  var VERSION = '0.8.0';
 
   // The ONE place the server address lives.
   var SERVER_BASE = 'https://warroom.kingshadeprotocol.com';
@@ -322,7 +336,39 @@
   // (checked 2026-11-04 against three sources that are not Torn).
   var BONUS_HITS = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000];
   var BONUS_COLOR = '#d4a017';
-  var BOX_BORDER = '1px solid #4a4f57';  // the frame of the window as it normally is
+  // 0.8.0: the look of Torns phone page. The values were read from the saved Torn
+  // phone page (dark mode, saved 2026-11-10, its css and its computed values at
+  // 393 px): text --default-color #ddd, panel --default-bg-panel-color #333, the
+  // grey of small texts #999, the divider under the bars row
+  // --sidebar-bars-divider-color #222, the frame of the chain bar
+  // --sidebar-chain-border-color #555, the title of a box a gradient from #555 to
+  // #333 with white bold 12 px text and 5 px top corners, the lines of a list
+  // #222, Arial. The bars row of the page uses .6rem text on a 30 px row with 8 px
+  // side padding; the Dibs row follows that (one constant each below).
+  var TORN_TEXT = '#dddddd';
+  var TORN_MUTED = '#999999';
+  var TORN_PANEL = '#333333';
+  var TORN_LINE = '#222222';
+  var TORN_TITLE_BG = 'linear-gradient(#555555,#333333)';
+  var TORN_RADIUS_PX = 5;
+  var BOX_BORDER = '1px solid #555555';  // the frame of the window as it normally is
+  // The Dibs row follows Torns own text colour variable when the page has it
+  // (light and dark mode); the fallback is the dark mode value.
+  var DOCK_TEXT = 'var(--default-color,#dddddd)';
+  var DOCK_LINE = 'var(--sidebar-bars-divider-color,#222222)';
+  var DOCK_ID = 'ks-chain-dibs-dock';
+  var DOCK_H = 24;                       // the Dibs row is at most this high, its divider included
+  var DOCK_FONT_SIZE = '.6rem';          // the size of the values in Torns bars row (9.6 px)
+  var DOCK_PAD_PX = 8;                   // the side padding of Torns bars row
+  var DOCK_GAP_PX = 8;                   // between the parts of the row
+  var DOCK_Z = 101;                      // Torns dark fade at the right edge of the bars (z-index 100) must not darken the + of the row
+  var DOCK_TICK_MS = 500;                // the safety look: is the bars row still there?
+  var DOCK_MOVES_MAX = 10;               // the row is put back at most this many times ...
+  var DOCK_MOVES_WINDOW_MS = 2000;       // ... in any 2 s; more means another script fights for the place
+  var DOCK_BLOCK_MS = 30000;             // then the row stays away this long and the window stays floating
+  var BAR_MOBILE_MARK = 'bar-mobile___'; // the phone Chain bar; the wide one (bar-desktop) is never docked under
+  var BARS_ROW_MARK = 'bars-mobile___';  // the row that holds the five bars
+  var HITTER_LIGHT_MODE = '#8a6d00';     // the hitter amber on a light panel (the yellow is not readable there)
   var HITTER_COLOR = '#f1c40f';          // the yellow of the hitter: frame, banner, "Hitter:" row
   var HITTER_DARK = '#3a3f45';           // the dark half of the pulsing frame
   var HITTER_FRAME_PX = 3;
@@ -372,7 +418,7 @@
   var watchOn = false;
   var watchSince = 0;
   var isLeader = false;
-  var timers = { ui: null, leader: null, poll: null };
+  var timers = { ui: null, leader: null, poll: null, dock: null };
   var listenerIds = [];
   var shared = null;          // { v, snap, snapAt, offset, torn, auth, note, at }
   var names = {};             // tornId -> name
@@ -385,6 +431,10 @@
   var loginFails = 0;
   var cycleBusy = false;
   var barNode = null;         // the chain bar element being watched
+  var barParent = null;       // ... the bars row it stands in
+  var barPlace = null;        // ... and the box that holds the bars row (the same observer also sees when Torn draws them again)
+  var dockMoves = [];         // when the row was put in place (the last 2 s)
+  var dockBlockedUntil = 0;   // no row before this time (another script fought for the place)
   var barObserver = null;
   var kickState = null;       // { count, tries }: a new hit seen on the page, waiting for the API
   var kickTimer = null;
@@ -873,25 +923,41 @@
 
   // One observer, on the bar that is there now. If the page draws the bar again
   // the old observer is let go and the new bar is watched - never two.
+  // 0.8.0: also kept while the window is minimized (the Dibs row sits under the
+  // bars row). It is still ONE observer: it looks at the bar and, for the bars row
+  // and the box that holds it, at the list of their children (to see that Torn
+  // drew them again or took the Dibs row away).
   function ensureBar() {
-    if (!running || !watchOn) { detachBar(); return; }
+    if (!running || (!watchOn && !minimized)) { detachBar(); return; }
     var node = document.querySelector(BAR_SELECTOR);
-    if (node && node === barNode && barObserver) return;
+    if (node && node === barNode && node.parentNode === barParent && barParent && barParent.parentNode === barPlace && barObserver) return;
     detachBar();
     if (!node || typeof MutationObserver !== 'function') return;
     barNode = node;
+    barParent = node.parentNode;
+    barPlace = barParent ? barParent.parentNode : null;
     barObserver = new MutationObserver(onBarMutation);
     barObserver.observe(node, { childList: true, subtree: true, characterData: true });
+    if (barParent && barParent.nodeType === 1) {
+      barObserver.observe(barParent, { childList: true });
+      if (hasPart(barParent, BARS_ROW_MARK) && barPlace && barPlace.nodeType === 1) barObserver.observe(barPlace, { childList: true });
+    }
   }
 
   function detachBar() {
     if (barObserver) { try { barObserver.disconnect(); } catch (e) { /* ignore */ } }
     barObserver = null;
     barNode = null;
+    barParent = null;
+    barPlace = null;
   }
 
   function onBarMutation() {
-    if (!running || !watchOn) return;
+    if (!running) return;
+    // Torn drew the bars again: watch the new chain bar, and put the Dibs row back under them.
+    if (barNode && !barNode.isConnected) ensureBar();
+    if (minimized) render();
+    if (!watchOn) return;
     var bar = readBar(barNode);
     if (!bar) return;
     var shown = (shared && shared.snap && shared.snap.chain) ? shared.snap.chain.current : null;
@@ -2044,18 +2110,18 @@
 
     ui.box = el('div');
     mark(ui.box, 'box');
-    css(ui.box, 'all:initial;display:flex;flex-direction:column;box-sizing:border-box;width:' + BOX_WIDTH + 'px;overflow:hidden;background:#1b1d21;color:#e6e6e6;' +
-      'border:' + BOX_BORDER + ';border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,0.6);' + fnt(false, TEXT_PX, TEXT_LINE_PX));
+    css(ui.box, 'all:initial;display:flex;flex-direction:column;box-sizing:border-box;width:' + BOX_WIDTH + 'px;overflow:hidden;background:' + TORN_PANEL + ';color:' + TORN_TEXT + ';' +
+      'border:' + BOX_BORDER + ';border-radius:' + TORN_RADIUS_PX + 'px;box-shadow:0 2px 10px rgba(0,0,0,0.6);' + fnt(false, TEXT_PX, TEXT_LINE_PX));
 
     // header: drag handle, title, mini timer, minimize
     ui.header = el('div');
     mark(ui.header, 'header');
     css(ui.header, 'all:initial;display:flex;flex:none;box-sizing:border-box;height:' + HEADER_H + 'px;align-items:center;justify-content:space-between;padding:' + HEADER_PAD + ';' +
-      'background:#262a30;border-radius:6px 6px 0 0;cursor:move;touch-action:none;color:#e6e6e6;' + fnt(true, HEAD_PX, HEAD_LINE_PX));
+      'background:' + TORN_TITLE_BG + ';border-radius:' + TORN_RADIUS_PX + 'px ' + TORN_RADIUS_PX + 'px 0 0;cursor:move;touch-action:none;color:#ffffff;' + fnt(true, HEAD_PX, HEAD_LINE_PX));
     ui.title = mark(el('span', 'KS Chain Dibs'), 'title');
-    css(ui.title, 'all:initial;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#e6e6e6;' + fnt(true, HEAD_PX, HEAD_LINE_PX));
+    css(ui.title, 'all:initial;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#ffffff;text-shadow:0 0 2px rgba(0,0,0,0.5);' + fnt(true, HEAD_PX, HEAD_LINE_PX));
     ui.mini = mark(el('span', ''), 'mini');
-    css(ui.mini, 'all:initial;flex:none;white-space:nowrap;color:#bdbdbd;' + fnt(false, TEXT_PX, TEXT_LINE_PX, MONO) + 'margin-left:auto;padding-left:3px;');
+    css(ui.mini, 'all:initial;flex:none;white-space:nowrap;color:' + TORN_MUTED + ';' + fnt(false, TEXT_PX, TEXT_LINE_PX, MONO) + 'margin-left:auto;padding-left:3px;');
     ui.minBtn = mark(el('button', '-'), 'minbtn');
     ui.minBtn.type = 'button';
     ui.minBtn.title = 'Minimize';
@@ -2075,7 +2141,7 @@
 
     // Minimized: two short rows under the header. Shown only with a usable answer.
     ui.miniInfo = mark(el('div'), 'miniinfo');
-    css(ui.miniInfo, 'all:initial;display:none;flex:none;box-sizing:border-box;padding:1px ' + PAD_PX + 'px 2px ' + PAD_PX + 'px;background:#1b1d21;border-radius:0 0 6px 6px;');
+    css(ui.miniInfo, 'all:initial;display:none;flex:none;box-sizing:border-box;padding:1px ' + PAD_PX + 'px 2px ' + PAD_PX + 'px;background:' + TORN_PANEL + ';border-radius:0 0 ' + TORN_RADIUS_PX + 'px ' + TORN_RADIUS_PX + 'px;');
     ui.miniFirst = buildMiniRow('minifirst');
     ui.miniHitter = buildMiniRow('minihitter');
     ui.miniInfo.appendChild(ui.miniFirst.row);
@@ -2083,10 +2149,10 @@
     ui.box.appendChild(ui.miniInfo);
 
     ui.body = mark(el('div'), 'body');
-    css(ui.body, 'all:initial;display:block;flex:1 1 auto;min-height:' + MIN_BODY_PX + 'px;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;box-sizing:border-box;padding:' + PAD_PX + 'px;color:#e6e6e6;' + fnt(false, TEXT_PX, TEXT_LINE_PX));
+    css(ui.body, 'all:initial;display:block;flex:1 1 auto;min-height:' + MIN_BODY_PX + 'px;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;box-sizing:border-box;padding:' + PAD_PX + 'px;color:' + TORN_TEXT + ';' + fnt(false, TEXT_PX, TEXT_LINE_PX));
 
     ui.chainLine = mark(el('div', ''), 'chain');
-    css(ui.chainLine, 'all:initial;display:block;color:#bdbdbd;' + fnt(false, TEXT_PX, TEXT_LINE_PX));
+    css(ui.chainLine, 'all:initial;display:block;color:' + TORN_MUTED + ';' + fnt(false, TEXT_PX, TEXT_LINE_PX));
     ui.timer = mark(el('div', '--:--'), 'timer');
     css(ui.timer, 'all:initial;display:block;color:#ffffff;' + fnt(true, TIMER_PX, TIMER_LINE_PX, MONO) + 'text-align:center;');
     ui.bonus = mark(el('div', ''), 'bonus');
@@ -2111,8 +2177,10 @@
     css(ui.movedFirst, noticeStyle(MOVED_COLOR, '#ffffff', true, TEXT_PX, TEXT_LINE_PX));
     ui.place = mark(el('div', ''), 'place');
     css(ui.place, 'all:initial;display:none;box-sizing:border-box;margin:0 0 2px 0;color:#bfe3ff;' + fnt(true, TEXT_PX, TEXT_LINE_PX));
+    ui.delim = mark(el('div'), 'delimiter');
+    css(ui.delim, 'all:initial;display:block;box-sizing:border-box;height:0;margin:' + BTN_GAP_PX + 'px 0;overflow:hidden;border-top:1px solid ' + TORN_LINE + ';');
     ui.queue = mark(el('div'), 'queue');
-    css(ui.queue, 'all:initial;display:block;color:#e6e6e6;' + fnt(false, TEXT_PX, TEXT_LINE_PX));
+    css(ui.queue, 'all:initial;display:block;color:' + TORN_TEXT + ';' + fnt(false, TEXT_PX, TEXT_LINE_PX));
     ui.msg = mark(el('div', ''), 'msg');
     css(ui.msg, 'all:initial;display:block;margin-top:' + BTN_GAP_PX + 'px;color:#ffd84d;' + fnt(false, TEXT_PX, TEXT_LINE_PX));
 
@@ -2160,6 +2228,7 @@
     ui.body.appendChild(ui.released);
     ui.body.appendChild(ui.movedFirst);
     ui.body.appendChild(ui.place);
+    ui.body.appendChild(ui.delim);
     ui.body.appendChild(ui.queue);
     ui.body.appendChild(ui.msg);
     ui.body.appendChild(ui.keyPanel.wrap);
@@ -2181,16 +2250,181 @@
   // The screen changed size (turned phone, keyboard): the window is moved back onto it.
   function onResize() { applyPos(true); }
 
+  // ------------------------------------------------------------ the Dibs row under Torns bars row (0.8.0)
+
+  function hasPart(node, part) { return String(node.getAttribute('class') || '').indexOf(part) >= 0; }
+
+  // The place for the row. Torn PDA has no side menu: Torns own bars row (Energy,
+  // Nerve, Happy, Life, Chain) is ONE element that holds the five bars, and the
+  // Dibs row goes directly after it. It needs the phone Chain bar, the bars row
+  // that holds it and a box for the row, all in view. Anything else (another page,
+  // Torn changed the class names, the wide layout, the bars not shown) is no place.
+  function dockPlace() {
+    var bar = document.querySelector(BAR_SELECTOR);
+    if (!bar || !hasPart(bar, BAR_MOBILE_MARK)) return null;
+    var row = bar.parentNode;
+    if (!row || row.nodeType !== 1 || !hasPart(row, BARS_ROW_MARK)) return null;
+    var box = row.parentNode;
+    if (!box || box.nodeType !== 1) return null;
+    if (typeof row.getClientRects === 'function' && row.getClientRects().length === 0) return null;
+    return { bar: bar, row: row, box: box };
+  }
+
+  function lumaOf(colorText) {
+    var m = /rgba?\(\s*(\d+)[ ,]+(\d+)[ ,]+(\d+)/.exec(String(colorText));
+    if (!m) return 255;
+    return 0.299 * Number(m[1]) + 0.587 * Number(m[2]) + 0.114 * Number(m[3]);
+  }
+
+  // The font of the row: the size of the values in Torns bars row, on one line of the row.
+  function dockFont(bold) {
+    return 'font:' + (bold ? 'bold ' : '') + DOCK_FONT_SIZE + '/' + (DOCK_H - 2) + 'px ' + FONT + ';';
+  }
+
+  function buildDock() {
+    var host = el('div');
+    host.id = DOCK_ID;
+    mark(host, 'dockhost');
+    // all:initial also beats the height Torns css gives every div in that box. The z-index puts the row above
+    // the dark fade Torn draws at the right edge of the bars (it would darken the + of the row).
+    css(host, 'all:initial;display:block;box-sizing:border-box;width:100%;position:relative;z-index:' + DOCK_Z + ';');
+    var root = host.attachShadow({ mode: 'open' });
+
+    var row = mark(el('div'), 'dock');
+    row.setAttribute('role', 'button');
+    row.setAttribute('tabindex', '0');
+    row.title = 'Open KS Chain Dibs';
+    css(row, 'all:initial;display:flex;box-sizing:border-box;width:100%;height:' + DOCK_H + 'px;align-items:center;overflow:hidden;padding:0 ' + DOCK_PAD_PX + 'px;' +
+      'border-bottom:1px solid ' + DOCK_LINE + ';cursor:pointer;-webkit-tap-highlight-color:transparent;color:' + DOCK_TEXT + ';' + dockFont(false));
+
+    var label = mark(el('span', 'Dibs'), 'docklabel');
+    css(label, 'all:initial;flex:none;margin-right:' + DOCK_GAP_PX + 'px;color:' + DOCK_TEXT + ';' + dockFont(true));
+    var status = mark(el('span', ''), 'dockstatus');
+    css(status, 'all:initial;display:block;flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:' + TORN_MUTED + ';' + dockFont(false));
+    var first = buildMiniRow('dockfirst', dockFont(false));
+    var hitter = buildMiniRow('dockhitter', dockFont(false));
+    first.row.style.cssText += 'width:auto;flex:1 1 0;min-width:0;overflow:hidden;margin-right:' + DOCK_GAP_PX + 'px;';
+    hitter.row.style.cssText += 'width:auto;flex:1 1 0;min-width:0;overflow:hidden;';
+    var tag = mark(el('span', '+'), 'docktag');
+    css(tag, 'all:initial;flex:none;margin-left:' + DOCK_GAP_PX + 'px;color:' + TORN_MUTED + ';' + dockFont(true));
+    row.appendChild(label);
+    row.appendChild(status);
+    row.appendChild(first.row);
+    row.appendChild(hitter.row);
+    row.appendChild(tag);
+    root.appendChild(row);
+
+    // The row opens the window. It is not a link: nothing on Torns page is clicked
+    // and nothing is opened or navigated to.
+    row.addEventListener('click', function (ev) { ev.stopPropagation(); openFromDock(); });
+    row.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); ev.stopPropagation(); openFromDock(); }
+    });
+
+    ui.dock = { host: host, row: row, status: status, tag: tag, first: first, hitter: hitter };
+  }
+
+  function openFromDock() {
+    minimized = false;
+    gmSet(K_MIN, false);
+    render();
+  }
+
+  function removeDock() {
+    if (ui.dock && ui.dock.host.parentNode) ui.dock.host.parentNode.removeChild(ui.dock.host);
+    if (ui.host && ui.host.style.display === 'none') ui.host.style.display = '';
+  }
+
+  // Never two rows: an empty copy of the row (the page copied the part of the page
+  // it stood in) is taken away.
+  function dropStrayDocks() {
+    var all = document.querySelectorAll('#' + DOCK_ID);
+    for (var i = 0; i < all.length; i++) {
+      if (!ui.dock || all[i] !== ui.dock.host) all[i].parentNode.removeChild(all[i]);
+    }
+  }
+
+  // Minimized and a bars row to dock under: the floating window is hidden and ONE
+  // row stands directly after the bars row. Otherwise the row is gone and the
+  // floating window is there (fail-closed: the window never vanishes). Safe to call
+  // often: it changes the page only when the row is missing, misplaced or not wanted.
+  function syncDock(want, d, snap, usable) {
+    ensureBar();
+    dropStrayDocks();
+    var place = (want && Date.now() >= dockBlockedUntil) ? dockPlace() : null;
+    if (!place) { removeDock(); return false; }
+    if (!ui.dock) buildDock();
+    var host = ui.dock.host;
+    if (host.parentNode !== place.box || place.row.nextSibling !== host) {
+      // Put in place again and again by another script: give the place up
+      // for a while instead of fighting (the window stays floating, fail-closed).
+      var now = Date.now();
+      while (dockMoves.length > 0 && dockMoves[0] <= now - DOCK_MOVES_WINDOW_MS) dockMoves.shift();
+      if (dockMoves.length >= DOCK_MOVES_MAX) {
+        dockBlockedUntil = now + DOCK_BLOCK_MS;
+        dockMoves = [];
+        removeDock();
+        return false;
+      }
+      dockMoves.push(now);
+      place.box.insertBefore(host, place.row.nextSibling);
+    }
+    if (ui.host.style.display !== 'none') ui.host.style.display = 'none';
+
+    var dk = ui.dock;
+    var statusText = !watchOn ? 'Watch is off' : (usable ? '' : d.text);
+    if (dk.status.textContent !== statusText) { dk.status.textContent = statusText; dk.status.title = statusText; }
+    var bonus = watchOn && d.bonus !== null;
+    var tagText = bonus ? 'BONUS +' : '+';
+    if (dk.tag.textContent !== tagText) dk.tag.textContent = tagText;
+    dk.tag.style.color = bonus ? BONUS_COLOR : TORN_MUTED;
+    var rows = watchOn && usable;
+    dk.status.style.display = rows ? 'none' : 'block';
+    dk.first.row.style.display = rows ? 'flex' : 'none';
+    dk.hitter.row.style.display = rows ? 'flex' : 'none';
+    if (rows) {
+      var mv = miniValues(d, snap);
+      setMiniRow(dk.first, 'First: ', mv.firstName, mv.youFirst ? ' (you)' : '', DOCK_TEXT);
+      if (mv.hitterName !== null) {
+        var dark = lumaOf(window.getComputedStyle(dk.row).color) > 128;
+        setMiniRow(dk.hitter, 'Hitter: ', mv.hitterName, '', dark ? HITTER_COLOR : HITTER_LIGHT_MODE);
+      } else {
+        setMiniRow(dk.hitter, 'Hitter: ', 'none', '', TORN_MUTED);
+      }
+    }
+    return true;
+  }
+
+  // Who is first and who is the hitter, as the minimized window and the Dibs row show it.
+  function miniValues(d, snap) {
+    var firstId = snap.queue.length > 0 ? snap.queue[0].tornId : null;
+    var hitterId = (d.showOwner && snap.turn) ? snap.turn.ownerId : null;
+    return {
+      firstName: firstId === null ? '-' : cleanName(nameOf(firstId)),
+      youFirst: firstId !== null && snap.you.inQueue && snap.you.position === 1,
+      hitterName: hitterId !== null ? cleanName(nameOf(hitterId)) : null
+    };
+  }
+
+  // The safety look twice a second: Torn may take the bars away without the
+  // observer seeing it (a parent far above is removed).
+  function dockTick() {
+    if (!running) return;
+    ensureBar();
+    if (minimized) render();
+  }
+
   // One minimized row: a label, a name that is cut with ... when it is long, and a suffix.
-  function buildMiniRow(markName) {
+  function buildMiniRow(markName, font) {
+    var f = font || fnt(false, TEXT_PX, TEXT_LINE_PX);
     var row = mark(el('div'), markName);
-    css(row, 'all:initial;display:flex;box-sizing:border-box;width:100%;color:#e6e6e6;' + fnt(false, TEXT_PX, TEXT_LINE_PX));
+    css(row, 'all:initial;display:flex;box-sizing:border-box;width:100%;color:' + TORN_TEXT + ';' + f);
     var label = el('span', '');
-    css(label, 'all:initial;flex:none;white-space:pre;color:#e6e6e6;' + fnt(false, TEXT_PX, TEXT_LINE_PX));
+    css(label, 'all:initial;flex:none;white-space:pre;color:' + TORN_TEXT + ';' + f);
     var name = el('span', '');
-    css(name, 'all:initial;display:block;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#e6e6e6;' + fnt(false, TEXT_PX, TEXT_LINE_PX));
+    css(name, 'all:initial;display:block;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:' + TORN_TEXT + ';' + f);
     var suffix = el('span', '');
-    css(suffix, 'all:initial;flex:none;white-space:pre;color:#e6e6e6;' + fnt(false, TEXT_PX, TEXT_LINE_PX));
+    css(suffix, 'all:initial;flex:none;white-space:pre;color:' + TORN_TEXT + ';' + f);
     row.appendChild(label);
     row.appendChild(name);
     row.appendChild(suffix);
@@ -2540,7 +2774,7 @@
     var snap = shared && shared.snap ? shared.snap : null;
     if (!snap || snap.queue.length === 0) {
       var empty = mark(el('div', snap ? 'Queue is empty' : ''), 'qempty');
-      css(empty, 'all:initial;display:block;color:#9aa0a6;' + fnt(false, TEXT_PX, TEXT_LINE_PX));
+      css(empty, 'all:initial;display:block;color:' + TORN_MUTED + ';' + fnt(false, TEXT_PX, TEXT_LINE_PX));
       ui.queue.appendChild(empty);
       return;
     }
@@ -2550,10 +2784,10 @@
     function addRow(index) {
       var q = snap.queue[index];
       var row = mark(el('div'), 'qrow');
-      css(row, 'all:initial;display:flex;justify-content:space-between;color:#e6e6e6;' + fnt(false, TEXT_PX, TEXT_LINE_PX));
+      css(row, 'all:initial;display:flex;justify-content:space-between;color:' + TORN_TEXT + ';' + fnt(false, TEXT_PX, TEXT_LINE_PX));
       var isOwner = ownerId !== null && q.tornId === ownerId;
       var label = mark(el('span', (index + 1) + '. ' + nameOf(q.tornId) + (isOwner ? ' (hitter)' : '')), 'qname');
-      css(label, 'all:initial;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:' + (isOwner ? '#ffd84d' : '#e6e6e6') + ';' + fnt(isOwner, TEXT_PX, TEXT_LINE_PX));
+      css(label, 'all:initial;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:' + (isOwner ? '#ffd84d' : TORN_TEXT) + ';' + fnt(isOwner, TEXT_PX, TEXT_LINE_PX));
       var tick = el('span', q.confirmed ? '\u2713' : '');
       mark(tick, 'qtick');
       css(tick, 'all:initial;color:#3ddc84;' + fnt(true, HEAD_PX, TEXT_LINE_PX));
@@ -2582,7 +2816,7 @@
       // "you" is only added when he is hidden himself and is not the hitter shown above.
       if (myPlace !== null && myPlace > shown && myPlace !== ownerIndex + 1) text += ' (you: #' + myPlace + ')';
       var m = mark(el('div', text), 'qmore');
-      css(m, 'all:initial;display:block;color:#9aa0a6;' + fnt(false, TEXT_PX, TEXT_LINE_PX));
+      css(m, 'all:initial;display:block;color:' + TORN_MUTED + ';' + fnt(false, TEXT_PX, TEXT_LINE_PX));
       ui.queue.appendChild(m);
     }
   }
@@ -2626,7 +2860,7 @@
 
     // A bonus hit next: the small timer says BONUS in gold, nothing else changes when minimized.
     ui.mini.textContent = (watchOn && d.remaining !== null) ? ((d.bonus !== null ? 'BONUS ' : '') + d.timer) : '';
-    ui.mini.style.color = (watchOn && d.bonus !== null) ? BONUS_COLOR : '#bdbdbd';
+    ui.mini.style.color = (watchOn && d.bonus !== null) ? BONUS_COLOR : TORN_MUTED;
     ui.mini.style.fontSize = ((watchOn && d.bonus !== null) ? MINI_BONUS_PX : TEXT_PX) + 'px';
     ui.minBtn.textContent = minimized ? '+' : '-';
     ui.minBtn.title = minimized ? 'Restore' : 'Minimize';
@@ -2634,13 +2868,13 @@
     // Minimized: who is first and who is the hitter, two short rows.
     show(ui.miniInfo, minimized && usable);
     if (minimized && usable) {
-      var firstId = snap.queue.length > 0 ? snap.queue[0].tornId : null;
-      var youFirst = firstId !== null && snap.you.inQueue && snap.you.position === 1;
-      setMiniRow(ui.miniFirst, 'First: ', firstId === null ? '-' : cleanName(nameOf(firstId)), youFirst ? ' (you)' : '', '#e6e6e6');
-      var hitterId = (d.showOwner && snap.turn) ? snap.turn.ownerId : null;
-      if (hitterId !== null) setMiniRow(ui.miniHitter, 'Hitter: ', cleanName(nameOf(hitterId)), '', HITTER_COLOR);
-      else setMiniRow(ui.miniHitter, 'Hitter: ', 'none', '', '#9aa0a6');
+      var mv = miniValues(d, snap);
+      setMiniRow(ui.miniFirst, 'First: ', mv.firstName, mv.youFirst ? ' (you)' : '', TORN_TEXT);
+      if (mv.hitterName !== null) setMiniRow(ui.miniHitter, 'Hitter: ', mv.hitterName, '', HITTER_COLOR);
+      else setMiniRow(ui.miniHitter, 'Hitter: ', 'none', '', TORN_MUTED);
     }
+    // 0.8.0: minimized under Torns bars row = one Dibs row; otherwise the window as before.
+    syncDock(minimized, d, snap, usable);
     if (minimized) return;
 
     ui.watchBtn.textContent = watchOn ? 'Stop' : 'Watch';
@@ -2659,6 +2893,7 @@
       show(ui.bonus, false);
       show(ui.phase, false);
       show(ui.queue, false);
+      show(ui.delim, false);
       ui.msg.textContent = (shared && shared.note) ? shared.note : (localMsg && Date.now() < localMsgUntil ? localMsg : '');
       show(ui.msg, ui.msg.textContent !== '');
       show(ui.keyPanel.wrap, false);
@@ -2683,6 +2918,7 @@
     show(ui.timer, true);
     show(ui.phase, true);
     show(ui.queue, hasKey);
+    show(ui.delim, hasKey);
     ui.chainLine.textContent = d.chainLine;
     ui.timer.textContent = d.timer;
     if (d.bonus !== null) {
@@ -2821,6 +3057,8 @@
     addListener(K_LEADER, onLeaderChange);
     addListener(K_NAMES, onNamesChange);
     addListener(K_KICK, onKick);
+    if (timers.dock) window.clearInterval(timers.dock);
+    timers.dock = window.setInterval(dockTick, DOCK_TICK_MS);
     applyWatch();
     render();
   }
@@ -2836,7 +3074,9 @@
     listenerIds = [];
     remoteStop();
     window.removeEventListener('resize', onResize);
+    if (timers.dock) { window.clearInterval(timers.dock); timers.dock = null; }
     watchOn = false;
+    removeDock();
   }
 
   window.addEventListener('pagehide', function () {
