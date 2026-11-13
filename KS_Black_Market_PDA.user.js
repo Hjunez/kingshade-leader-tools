@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Black Market PDA
 // @namespace    kingshade.ks-black-market
-// @version      0.4.4
+// @version      0.4.5
 // @description  Travel advisor: the best runs abroad for every item sold abroad, and when to leave Torn to land right after a restock, for members of Politically Incorrect. Reads from the KS Black Market server and, for your cash, travel method and item slots, from the Torn page you have open. Never clicks, navigates or contacts Torn.
 // @author       Kingshade
 // @match        https://www.torn.com/*
@@ -15,7 +15,7 @@
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Black_Market_PDA.user.js
 // ==/UserScript==
 /*
- * KS Black Market 0.4.4 (PDA) — disclosure
+ * KS Black Market 0.4.5 (PDA) — disclosure
  * What it does : your travel advisor. It lists the best runs abroad for every item sold abroad, not only drugs (best
  *                trips, sell abroad, bring home) for the travel method and the number of item slots you pick, strictly
  *                ordered by the profit you can expect per hour of flying. For goods you bring home it also says WHEN to
@@ -59,6 +59,11 @@
  * API key      : your own Torn key at access level Public is enough (no selections needed). It is used only for the
  *                faction membership check. If Torn rejects the key, or it does not belong to the faction, the saved
  *                key is removed and not tried again.
+ *
+ * CHANGELOG 0.4.5
+ * FIXED (Torn PDA): the Black Market row keeps a space between the destination and the amount.
+ * FIXED        : Sell abroad no longer suggests items that Torn does not let you take abroad (suitcases, cars,
+ *                parcels, presents, Halloween baskets).
  *
  * CHANGELOG 0.4.4
  * CHANGED (Torn PDA): minimized, KS Black Market now sits as one row under Torn's bars (Energy, Nerve, Happy, Life,
@@ -127,7 +132,7 @@
  */
 (function () {
 'use strict';
-var KSBM_VERSION = '0.4.4';
+var KSBM_VERSION = '0.4.5';
 var KSBM_PLATFORM = 'PDA';
 
 /* ================= KS Black Market — core (shared by PC and PDA) =================
@@ -469,8 +474,22 @@ var KSBM_CORE = (function () {
     return set;
   }
 
+  /* Items that Torn does not let you take out of Torn: suitcases, parcels, presents, Halloween baskets and cars (the announcement "Traveling 2.0 -
+   * Phase 3", 2026-10-21, as written in the project drumorgan/valigia on GitHub, CLAUDE.md lines 287-292: "Can't be taken abroad: Cars, Halloween
+   * Baskets, Parcels, Presents, Suitcases - some ARE shop-stocked (Hawaii sells Small Suitcases)"; a second-hand source, Torn's own text has not been read).
+   * Only the Small Suitcase is tried in real life (member report 2026-11-13). Matched by NAME with word boundaries, no wider than the list: a name
+   * ending in "Suitcase", the whole word Parcel, Present or "Halloween Basket" (a plural too). Cars: the server's data has no item type and no name of a
+   * car is among the goods of the shops abroad (checked 2026-11-13 against the 202 names in testdata), so no car is matched by name here. */
+  var BLOCKED_ABROAD = [/\bSuitcases?$/i, /\bParcels?\b/i, /\bPresents?\b/i, /\bHalloween Baskets?\b/i];
+  function canTakeAbroad(name) {
+    var s = String(name);
+    for (var i = 0; i < BLOCKED_ABROAD.length; i++) if (BLOCKED_ABROAD[i].test(s)) return false;
+    return true;
+  }
+
   function exportEval(latest, row, method, n) {
     var d = latest.drugs[row.drug];
+    if (!canTakeAbroad(row.drug)) return null;                                     // it may not be taken from Torn: never suggested for "Sell abroad"
     if (!d || row.bm_status !== 'OK' || d.im_status !== 'OK' || n < 1 || n > CUM_UNITS) return null;
     var cost = d.buy_cost_cum[n - 1];
     if (cost === null) return null;
@@ -1119,7 +1138,7 @@ var KSBM_CORE = (function () {
     rowView: rowView, detailLines: detailLines, legendFor: legendFor, SORT_HELP: SORT_HELP, perTrip: perTrip, UNKNOWN_GROUP_TITLE: UNKNOWN_GROUP_TITLE, FIXED_PROFIT: FIXED_PROFIT,
     FIXED_LOSS: FIXED_LOSS,
     clampSeats: clampSeats, validMethod: validMethod, buildView: buildView,
-    EMPTY_TEXT: EMPTY_TEXT, sideBox: sideBox, sideName: sideName, fmtCompact3: fmtCompact3, fmtPerHour3: fmtPerHour3, makeCache: makeCache, readCache: readCache, CACHE_V: CACHE_V, SIDE_ROWS: SIDE_ROWS, SIDE_SIGN_IN: SIDE_SIGN_IN, SIDE_CHECKING: SIDE_CHECKING, SIDE_OFFLINE: SIDE_OFFLINE, SIDE_STALE: SIDE_STALE,
+    canTakeAbroad: canTakeAbroad, EMPTY_TEXT: EMPTY_TEXT, sideBox: sideBox, sideName: sideName, fmtCompact3: fmtCompact3, fmtPerHour3: fmtPerHour3, makeCache: makeCache, readCache: readCache, CACHE_V: CACHE_V, SIDE_ROWS: SIDE_ROWS, SIDE_SIGN_IN: SIDE_SIGN_IN, SIDE_CHECKING: SIDE_CHECKING, SIDE_OFFLINE: SIDE_OFFLINE, SIDE_STALE: SIDE_STALE,
     NO_DATA_TEXT: NO_DATA_TEXT, fmtSigned: fmtSigned, fmtSignedCompact: fmtSignedCompact,
     fmtMoney: fmtMoney, fmtCompact: fmtCompact, fmtHM: fmtHM, fmtAge: fmtAge, countryName: countryName
   };
@@ -2165,9 +2184,9 @@ var KSBM_DOCK = (function () {
       var label = span(LABEL, 'flex:none;margin-right:' + GAP_PX + 'px;color:' + TEXT + ';' + font(true));
       var status = span('', 'display:block;flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:' + MUTED + ';' + font(false));
       var dest = span('', 'display:block;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:' + TEXT + ';' + font(false));
-      var now = span('now', 'flex:none;margin:0 4px;padding:0 4px;border-radius:3px;background:' + NOW_GREEN + ';color:#ffffff;' + 'font:bold .5rem/12px ' + FONT + ';');
+      var now = span('now', 'flex:none;margin:0 0 0 4px;padding:0 4px;border-radius:3px;background:' + NOW_GREEN + ';color:#ffffff;' + 'font:bold .5rem/12px ' + FONT + ';');
       now.setAttribute(ATTR_NOW, '1');
-      var amount = span('', 'flex:none;white-space:nowrap;color:' + TEXT + ';' + font(false));
+      var amount = span('', 'flex:none;margin-left:4px;white-space:nowrap;color:' + TEXT + ';' + font(false));   // 4 px of air before the amount, with or without the mark
       var spacer = span('', 'flex:1 1 0;min-width:0;');
       var tag = span('+', 'flex:none;margin-left:' + GAP_PX + 'px;color:' + MUTED + ';' + font(true));
       [label, status, dest, now, amount, spacer, tag].forEach(function (e) { row.appendChild(e); });
