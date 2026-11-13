@@ -461,6 +461,44 @@
   #eventBoard input:focus-visible, #eventBoard select:focus-visible, #eventBoard textarea:focus-visible {
     outline: 2px solid var(--accent); outline-offset: 2px;
   }
+
+  /* Faction Events 0.2.0: answers, absences, messages to the staff. Own classes (ebx-*), page colours only. */
+  .ebx-answer { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 10px; margin-top: 2px; min-width: 0; }
+  .ebx-ask { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .ebx-q { font-family: var(--display); font-weight: 600; font-size: 14px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink); margin-right: 4px; }
+  .ebx-ans[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .ebx-ans[aria-pressed="true"]:hover { color: var(--accent-ink); }
+  .ebx-field { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; min-width: 0; }
+  .ebx-label { display: flex; flex-direction: column; gap: 4px; flex: 1 1 220px; min-width: 0; font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .ebx-input, .ebx-textarea {
+    width: 100%; max-width: 100%; font-family: var(--body); font-size: 14px; text-transform: none; letter-spacing: normal; font-weight: 400;
+    color: var(--ink); background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: 3px; padding: 8px 10px;
+  }
+  .ebx-textarea { resize: vertical; min-height: 84px; }
+  .ebx-input::placeholder, .ebx-textarea::placeholder { color: var(--muted); opacity: 1; }
+  .ebx-input:focus-visible, .ebx-textarea:focus-visible, .ebx-ans:focus-visible, .ebx-who summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .ebx-count { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .ebx-who summary { cursor: pointer; font-size: 13px; color: var(--ink); }
+  .ebx-who-row, .ebx-row { display: flex; flex-direction: column; gap: 3px; padding: 6px 0; border-top: 1px solid var(--line); min-width: 0; overflow-wrap: anywhere; }
+  .ebx-who-row:first-of-type { border-top: 0; }
+  .ebx-line { font-size: 14px; color: var(--ink); overflow-wrap: anywhere; }
+  .ebx-name { color: var(--accent); font-weight: 600; text-decoration: underline; }
+  .ebx-reason { font-size: 13px; color: var(--muted); white-space: pre-wrap; padding-left: 12px; border-left: 2px solid var(--line-strong); }
+  .ebx-text { font-size: 14px; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .ebx-when { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .ebx-hint { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .ebx-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 2px; }
+  .ebx-pill { font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; padding: 1px 7px; border-radius: 2px; border: 1px solid currentColor; }
+  .ebx-open { color: var(--warn); }
+  .ebx-done { color: var(--good); }
+  .ebx-box { display: flex; flex-direction: column; gap: 12px; }
+  .ebx-form { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .ebx-form .ebx-label { flex: 0 0 auto; }
+  .ebx-dates { display: flex; flex-wrap: wrap; gap: 10px; }
+  .ebx-dates .ebx-label { flex: 1 1 200px; }
+  .ebx-sub { font-size: 13px; color: var(--muted); margin: 0; }
+  .ebx-form-title { font-family: var(--display); font-weight: 600; font-size: 16px; color: var(--ink); margin: 0; }
+  .ebx-sec { min-width: 0; }
 </style>
 </head>
 <body>
@@ -511,12 +549,68 @@
     <p class="note" id="ebMessage">Sign in above to see the faction events.</p>
     <p class="note" id="ebStaleNote" hidden></p>
     <p class="note" id="ebDegradedNote" hidden></p>
+    <p class="note" id="ebxStatus" role="status" hidden></p>
 
     <div class="line ev-toolbar" id="ebToolbar" hidden>
       <button type="button" class="mini" id="ebRefreshBtn" data-action="refresh">Refresh</button>
     </div>
 
     <div class="ev-list" id="ebListHost"></div>
+  </section>
+
+  <section class="ebx-sec" id="ebxAway" aria-labelledby="ebxAwayH" hidden>
+    <h2 id="ebxAwayH">Away</h2>
+    <div class="card ebx-box">
+      <div id="ebxAwayList"></div>
+      <p class="note" id="ebxAwayEmpty">Nobody has said they are away.</p>
+      <div class="ebx-form">
+        <p class="ebx-form-title" id="ebxAwayMode">I will be away</p>
+        <div class="ebx-dates">
+          <label class="ebx-label">From (TCT)
+            <input class="ebx-input" type="datetime-local" step="60" id="ebxAwayFrom">
+          </label>
+          <label class="ebx-label">To (TCT)
+            <input class="ebx-input" type="datetime-local" step="60" id="ebxAwayTo">
+          </label>
+        </div>
+        <label class="ebx-label">Reason (only staff sees this)
+          <input class="ebx-input" type="text" maxlength="200" id="ebxAwayReason">
+        </label>
+        <div class="ebx-actions">
+          <button type="button" class="mini primary" id="ebxAwaySave" data-ebx="away-save">Save</button>
+          <button type="button" class="mini" id="ebxAwayCancel" data-ebx="away-cancel" hidden>Cancel</button>
+        </div>
+        <p class="note bad" id="ebxAwayErr" role="status" hidden></p>
+        <p class="ebx-sub">For time away outside wars. Wars use the Discord poll.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="ebx-sec" id="ebxTell" aria-labelledby="ebxTellH" hidden>
+    <h2 id="ebxTellH">Tell the staff</h2>
+    <div class="card ebx-box">
+      <label class="ebx-label">Your message
+        <textarea class="ebx-textarea" maxlength="1000" id="ebxTellText"></textarea>
+      </label>
+      <div class="ebx-actions">
+        <button type="button" class="mini primary" id="ebxTellSend" data-ebx="tell-send">Send</button>
+      </div>
+      <p class="note" id="ebxTellErr" role="status" hidden></p>
+      <p class="ebx-sub">Only Rabid, Cheese and Kingshade can read this. They see your name.</p>
+      <div id="ebxSentWrap" hidden>
+        <p class="ebx-form-title">Sent by you</p>
+        <div id="ebxSent"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="ebx-sec" id="ebxInbox" aria-labelledby="ebxInboxH" hidden>
+    <h2 id="ebxInboxH">Messages to staff</h2>
+    <div class="card ebx-box">
+      <p class="note" id="ebxInboxEmpty" hidden>No messages.</p>
+      <div id="ebxInboxList"></div>
+      <p class="note bad" id="ebxInboxErr" role="status" hidden></p>
+    </div>
   </section>
 
   <div class="keynote">
@@ -633,8 +727,9 @@
 
   <footer>
     <p>These pages read through Torn's official API and never act on your behalf in Torn. Faction
-      Events is the one thing here that stores anything: the events live on Kingshade's own
-      server, and only the Leader and Co-Leader can put them there.</p>
+      Events is the one thing here that stores anything: the events, the answers to them, absences and
+      messages to the staff live on Kingshade's own server. Only the Leader and Co-Leader can put events
+      there, and only Rabid, Cheese and Kingshade can read reasons and messages.</p>
     <p>The status beside each name is that person's status <em>in Torn</em>, read once when this page
       opens. It is not a signal that they have this page open — nothing here watches anyone.</p>
   </footer>
@@ -1016,6 +1111,7 @@
     token: null,
     tokenExpiresAt: 0,
     canWrite: false,
+    tornId: null,
     lastGoodEvents: null,
     lastGoodAt: null,
     lastDegraded: false,
@@ -1063,6 +1159,7 @@
     }
 
     board.token = data.session;
+    board.tornId = typeof data.tornId === 'string' ? data.tornId : null;
     board.canWrite = !!data.canWrite;
     var ttl = typeof data.sessionTtlSeconds === 'number' ? data.sessionTtlSeconds : 0;
     board.tokenExpiresAt = Date.now() + ttl * 1000 - 30000;
@@ -1155,6 +1252,8 @@
     board.token = null;
     board.tokenExpiresAt = 0;
     board.canWrite = false;
+    board.tornId = null;
+    if (ebx) ebx.reset();
     board.lastGoodEvents = null;
     board.lastGoodAt = null;
     board.lastDegraded = false;
@@ -1192,6 +1291,7 @@
     if (board.lastGoodEvents === null && board.errorDetail === null) ebRenderChecking();
 
     var outcome = await ebApiCall('/events/list', {});
+    if (outcome.ok && board.signedIn) await ebx.load({ names: true });
 
     board.fetchInFlight = false;
     ebEl.ebRefreshBtn.disabled = false;
@@ -1384,6 +1484,8 @@
       noteEl.textContent = event.note;
       card.appendChild(noteEl);
     }
+
+    ebx.decorate(card, event, isStale);
 
     if (board.canWrite) {
       var actions = document.createElement('div');
@@ -1787,6 +1889,479 @@
     if (action === 'delete-yes') { void ebDoDelete(target.dataset.id); return; }
     if (action === 'form-cancel') { ebCloseForm(); return; }
     if (action === 'form-save') { void ebSubmitForm(); return; }
+  });
+
+  // ================================================================
+  // Faction Events 0.2.0 - answers (Yes/No), absences and messages to the staff.
+  // The server decides everything (who may see a reason, who may change a post);
+  // this code only shows what the server sent and never builds markup from it:
+  // textContent everywhere. A server without these routes answers 404 and every
+  // part below stays hidden, so the board works exactly as before.
+  // ================================================================
+  function ebxCreate(cfg) {
+    var ID_RE = /^[0-9]{1,12}$/;
+    var ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
+    var X = {};
+    ['ebxStatus', 'ebxAway', 'ebxAwayList', 'ebxAwayEmpty', 'ebxAwayFrom', 'ebxAwayTo', 'ebxAwayReason',
+     'ebxAwaySave', 'ebxAwayCancel', 'ebxAwayErr', 'ebxAwayMode', 'ebxTell', 'ebxTellText', 'ebxTellSend',
+     'ebxTellErr', 'ebxSentWrap', 'ebxSent', 'ebxInbox', 'ebxInboxList', 'ebxInboxEmpty', 'ebxInboxErr']
+      .forEach(function (id) {
+        // The staff inbox exists only on leader.html; elsewhere a detached element stands in for it.
+        X[id] = document.getElementById(id) || document.createElement('div');
+      });
+    var state = null;
+    var loadSeq = 0;
+    var gen = 0;
+
+    function fresh() {
+      gen++;
+      return {
+        gen: gen, on: false, loaded: false, isStaff: false, degraded: false, error: false,
+        responses: [], away: [], myComplaints: [], complaints: null,
+        names: {}, cardMsg: {}, editId: null, deleteId: null, awayDeleteId: null, busy: false
+      };
+    }
+    state = fresh();
+
+    function mk(tag, cls, text) {
+      var node = document.createElement(tag);
+      if (cls) node.className = cls;
+      if (text !== undefined) node.textContent = text;
+      return node;
+    }
+    function isIso(v) { return typeof v === 'string' && ISO_RE.test(v) && Number.isFinite(Date.parse(v)); }
+    function staffView() { return cfg.staffView === true && state.isStaff === true; }
+    function me() { return cfg.myId(); }
+
+    function clean(d) {
+      if (!d || d.ok !== true || !Array.isArray(d.responses) || !Array.isArray(d.away) || !Array.isArray(d.myComplaints)) return null;
+      var out = { isStaff: d.isStaff === true, degraded: d.degraded === true, responses: [], away: [], myComplaints: [], complaints: null };
+      d.responses.forEach(function (r) {
+        if (r && typeof r.eventId === 'string' && typeof r.tornId === 'string' && ID_RE.test(r.tornId) &&
+            (r.answer === 'yes' || r.answer === 'no')) {
+          out.responses.push({ eventId: r.eventId, tornId: r.tornId, answer: r.answer, reason: typeof r.reason === 'string' ? r.reason : null });
+        }
+      });
+      d.away.forEach(function (a) {
+        if (a && typeof a.id === 'string' && typeof a.tornId === 'string' && ID_RE.test(a.tornId) && isIso(a.fromUtc) && isIso(a.toUtc)) {
+          out.away.push({ id: a.id, tornId: a.tornId, fromUtc: a.fromUtc, toUtc: a.toUtc, reason: typeof a.reason === 'string' ? a.reason : null });
+        }
+      });
+      d.myComplaints.forEach(function (c) {
+        if (c && typeof c.id === 'string' && typeof c.text === 'string' && isIso(c.createdAt) && (c.status === 'open' || c.status === 'handled')) {
+          out.myComplaints.push({ id: c.id, text: c.text, createdAt: c.createdAt, status: c.status });
+        }
+      });
+      if (Array.isArray(d.complaints)) {
+        out.complaints = [];
+        d.complaints.forEach(function (c) {
+          if (c && typeof c.id === 'string' && typeof c.text === 'string' && typeof c.tornId === 'string' && ID_RE.test(c.tornId) &&
+              isIso(c.createdAt) && (c.status === 'open' || c.status === 'handled')) {
+            out.complaints.push({ id: c.id, tornId: c.tornId, text: c.text, createdAt: c.createdAt, status: c.status });
+          }
+        });
+      }
+      return out;
+    }
+
+    function nameLink(id) {
+      var a = mk('a', 'ebx-name');
+      a.href = 'https://www.torn.com/profiles.php?XID=' + id;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = state.names[id] || '[' + id + ']';
+      return a;
+    }
+    function nameSort(a, b) {
+      var an = (state.names[a.tornId] || '[' + a.tornId + ']').toLowerCase();
+      var bn = (state.names[b.tornId] || '[' + b.tornId + ']').toLowerCase();
+      return an < bn ? -1 : an > bn ? 1 : 0;
+    }
+
+    // ------------------------------------------------------------ load
+    async function load(opts) {
+      var options = opts || {};
+      var mySeq = ++loadSeq;
+      var myGen = state.gen;
+      var names = null;
+      var namesPromise = options.names ? cfg.loadNames() : null;
+      var out = await cfg.call('/members/board', {});
+      if (namesPromise) { try { names = await namesPromise; } catch (err) { names = null; } }
+      if (myGen !== state.gen || mySeq !== loadSeq || !cfg.signedIn()) return;
+      if (names) state.names = names;
+      var data = out.ok ? clean(out.data) : null;
+      if (data) {
+        state.on = true; state.loaded = true; state.error = false;
+        state.isStaff = data.isStaff; state.degraded = data.degraded;
+        state.responses = data.responses; state.away = data.away;
+        state.myComplaints = data.myComplaints; state.complaints = data.complaints;
+      } else if (!out.ok && out.status === 404) {
+        // An older server without these routes: hide everything, quietly.
+        state.on = false; state.loaded = false; state.error = false;
+      } else {
+        state.error = true;
+        if (!state.loaded) state.on = false;
+      }
+      renderSections();
+      if (options.rerender) cfg.rerender();
+    }
+
+    function reset() {
+      loadSeq++;
+      state = fresh();
+      X.ebxAwayFrom.value = ''; X.ebxAwayTo.value = ''; X.ebxAwayReason.value = '';
+      X.ebxTellText.value = '';
+      renderSections();
+    }
+
+    // ---------------------------------------------------------- sections
+    function renderSections() {
+      var on = state.on;
+      var status = '';
+      if (state.error) status = 'Answers and absences could not be loaded. Press Refresh to try again.';
+      else if (on && state.degraded) status = 'Some answers or absences could not be read. The lists may be incomplete.';
+      X.ebxStatus.textContent = status;
+      X.ebxStatus.hidden = status === '';
+      X.ebxAway.hidden = !on;
+      X.ebxTell.hidden = !on;
+      X.ebxInbox.hidden = !(on && staffView() && state.complaints !== null);
+      if (!on) { X.ebxAwayList.textContent = ''; X.ebxSent.textContent = ''; X.ebxInboxList.textContent = ''; return; }
+      renderAway();
+      renderTell();
+      renderInbox();
+    }
+
+    function renderAway() {
+      var now = Date.now();
+      var list = state.away.filter(function (a) { return Date.parse(a.toUtc) > now; })
+        .sort(function (a, b) { return a.fromUtc < b.fromUtc ? -1 : a.fromUtc > b.fromUtc ? 1 : 0; });
+      X.ebxAwayList.textContent = '';
+      X.ebxAwayEmpty.hidden = list.length > 0;
+      list.forEach(function (a) {
+        var row = mk('div', 'ebx-row');
+        var line = mk('div', 'ebx-line');
+        line.appendChild(nameLink(a.tornId));
+        line.appendChild(document.createTextNode(' — away ' + cfg.fmt(a.fromUtc) + ' to ' + cfg.fmt(a.toUtc)));
+        row.appendChild(line);
+        if (staffView() && a.reason) row.appendChild(mk('div', 'ebx-reason', a.reason));
+        var own = a.tornId === me();
+        if (own || staffView()) {
+          var actions = mk('div', 'ebx-actions');
+          if (state.awayDeleteId === a.id) {
+            // Staff (leader.html) confirm a removal the same way as Delete in "Messages to staff".
+            actions.appendChild(mk('span', 'ebx-hint', 'Really delete?'));
+            var yes = mk('button', 'mini', 'Yes'); yes.type = 'button';
+            yes.dataset.ebx = 'away-remove-yes'; yes.dataset.id = a.id;
+            var no = mk('button', 'mini', 'Cancel'); no.type = 'button';
+            no.dataset.ebx = 'away-remove-cancel';
+            actions.appendChild(yes); actions.appendChild(no);
+          } else {
+            if (own) {
+              var edit = mk('button', 'mini', 'Edit'); edit.type = 'button';
+              edit.dataset.ebx = 'away-edit'; edit.dataset.id = a.id;
+              actions.appendChild(edit);
+            }
+            var remove = mk('button', 'mini', 'Remove'); remove.type = 'button';
+            remove.dataset.ebx = 'away-remove'; remove.dataset.id = a.id;
+            actions.appendChild(remove);
+          }
+          row.appendChild(actions);
+        }
+        X.ebxAwayList.appendChild(row);
+      });
+      X.ebxAwayCancel.hidden = state.editId === null;
+      X.ebxAwayMode.textContent = state.editId === null ? 'I will be away' : 'Change your absence';
+    }
+
+    function renderTell() {
+      X.ebxSent.textContent = '';
+      var mine = state.myComplaints.slice().sort(function (a, b) { return a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0; });
+      X.ebxSentWrap.hidden = mine.length === 0;
+      mine.forEach(function (c) {
+        var row = mk('div', 'ebx-row');
+        var line = mk('div', 'ebx-line');
+        line.appendChild(mk('span', 'ebx-when', cfg.fmt(c.createdAt)));
+        line.appendChild(document.createTextNode(' '));
+        line.appendChild(mk('span', 'ebx-pill ' + (c.status === 'handled' ? 'ebx-done' : 'ebx-open'), c.status === 'handled' ? 'Handled' : 'Open'));
+        row.appendChild(line);
+        row.appendChild(mk('div', 'ebx-text', c.text));
+        X.ebxSent.appendChild(row);
+      });
+    }
+
+    function renderInbox() {
+      X.ebxInboxList.textContent = '';
+      if (!(staffView() && state.complaints !== null)) return;
+      var sorted = state.complaints.slice().sort(function (a, b) {
+        if (a.status !== b.status) return a.status === 'open' ? -1 : 1;
+        return a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0;
+      });
+      X.ebxInboxEmpty.hidden = sorted.length > 0;
+      sorted.forEach(function (c) {
+        var row = mk('div', 'ebx-row');
+        var line = mk('div', 'ebx-line');
+        line.appendChild(nameLink(c.tornId));
+        line.appendChild(document.createTextNode(' · '));
+        line.appendChild(mk('span', 'ebx-when', cfg.fmt(c.createdAt)));
+        line.appendChild(document.createTextNode(' '));
+        line.appendChild(mk('span', 'ebx-pill ' + (c.status === 'handled' ? 'ebx-done' : 'ebx-open'), c.status === 'handled' ? 'Handled' : 'Open'));
+        row.appendChild(line);
+        row.appendChild(mk('div', 'ebx-text', c.text));
+        var actions = mk('div', 'ebx-actions');
+        if (state.deleteId === c.id) {
+          actions.appendChild(mk('span', 'ebx-hint', 'Really delete?'));
+          var yes = mk('button', 'mini', 'Yes'); yes.type = 'button'; yes.dataset.ebx = 'msg-delete-yes'; yes.dataset.id = c.id;
+          var no = mk('button', 'mini', 'Cancel'); no.type = 'button'; no.dataset.ebx = 'msg-delete-cancel';
+          actions.appendChild(yes); actions.appendChild(no);
+        } else {
+          if (c.status === 'open') {
+            var handle = mk('button', 'mini', 'Mark handled'); handle.type = 'button';
+            handle.dataset.ebx = 'msg-handle'; handle.dataset.id = c.id;
+            actions.appendChild(handle);
+          }
+          var del = mk('button', 'mini', 'Delete'); del.type = 'button';
+          del.dataset.ebx = 'msg-delete'; del.dataset.id = c.id;
+          actions.appendChild(del);
+        }
+        row.appendChild(actions);
+        X.ebxInboxList.appendChild(row);
+      });
+    }
+
+    // -------------------------------------------------- event card block
+    function isOpenEvent(event) {
+      if (event.type === 'Ranked War' || event.status !== 'Scheduled') return false;
+      var finish = event.endUtc || event.deadlineUtc || event.startUtc;
+      return Date.now() < Date.parse(finish);
+    }
+
+    function decorate(card, event, isStale) {
+      if (!state.on) return;
+      var box = mk('div', 'ebx-answer');
+      if (event.type === 'Ranked War') {
+        box.appendChild(mk('p', 'note', 'Attendance for wars is a Discord poll.'));
+        card.appendChild(box);
+        return;
+      }
+      var here = state.responses.filter(function (r) { return r.eventId === event.id; });
+      var mine = null;
+      here.forEach(function (r) { if (r.tornId === me()) mine = r; });
+      var yes = here.filter(function (r) { return r.answer === 'yes'; }).sort(nameSort);
+      var no = here.filter(function (r) { return r.answer === 'no'; }).sort(nameSort);
+
+      var reasonInput = null;
+      if (isOpenEvent(event) && !isStale) {
+        var ask = mk('div', 'ebx-ask');
+        ask.appendChild(mk('span', 'ebx-q', 'Are you in?'));
+        ['yes', 'no'].forEach(function (answer) {
+          var b = mk('button', 'mini ebx-ans', answer === 'yes' ? 'Yes' : 'No');
+          b.type = 'button';
+          b.dataset.ebx = 'ans'; b.dataset.event = event.id; b.dataset.answer = answer;
+          b.setAttribute('aria-pressed', mine && mine.answer === answer ? 'true' : 'false');
+          ask.appendChild(b);
+        });
+        box.appendChild(ask);
+
+        var field = mk('div', 'ebx-field');
+        var label = mk('label', 'ebx-label', 'Reason (only staff sees this)');
+        reasonInput = mk('input', 'ebx-input');
+        reasonInput.type = 'text';
+        reasonInput.maxLength = 200;
+        reasonInput.dataset.ebxReason = event.id;
+        // The server sends a member their OWN saved reason back, so the field shows what is saved.
+        reasonInput.value = mine && mine.reason !== null ? mine.reason : '';
+        label.appendChild(reasonInput);
+        field.appendChild(label);
+        var save = mk('button', 'mini', 'Save reason'); save.type = 'button';
+        save.dataset.ebx = 'reason-save'; save.dataset.event = event.id;
+        field.appendChild(save);
+        box.appendChild(field);
+      }
+
+      box.appendChild(mk('div', 'ebx-count', 'Yes ' + yes.length + ' · No ' + no.length));
+      if (here.length > 0) {
+        var details = mk('details', 'ebx-who');
+        details.appendChild(mk('summary', '', 'Who answered'));
+        yes.concat(no).forEach(function (r) {
+          var row = mk('div', 'ebx-who-row');
+          var line = mk('div', 'ebx-line');
+          line.appendChild(nameLink(r.tornId));
+          line.appendChild(document.createTextNode(' — ' + (r.answer === 'yes' ? 'Yes' : 'No')));
+          row.appendChild(line);
+          if (staffView() && r.reason) row.appendChild(mk('div', 'ebx-reason', r.reason));
+          details.appendChild(row);
+        });
+        box.appendChild(details);
+      }
+      if (state.cardMsg[event.id]) box.appendChild(mk('p', 'note bad', state.cardMsg[event.id]));
+      card.appendChild(box);
+    }
+
+    // ----------------------------------------------------------- actions
+    function describe(out, fallback) {
+      var d = out.data;
+      if (out.status === 429) return 'Too many sign-ins just now. Wait a moment and try again.';
+      if (d && typeof d.detail === 'string' && d.detail) return d.detail;
+      if (out.status === 0) return 'Could not reach the event board.';
+      return fallback;
+    }
+
+    function findReasonInput(eventId) {
+      var inputs = document.querySelectorAll('input[data-ebx-reason]');
+      for (var i = 0; i < inputs.length; i++) if (inputs[i].dataset.ebxReason === eventId) return inputs[i];
+      return null;
+    }
+
+    async function answer(eventId, value, reasonMode) {
+      var input = findReasonInput(eventId);
+      var body = { eventId: eventId, answer: value };
+      // Yes/No sends a reason only when one is typed; "Save reason" always sends what is in the field.
+      if (input && (reasonMode === 'always' || input.value !== '')) body.reason = input.value;
+      var out = await cfg.call('/responses/set', body);
+      if (!cfg.signedIn()) return;
+      if (out.ok) {
+        delete state.cardMsg[eventId];
+      } else {
+        state.cardMsg[eventId] = describe(out, 'Your answer could not be saved.');
+      }
+      await load({ rerender: true });
+    }
+
+    async function onClick(event) {
+      var target = event.target && event.target.closest ? event.target.closest('[data-ebx]') : null;
+      if (!target || state.busy || !state.on) return;
+      var action = target.dataset.ebx;
+      var id = target.dataset.id;
+      state.busy = true;
+      try {
+        if (action === 'ans') {
+          var current = null;
+          state.responses.forEach(function (r) { if (r.eventId === target.dataset.event && r.tornId === me()) current = r; });
+          var pressed = target.dataset.answer;
+          await answer(target.dataset.event, current && current.answer === pressed ? null : pressed, 'typed');
+        } else if (action === 'reason-save') {
+          var mineNow = null;
+          state.responses.forEach(function (r) { if (r.eventId === target.dataset.event && r.tornId === me()) mineNow = r; });
+          if (!mineNow) {
+            state.cardMsg[target.dataset.event] = 'Choose Yes or No first.';
+            cfg.rerender();
+          } else {
+            await answer(target.dataset.event, mineNow.answer, 'always');
+          }
+        } else if (action === 'away-save') {
+          await saveAway();
+        } else if (action === 'away-edit') {
+          var found = null;
+          state.away.forEach(function (a) { if (a.id === id) found = a; });
+          if (found) {
+            state.editId = id;
+            X.ebxAwayFrom.value = found.fromUtc.slice(0, 16);
+            X.ebxAwayTo.value = found.toUtc.slice(0, 16);
+            X.ebxAwayReason.value = found.reason !== null ? found.reason : '';
+            X.ebxAwayErr.hidden = true;
+            renderAway();
+            X.ebxAwayFrom.focus();
+          }
+        } else if (action === 'away-cancel') {
+          state.editId = null;
+          X.ebxAwayFrom.value = ''; X.ebxAwayTo.value = ''; X.ebxAwayReason.value = '';
+          X.ebxAwayErr.hidden = true;
+          renderAway();
+        } else if (action === 'away-remove' && staffView()) {
+          state.awayDeleteId = id; renderAway();
+        } else if (action === 'away-remove-cancel') {
+          state.awayDeleteId = null; renderAway();
+        } else if (action === 'away-remove' || action === 'away-remove-yes') {
+          state.awayDeleteId = null;
+          var gone = await cfg.call('/away/delete', { id: id });
+          if (!gone.ok) { X.ebxAwayErr.textContent = describe(gone, 'The absence could not be removed.'); X.ebxAwayErr.hidden = false; }
+          else { X.ebxAwayErr.hidden = true; if (state.editId === id) state.editId = null; }
+          await load();
+        } else if (action === 'tell-send') {
+          await sendTell();
+        } else if (action === 'msg-handle') {
+          var done = await cfg.call('/complaints/resolve', { id: id });
+          X.ebxInboxErr.hidden = done.ok;
+          if (!done.ok) X.ebxInboxErr.textContent = describe(done, 'The message could not be marked.');
+          await load();
+        } else if (action === 'msg-delete') {
+          state.deleteId = id; renderInbox();
+        } else if (action === 'msg-delete-cancel') {
+          state.deleteId = null; renderInbox();
+        } else if (action === 'msg-delete-yes') {
+          var removed = await cfg.call('/complaints/delete', { id: id });
+          state.deleteId = null;
+          X.ebxInboxErr.hidden = removed.ok;
+          if (!removed.ok) X.ebxInboxErr.textContent = describe(removed, 'The message could not be deleted.');
+          await load();
+        }
+      } finally {
+        state.busy = false;
+      }
+    }
+
+    async function saveAway() {
+      var from = X.ebxAwayFrom.value;
+      var to = X.ebxAwayTo.value;
+      function problem(text) { X.ebxAwayErr.textContent = text; X.ebxAwayErr.hidden = false; }
+      if (!from || from.length < 16 || !to || to.length < 16) { problem('Fill in both From and To.'); return; }
+      // String work only: the fields are TCT, never parsed as local time.
+      var fromUtc = from.slice(0, 16) + ':00.000Z';
+      var toUtc = to.slice(0, 16) + ':00.000Z';
+      if (!(toUtc > fromUtc)) { problem('To must be after From.'); return; }
+      if (!(toUtc > new Date().toISOString())) { problem('To must be in the future.'); return; }
+      var body = { fromUtc: fromUtc, toUtc: toUtc };
+      // The field holds the saved reason (the server sends it back to its owner), so what is in it is what is saved:
+      // an emptied field clears the reason.
+      body.reason = X.ebxAwayReason.value;
+      if (state.editId !== null) body.id = state.editId;
+      X.ebxAwaySave.disabled = true;
+      var out = await cfg.call(state.editId === null ? '/away/create' : '/away/update', body);
+      X.ebxAwaySave.disabled = false;
+      if (!cfg.signedIn()) return;
+      if (!out.ok) { problem(describe(out, 'Your absence could not be saved.')); return; }
+      X.ebxAwayErr.hidden = true;
+      state.editId = null;
+      X.ebxAwayFrom.value = ''; X.ebxAwayTo.value = ''; X.ebxAwayReason.value = '';
+      await load();
+    }
+
+    async function sendTell() {
+      var text = X.ebxTellText.value;
+      function problem(message) { X.ebxTellErr.textContent = message; X.ebxTellErr.hidden = false; X.ebxTellErr.className = 'note bad'; }
+      if (text.trim() === '') { problem('Write your message first.'); return; }
+      X.ebxTellSend.disabled = true;
+      var out = await cfg.call('/complaints/create', { text: text });
+      X.ebxTellSend.disabled = false;
+      if (!cfg.signedIn()) return;
+      if (!out.ok) { problem(describe(out, 'Your message could not be sent.')); return; }
+      X.ebxTellText.value = '';
+      X.ebxTellErr.textContent = 'Sent. The staff will see it.';
+      X.ebxTellErr.className = 'note';
+      X.ebxTellErr.hidden = false;
+      await load();
+    }
+
+    document.addEventListener('click', function (event) { void onClick(event); });
+
+    return { load: load, reset: reset, decorate: decorate };
+  }
+
+  var ebx = ebxCreate({
+    staffView: true,
+    call: function (path, extra) { return ebApiCall(path, extra); },
+    myId: function () { return board.tornId || ''; },
+    signedIn: function () { return board.signedIn; },
+    rerender: function () { if (board.lastGoodEvents !== null) ebRenderBoard(); },
+    fmt: ebFormatDual,
+    // The roster this page already read with the visitor's key (Torn ID -> name); no extra call.
+    loadNames: function () {
+      var map = {};
+      members.forEach(function (m) {
+        if (m && (typeof m.id === 'number' || typeof m.id === 'string') && typeof m.name === 'string') map[String(m.id)] = m.name;
+      });
+      return Promise.resolve(map);
+    }
   });
 
   var stored = read(KEY_STORE);
