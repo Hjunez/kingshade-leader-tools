@@ -1,0 +1,1335 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KS OC Planner</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground: #eaedf1; --surface: #ffffff; --surface-2: #f4f6f9;
+    --ink: #14202b; --muted: #526273; --faint: #4f5f6e;
+    --line: #d3dae1; --line-strong: #b8c3cd;
+    --accent: #8f431c; --accent-ink: #ffffff; --accent-soft: #f2ded4;
+    --good: #1c7355; --good-soft: #dfeee8;
+    --warn: #8c6210; --warn-soft: #f6ecd6;
+    --bad: #a12f2a; --bad-soft: #f6dedc;
+    --shadow: 0 1px 2px rgba(20,32,43,.06), 0 8px 24px rgba(20,32,43,.06);
+    --display: 'Saira Condensed','Arial Narrow',Helvetica,sans-serif;
+    --body: 'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;
+    --mono: 'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+      --ink: #e3e9ef; --muted: #93a3b2; --faint: #8a9bab;
+      --line: #26313b; --line-strong: #35434f;
+      --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+      --good: #46a583; --good-soft: #172a24;
+      --warn: #cc9f3f; --warn-soft: #2a2417;
+      --bad: #dd6a61; --bad-soft: #2c1b1a;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+    --ink: #e3e9ef; --muted: #93a3b2; --faint: #8a9bab;
+    --line: #26313b; --line-strong: #35434f;
+    --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+    --good: #46a583; --good-soft: #172a24;
+    --warn: #cc9f3f; --warn-soft: #2a2417;
+    --bad: #dd6a61; --bad-soft: #2c1b1a;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--body); font-size: 15px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased; overflow-wrap: anywhere;
+  }
+
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 28px 20px 72px; display: flex; flex-direction: column; gap: 22px; }
+
+  .backbar a {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+    text-decoration: none; border: 1px solid var(--line-strong);
+    border-radius: 3px; padding: 7px 12px; display: inline-block;
+  }
+  .backbar a:hover { color: var(--accent); border-color: var(--accent); }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .masthead {
+    display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between;
+    gap: 12px 24px; padding-bottom: 18px; border-bottom: 2px solid var(--line-strong);
+  }
+  h1 { font-family: var(--display); font-weight: 700; font-size: clamp(30px,5vw,42px); line-height: 1.02; margin: 0; }
+  .masthead p { margin: 6px 0 0; color: var(--muted); max-width: 64ch; }
+  .stamp {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .13em; text-transform: uppercase; color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 2px; padding: 5px 10px; white-space: nowrap;
+  }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; box-shadow: var(--shadow); }
+  .panel-head {
+    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+    gap: 8px 16px; padding: 14px 18px; border-bottom: 1px solid var(--line);
+  }
+  .panel-head h2 {
+    font-family: var(--display); font-weight: 600; font-size: 19px;
+    letter-spacing: .04em; text-transform: uppercase; margin: 0;
+  }
+  .panel-head .hint { color: var(--faint); font-size: 13px; margin: 0; }
+  .panel-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+
+  label.lbl {
+    font-family: var(--display); font-weight: 600; font-size: 12px;
+    letter-spacing: .11em; text-transform: uppercase; color: var(--muted);
+    display: block; margin-bottom: 6px;
+  }
+
+  input[type="password"], input[type="text"] {
+    font-family: var(--mono); font-size: 15px; color: var(--ink);
+    background: var(--surface-2); border: 1px solid var(--line-strong);
+    border-radius: 3px; padding: 9px 11px; width: 100%; min-width: 0;
+  }
+  input:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .btn {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .08em; text-transform: uppercase;
+    background: var(--surface-2); color: var(--ink);
+    border: 1px solid var(--line-strong); border-radius: 3px;
+    padding: 9px 15px; cursor: pointer;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn.primary:hover { color: var(--accent-ink); filter: brightness(1.06); }
+  .btn[disabled] { opacity: .6; cursor: default; filter: none; }
+  .btn.quiet { background: transparent; border-color: var(--line-strong); color: var(--muted); }
+  .btn.quiet:hover { color: var(--bad); border-color: var(--bad); }
+
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .grow { flex: 1 1 200px; min-width: 0; }
+  .note { color: var(--muted); font-size: 13px; margin: 0; }
+
+  .msg { font-size: 14px; border-radius: 3px; padding: 11px 13px; margin: 0; }
+  .msg.err { background: var(--bad-soft); color: var(--bad); border: 1px solid var(--bad); }
+  .msg.ok { background: var(--good-soft); color: var(--good); }
+  .msg.warnbox { background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn); }
+  .msg[hidden] { display: none; }
+  .msg a { color: inherit; font-weight: 600; }
+
+  .statusrows { padding: 14px 18px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+  .statusrows p { margin: 0; }
+  .statusrows .bad { color: var(--bad); font-weight: 600; }
+  .statusrows a { color: var(--accent); font-weight: 600; }
+  .statusrows .k { font-family: var(--display); font-weight: 600; letter-spacing: .05em; color: var(--muted); }
+
+  .figures {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 1px; background: var(--line); border: 1px solid var(--line);
+    border-radius: 4px; overflow: hidden;
+  }
+  .figure { background: var(--surface); padding: 14px 15px; display: flex; flex-direction: column; gap: 3px; }
+  .figure .k {
+    font-family: var(--display); font-weight: 600; font-size: 12px;
+    letter-spacing: .11em; text-transform: uppercase; color: var(--muted);
+  }
+  .figure .v { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 500; font-size: 24px; line-height: 1.2; }
+  .figure.alert .v { color: var(--warn); }
+
+  .crime { border-bottom: 1px solid var(--line); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+  .crime:last-child { border-bottom: 0; }
+  .crime-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; }
+  .crime-head .name { font-family: var(--display); font-weight: 700; font-size: 22px; letter-spacing: .01em; }
+
+  .pill {
+    font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: .04em;
+    padding: 3px 8px; border-radius: 2px; white-space: nowrap; display: inline-block;
+    background: var(--surface-2); color: var(--muted); border: 1px solid var(--line);
+  }
+  .pill.good { background: var(--good-soft); color: var(--good); border-color: transparent; }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+  .pill.bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+  .pill.accent { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+  .crime-head .pill { white-space: normal; max-width: 100%; }
+
+  .overdue { background: var(--bad-soft); color: var(--bad); border: 1px solid var(--bad); border-radius: 3px; padding: 10px 13px; font-weight: 600; font-size: 14px; }
+
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 3px; max-width: 100%; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th {
+    font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--muted); background: var(--surface-2); white-space: nowrap;
+  }
+  tr:last-child td { border-bottom: 0; }
+  table.seats { min-width: 1010px; }
+  table.simple { min-width: 560px; }
+  td.num, th.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tr.diff td { background: var(--accent-soft); }
+  tr.diff td:first-child { box-shadow: inset 4px 0 0 var(--accent); }
+  td a { color: var(--accent); font-weight: 500; }
+  .dim { color: var(--faint); }
+  .sub { display: block; font-size: 12px; color: var(--muted); }
+  .mark { font-family: var(--mono); font-size: 11px; color: var(--warn); margin-left: 4px; }
+  td.below { color: var(--warn); font-weight: 600; }
+
+  .lines { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+  .lines p { margin: 0; }
+  .lines .tag { font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-right: 8px; }
+  h3 {
+    font-family: var(--display); font-weight: 600; font-size: 14px;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 4px 0 0;
+  }
+
+  details { border-top: 1px solid var(--line); }
+  details.inline { border: 1px solid var(--line); border-radius: 3px; }
+  summary {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+    padding: 11px 14px; cursor: pointer;
+  }
+  summary:hover { color: var(--accent); }
+  details dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 14px; }
+  details dt { font-weight: 600; color: var(--muted); }
+  details dd { margin: 0; }
+  details .tablewrap { margin: 0 14px 14px; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+  .chips li { margin: 0; }
+  .chips a { text-decoration: none; }
+  .chips .pill a { color: var(--ink); }
+  .empty { padding: 26px 18px; text-align: center; color: var(--faint); margin: 0; }
+
+  footer { border-top: 1px solid var(--line); padding-top: 16px; color: var(--faint); font-size: 13px; }
+  footer p { margin: 0 0 6px; max-width: 78ch; }
+
+  @media (max-width: 520px) {
+    .wrap { padding: 16px 12px 56px; gap: 16px; }
+    .panel-head, .crime { padding-left: 12px; padding-right: 12px; }
+    .panel-body { padding: 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav class="backbar"><a href="leader.html">&larr; Leader Tools</a></nav>
+
+  <header class="masthead">
+    <div>
+      <h1>KS OC Planner</h1>
+      <p>The whole plan for every open crime: who sits where, who should move, who is free, and who is holding a crime up.</p>
+    </div>
+    <span class="stamp">PoIitically Incorrect &middot; 48039</span>
+  </header>
+
+  <section class="panel" id="keyPanel">
+    <div class="panel-head">
+      <h2>Sign in and load the plan</h2>
+      <p class="hint">Reads only. For the OC leaders. Nothing here joins, moves or starts a crime.</p>
+    </div>
+    <div class="panel-body">
+      <div>
+        <label class="lbl" for="apiKey">Torn Custom API Key</label>
+        <div class="toolbar">
+          <input type="password" id="apiKey" class="grow" autocomplete="off" spellcheck="false" placeholder="Paste your key">
+          <button type="button" class="btn" id="toggleKey" aria-pressed="false">Show</button>
+          <button type="button" class="btn primary" id="loadBtn">Load</button>
+          <button type="button" class="btn quiet" id="forgetKey">Forget key (all Leader Tools pages)</button>
+        </div>
+        <p class="note" id="forgetNote" style="margin-top:8px">The key is kept in this browser only. &ldquo;Forget key&rdquo; removes it here, so War Room and OC Roster Board forget it too.</p>
+      </div>
+      <p class="msg err" id="errorBox" role="alert" hidden></p>
+      <p class="msg ok" id="okBox" role="status" hidden></p>
+    </div>
+    <details>
+      <summary>What this needs, and what happens to the key</summary>
+      <div class="panel-body">
+        <dl>
+          <dt>Key</dt>
+          <dd>The same Leader Tools key as the other pages. It must open <strong>faction &rarr; members</strong>, and your faction position needs Faction API Access. <a id="keyLinkStatic" target="_blank" rel="noopener noreferrer">Create the Leader Tools key</a></dd>
+          <dt>Sign-in</dt>
+          <dd>The key goes once to the KS OC Planner server, which only asks Torn whose key it is and checks that you are on the OC leader list. The server never stores the key. The sign-in slip it hands back lives in this page only and expires after about ten minutes.</dd>
+          <dt>Torn</dt>
+          <dd>The page asks Torn directly, from this browser, for the faction member list, to see who is in hospital, in jail or abroad. The key goes to Torn only, in the request header.</dd>
+          <dt>Presses</dt>
+          <dd>One press of Load or Refresh is one read. The page never polls in the background and never acts inside Torn.</dd>
+        </dl>
+      </div>
+    </details>
+  </section>
+
+  <section class="panel" id="statusPanel" hidden>
+    <div class="statusrows" id="statusRows"></div>
+  </section>
+
+  <p class="msg err" id="staleBox" role="alert" hidden></p>
+
+  <section class="figures" id="figures" hidden aria-label="Summary"></section>
+
+  <section class="panel" id="crimesPanel" hidden>
+    <div class="panel-head">
+      <h2>Open crimes</h2>
+      <p class="hint" id="crimesHint"></p>
+    </div>
+    <div id="crimes"></div>
+  </section>
+
+  <section class="panel" id="freePanel" hidden>
+    <div class="panel-head">
+      <h2>Free members</h2>
+      <p class="hint">Not sitting in any crime right now. Each one chooses his own crime.</p>
+    </div>
+    <div class="panel-body" id="freeBody"></div>
+  </section>
+
+  <section class="panel" id="noDataPanel" hidden>
+    <div class="panel-head">
+      <h2>No shared CPR</h2>
+      <p class="hint" id="noDataHint"></p>
+    </div>
+    <div class="panel-body" id="noDataBody"></div>
+  </section>
+
+  <footer>
+    <p><strong>Manual refresh only.</strong> The page reads when it opens (if a key is saved) and when you press Load or Refresh. It never polls in the background.</p>
+    <p><strong>Two clocks.</strong> The crime data comes from the KS server and can be a few minutes old. Member status (hospital, jail, abroad) is read live from Torn at the moment you press the button.</p>
+    <p><strong>Advice only.</strong> Nobody is moved by this page. The suggestions are a calculation from the CPR members chose to share.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var OC_WORKER_ORIGIN = 'https://oc.kingshadeprotocol.com';
+  var WORKER_PATHS = ['/session', '/plan/all'];
+  var TORN_MEMBERS_URL = 'https://api.torn.com/v2/faction/members?striptags=true&comment=KSOCPlannerLeader';
+  var KEY_STORE = 'ks-leader-board-key';
+  var KEY_LINK = 'https://www.torn.com/preferences.php#tab=api?step=addNewKey&title=KSLeaderTools&faction=members,rankedwars,rankedwarreport,crimes,news,inventory,attacks&user=personalstats,snapshot,profile';
+  var KEY_PATTERN = /^[A-Za-z0-9]{8,64}$/;
+  var REQUEST_TIMEOUT_MS = 20000;
+  var SESSION_MARGIN_MS = 60000;
+  var TICK_MS = 30000;
+  var CPR_STALE_SECONDS = 72 * 3600;
+  var DEBUG_STORE = 'ksocp.leader.debug';
+
+  // ------------------------------------------------------------------ text
+
+  var T = {
+    BAD_KEY: 'That does not look like a Torn API key. Copy the whole key from Torn, with no spaces around it.',
+    NOT_IN_FACTION: 'This key does not belong to a member of PoIitically Incorrect.',
+    NOT_A_LEADER: 'Signed in, but this Torn ID is not on the OC leader list. Only Kingshade, Cheese and Rabid can see the whole plan.',
+    NOT_SET_UP: 'The KS OC Planner server is not set up.',
+    TORN_UNREACHED: 'The KS server could not reach Torn to check the key. Try again shortly.',
+    STORAGE: 'The KS OC Planner server could not read its data. Nothing is shown rather than something wrong.',
+    EXPIRED: 'The sign-in expired and could not be renewed.',
+    UNREACHABLE: 'The KS OC Planner server could not be reached.',
+    UNEXPECTED: 'Unexpected answer from the KS OC Planner server.',
+    FREE_NOTE: 'Each member chooses his own crime. This list does not rank crimes.',
+    NODATA_NOTE: 'These members have never shared their CPR with KS OC Planner, so no seat can be suggested for them. They share it from the KS OC Planner script on Torn’s Crimes tab.',
+    NO_PLAN_STALE: 'No crimes are shown while the OC data is out of date.'
+  };
+
+  function tornErrorText(code) {
+    if (code === 2) return 'Torn rejected the key. Check it was copied whole.';
+    if (code === 5) return 'Too many calls in the last minute. Wait a moment and try again.';
+    if (code === 7) return 'Your faction position is not allowed to see this. It is a faction permission, not a key setting.';
+    if (code === 8) return 'Torn has blocked this IP address for a while. Try again later.';
+    if (code === 9) return 'Torn’s API is temporarily unavailable. Try again shortly.';
+    if (code === 10) return 'The key owner is in federal jail, so the key cannot be used.';
+    if (code === 13) return 'This key is disabled after seven days of account inactivity.';
+    if (code === 16) return 'The key is missing a selection for this call.';
+    if (code === 17) return 'Torn is in a backend update. Try again in a minute.';
+    if (code === 18) return 'This key has been paused by its owner.';
+    return 'Torn returned error ' + code + '.';
+  }
+
+  var FLAG_LABELS = {
+    CPR_IMPROVEMENT: 'Better line-up: no seat gets worse',
+    WEIGHTED_IMPROVEMENT: 'Better line-up by weight: a seat gets worse but weight × CPR goes up',
+    FLOOR_IMPROVEMENT: 'More seats above the faction minimum',
+    NO_CHANGE: 'No change suggested',
+    EQUIVALENT: 'Several line-ups are equally good; the one with the fewest moves is shown',
+    NO_WEIGHTS: 'No role weights for this crime: every seat counts the same'
+  };
+
+  // ------------------------------------------------------------------ state
+
+  var S = {
+    run: 0,
+    running: false,
+    ran: false,
+    session: null,        // { token, expiresLocal, tornId, isLeader }
+    loginFlight: null,
+    plan: null,           // the validated /plan/all answer
+    fetchedLocal: 0,      // Date.now() when the plan arrived
+    members: null,        // Map id -> { state, description, until, name }
+    membersAt: 0,
+    membersErr: null,     // { text, keyLink }
+    error: null,          // { text, keyLink }
+    names: new Map(),
+    tickTimer: null,
+    renderSig: ''
+  };
+
+  var el = {};
+  ['apiKey', 'toggleKey', 'loadBtn', 'forgetKey', 'errorBox', 'okBox', 'statusPanel', 'statusRows',
+    'staleBox', 'figures', 'crimesPanel', 'crimes', 'crimesHint', 'freePanel', 'freeBody', 'noDataPanel',
+    'noDataBody', 'noDataHint', 'keyLinkStatic']
+    .forEach(function (id) { el[id] = document.getElementById(id); });
+  el.keyLinkStatic.href = KEY_LINK;
+
+  // ------------------------------------------------------------ small tools
+
+  function debugOn() { try { return localStorage.getItem(DEBUG_STORE) === '1'; } catch (e) { return false; } }
+  function dbg(line) { if (debugOn()) console.log('[KS-OCP-L] ' + line); }
+
+  function readKey() { try { return localStorage.getItem(KEY_STORE) || ''; } catch (e) { return ''; } }
+  function storeKey(v) {
+    try { if (v) localStorage.setItem(KEY_STORE, v); else localStorage.removeItem(KEY_STORE); }
+    catch (e) { /* storage blocked: the page still works for this visit */ }
+  }
+
+  function h(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined && text !== null) e.textContent = text;
+    return e;
+  }
+  function add(parent) {
+    for (var i = 1; i < arguments.length; i++) {
+      var c = arguments[i];
+      if (c === null || c === undefined || c === false) continue;
+      parent.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+    }
+    return parent;
+  }
+  function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+
+  function dur(sec) {
+    sec = Math.max(0, Math.floor(sec));
+    if (sec < 60) return 'less than 1 min';
+    var m = Math.floor(sec / 60);
+    if (m < 60) return m + ' min';
+    var hh = Math.floor(m / 60);
+    if (hh < 24) { var mm = m % 60; return hh + ' h' + (mm ? ' ' + mm + ' min' : ''); }
+    var d = Math.floor(hh / 24); var rest = hh % 24;
+    return d + ' d' + (rest ? ' ' + rest + ' h' : '');
+  }
+  function clockTime(unix) {
+    return new Date(unix * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  function clockWhen(unix) {
+    var d = new Date(unix * 1000); var n = new Date();
+    if (d.toDateString() === n.toDateString()) return clockTime(unix);
+    return d.toLocaleDateString([], { day: 'numeric', month: 'short' }) + ' ' + clockTime(unix);
+  }
+  function pct(v) { return String(v) + '%'; }
+  function weightText(w) { return (Math.round(w * 10) / 10).toFixed(1) + '%'; }
+  function sumText(v) { return (Math.round(v * 10) / 10).toFixed(1); }
+
+  function localNowSec() { return Date.now() / 1000; }
+  // Plan time: the server's clock, moved on by the time that passed here since the answer arrived.
+  function planNow() {
+    if (!S.plan) return localNowSec();
+    return S.plan.serverTime + (Date.now() - S.fetchedLocal) / 1000;
+  }
+
+  // A number of seconds that keeps counting on screen. The timer only redraws these; it never reads anything.
+  function liveText(kind, val) {
+    if (kind === 'age0') return dur(val + (Date.now() - S.fetchedLocal) / 1000);
+    if (kind === 'since') return dur(planNow() - val);
+    if (kind === 'until') return dur(val - planNow());
+    return '';
+  }
+  function live(kind, val) {
+    var s = h('span', 'live', liveText(kind, val));
+    s.setAttribute('data-live', kind);
+    s.setAttribute('data-val', String(val));
+    return s;
+  }
+
+  function nameOf(id) {
+    if (id === null || id === undefined) return '';
+    var n = S.names.get(String(id));
+    return n ? n : '#' + id;
+  }
+  function profileLink(id, name) {
+    var text = name || nameOf(id);
+    if (!/^[0-9]{1,12}$/.test(String(id))) return h('span', '', text);
+    var a = h('a', '', text);
+    a.href = 'https://www.torn.com/profiles.php?XID=' + id;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    return a;
+  }
+  function pill(parts, tone) {
+    var p = h('span', 'pill' + (tone ? ' ' + tone : ''));
+    return add.apply(null, [p].concat(Array.isArray(parts) ? parts : [parts]));
+  }
+
+  // ----------------------------------------------------------- Torn status
+
+  function tornFor(id) {
+    if (!S.members) return null;
+    return S.members.get(String(id)) || null;
+  }
+  function tone(state) {
+    if (state === 'Okay') return 'good';
+    if (state === 'Hospital' || state === 'Jail' || state === 'Federal') return 'bad';
+    if (state === 'Abroad' || state === 'Traveling') return 'accent';
+    return 'warn';
+  }
+  // The cell for one member. Missing or unreadable is "Status unknown", never "Okay".
+  function statusCell(id) {
+    var m = tornFor(id);
+    var box = h('div', '');
+    if (!m) { box.appendChild(pill('Status unknown', 'warn')); return box; }
+    box.appendChild(pill(m.state, tone(m.state)));
+    if (m.state !== 'Okay') {
+      if (m.description) box.appendChild(h('span', 'sub', m.description));
+      if (m.until > localNowSec()) box.appendChild(h('span', 'sub', 'until ' + clockWhen(m.until)));
+    }
+    return box;
+  }
+  function blockersOf(oc) {
+    var out = [];
+    oc.slots.forEach(function (s) {
+      if (s.current.userId === null) return;
+      var m = tornFor(s.current.userId);
+      if (m && m.state !== 'Okay') out.push({ id: s.current.userId, name: nameOf(s.current.userId), description: m.description || m.state });
+    });
+    return out;
+  }
+
+  // ----------------------------------------------------------- the network
+
+  // The only way to the KS OC Planner server. Two paths, POST, JSON, no cookies, 20 s.
+  async function workerPost(path, body) {
+    if (WORKER_PATHS.indexOf(path) === -1) throw new Error('path not allowed');
+    var ctl = new AbortController();
+    var timer = setTimeout(function () { ctl.abort(); }, REQUEST_TIMEOUT_MS);
+    try {
+      var res = await fetch(OC_WORKER_ORIGIN + path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        credentials: 'omit',
+        signal: ctl.signal
+      });
+      var json = null;
+      try { json = await res.json(); } catch (e) { json = null; }
+      return { status: res.status, json: json, network: false };
+    } catch (e) {
+      return { status: 0, json: null, network: true };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // The only call to Torn: the member list, the key in the Authorization header and nowhere else.
+  async function tornMembers(key) {
+    var ctl = new AbortController();
+    var timer = setTimeout(function () { ctl.abort(); }, REQUEST_TIMEOUT_MS);
+    try {
+      var res = await fetch(TORN_MEMBERS_URL, { headers: { Authorization: 'ApiKey ' + key }, signal: ctl.signal });
+      var json = null;
+      try { json = await res.json(); } catch (e) { json = null; }
+      return { json: json, network: false };
+    } catch (e) {
+      return { json: null, network: true };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // ------------------------------------------------------ worker error text
+
+  function workerError(res) {
+    if (res.network) return { text: T.UNREACHABLE };
+    var j = res.json;
+    var code = j && typeof j === 'object' && typeof j.error === 'string' ? j.error : null;
+    if (code === null) return { text: T.UNEXPECTED + ' [' + res.status + ']' };
+    var tag = ' [' + res.status + ' ' + code + ']';
+    var st = res.status;
+    if (st === 400 && code === 'invalid_key') return { text: T.BAD_KEY + tag };
+    if ((st === 401 || st === 503) && code === 'key_rejected') {
+      var tc = typeof j.tornErrorCode === 'number' ? j.tornErrorCode : null;
+      var text = tc === null ? 'Torn did not accept the key.' : tornErrorText(tc);
+      return { text: text + tag, tornCode: tc, keyLink: tc === 16 };
+    }
+    if (st === 403 && code === 'not_in_faction') return { text: T.NOT_IN_FACTION + tag };
+    if (st === 403 && code === 'not_a_leader') return { text: T.NOT_A_LEADER + tag };
+    if (st === 429 && (code === 'login_blocked' || code === 'login_paused' || code === 'publish_blocked')) {
+      var secs = typeof j.retryAfterSeconds === 'number' ? Math.ceil(j.retryAfterSeconds) : null;
+      return { text: 'Too many failed sign-ins. Try again in ' + (secs === null ? 'a while' : secs + ' s') + '.' + tag };
+    }
+    if (st === 500 && code === 'server_not_configured') return { text: T.NOT_SET_UP + tag };
+    if ((st === 502 && code === 'torn_unreadable') || (st === 503 && code === 'torn_unreachable')) return { text: T.TORN_UNREACHED + tag };
+    if (st === 503 && code === 'storage_error') return { text: T.STORAGE + tag };
+    if (st === 401 && code === 'unauthorized') return { text: T.EXPIRED + tag };
+    return { text: T.UNEXPECTED + tag };
+  }
+
+  // ------------------------------------------------------------- sign-in
+
+  // A slip belongs to the key it was made for: another key in the field means a new sign-in.
+  function sessionFresh(key) {
+    return !!S.session && S.session.forKey === key && Date.now() < S.session.expiresLocal - SESSION_MARGIN_MS;
+  }
+
+  // One sign-in at a time: a second caller waits for the first one's answer, so the key is never sent twice at once.
+  async function login(key) {
+    if (S.loginFlight) return S.loginFlight;
+    S.loginFlight = (async function () {
+      var res = await workerPost('/session', { key: key });
+      var j = res.json;
+      if (res.status === 200 && j && j.ok === true && typeof j.session === 'string' && j.session !== '' &&
+          typeof j.tornId === 'string' && typeof j.isLeader === 'boolean' &&
+          typeof j.issuedAt === 'number' && typeof j.expiresAt === 'number' && j.expiresAt > j.issuedAt) {
+        S.session = { token: j.session, expiresLocal: Date.now() + (j.expiresAt - j.issuedAt), tornId: j.tornId, isLeader: j.isLeader, forKey: key };
+        dbg('session ok');
+        return { ok: true };
+      }
+      S.session = null;
+      var err = workerError(res);
+      dbg('session error ' + (res.network ? 'network' : res.status + ' ' + (j && j.error)));
+      return { ok: false, err: err };
+    })();
+    try { return await S.loginFlight; } finally { S.loginFlight = null; }
+  }
+
+  // ------------------------------------------------------ answer validation
+
+  function isObj(v) { return v !== null && typeof v === 'object' && !Array.isArray(v); }
+  function isNum(v) { return typeof v === 'number' && isFinite(v); }
+  function isStr(v) { return typeof v === 'string'; }
+  function orNull(v, f) { return v === null || f(v); }
+
+  function validSlot(s) {
+    return isObj(s) && isStr(s.positionId) && isStr(s.label) && isNum(s.weight) && typeof s.locked === 'boolean' &&
+      isObj(s.current) && orNull(s.current.userId, isStr) && orNull(s.current.cpr, isNum) && orNull(s.current.progress, isNum) &&
+      orNull(s.current.itemAvailable, function (v) { return typeof v === 'boolean'; }) &&
+      isObj(s.proposed) && orNull(s.proposed.userId, isStr) && orNull(s.proposed.cpr, isNum) && isStr(s.proposed.origin) &&
+      typeof s.proposed.stale === 'boolean';
+  }
+  function validFlags(a) { return Array.isArray(a) && a.every(function (f) { return isObj(f) && isStr(f.code); }); }
+  function validChange(c) { return isObj(c) && isStr(c.userId) && isStr(c.fromPositionId) && isStr(c.toPositionId); }
+  function validCandidate(c) {
+    return isObj(c) && isStr(c.userId) && isStr(c.name) && isStr(c.positionId) && isStr(c.label) && isStr(c.code) && isNum(c.cpr) &&
+      isNum(c.floor) && typeof c.stale === 'boolean' && Array.isArray(c.changes) && c.changes.every(validChange) &&
+      Array.isArray(c.missingPositions) && c.missingPositions.every(isStr);
+  }
+  function validOc(o) {
+    return isObj(o) && isNum(o.crimeId) && isStr(o.name) && isNum(o.difficulty) && isStr(o.status) && isNum(o.floor) &&
+      orNull(o.readyAt, isNum) && isNum(o.expiredAt) && Array.isArray(o.slots) && o.slots.length > 0 && o.slots.every(validSlot) &&
+      Array.isArray(o.changes) && o.changes.every(validChange) && validFlags(o.flags) && o.flags.length > 0 &&
+      isObj(o.sums) && isNum(o.sums.before) && isNum(o.sums.after) &&
+      Array.isArray(o.candidates) && o.candidates.every(validCandidate);
+  }
+  function validPlan(j) {
+    if (!isObj(j) || j.ok !== true || !isNum(j.serverTime)) return false;
+    if (!isObj(j.state) || typeof j.state.stale !== 'boolean' || typeof j.state.present !== 'boolean') return false;
+    if (!orNull(j.state.generatedAt, isNum) || !orNull(j.state.ageSeconds, isNum)) return false;
+    if (!isObj(j.weights) || !orNull(j.weights.fetchedAt, isNum) || !orNull(j.weights.ageSeconds, isNum)) return false;
+    if (!validFlags(j.flags)) return false;
+    var s = j.summary;
+    if (!isObj(s) || ['membersTotal', 'membersWithData', 'membersWithoutData', 'membersFree', 'crimesRecruiting', 'crimesPlanning']
+      .some(function (k) { return !isNum(s[k]); })) return false;
+    if (!Array.isArray(j.ocs) || !j.ocs.every(validOc)) return false;
+    if (!Array.isArray(j.free) || !j.free.every(function (f) {
+      return isObj(f) && isStr(f.userId) && isStr(f.name) && typeof f.hasData === 'boolean' && orNull(f.dataAgeSeconds, isNum) && Array.isArray(f.optionsIn);
+    })) return false;
+    if (!Array.isArray(j.noData) || !j.noData.every(function (n) { return isObj(n) && isStr(n.userId) && isStr(n.name); })) return false;
+    if (!isObj(j.matrix)) return false;
+    return true;
+  }
+
+  // ------------------------------------------------------------- one round
+
+  function failRound(run, err) {
+    S.plan = null;
+    S.error = err;
+    S.members = null; S.membersAt = 0; S.membersErr = null;
+    return false;
+  }
+
+  async function round(key) {
+    var run = S.run;
+    if (!KEY_PATTERN.test(key)) { failRound(run, { text: T.BAD_KEY }); return; }
+
+    if (!sessionFresh(key)) {
+      var l1 = await login(key);
+      if (run !== S.run) return;
+      if (!l1.ok) { absorbKeyFailure(l1.err); failRound(run, l1.err); return; }
+    }
+    storeKey(key);
+
+    var res = await workerPost('/plan/all', { session: S.session.token });
+    if (run !== S.run) return;
+    if (res.status === 401 && res.json && res.json.error === 'unauthorized') {
+      S.session = null;
+      var l2 = await login(key);
+      if (run !== S.run) return;
+      if (!l2.ok) { absorbKeyFailure(l2.err); failRound(run, l2.err); return; }
+      res = await workerPost('/plan/all', { session: S.session.token });
+      if (run !== S.run) return;
+    }
+
+    if (res.status !== 200 || !res.json || res.json.ok !== true) {
+      var err = workerError(res);
+      dbg('plan error ' + (res.network ? 'network' : res.status + ' ' + (res.json && res.json.error)));
+      failRound(run, err);
+      return;
+    }
+    if (!validPlan(res.json)) {
+      dbg('plan error shape');
+      failRound(run, { text: T.UNEXPECTED });
+      return;
+    }
+    S.plan = res.json;
+    S.fetchedLocal = Date.now();
+    S.error = null;
+    collectNames();
+    dbg('plan ok');
+
+    var tm = await tornMembers(key);
+    if (run !== S.run) return;
+    readMembers(tm);
+  }
+
+  // Torn says the key is dead: the shared key room is emptied, as the other pages do.
+  function absorbKeyFailure(err) {
+    if (err && [2, 10, 13, 18].indexOf(err.tornCode) !== -1) { storeKey(''); el.apiKey.value = ''; }
+  }
+
+  function readMembers(tm) {
+    S.members = null; S.membersAt = 0; S.membersErr = null;
+    var j = tm.json;
+    if (tm.network) {
+      S.membersErr = { text: 'Could not reach Torn.  [GET /v2/faction/members — network or CORS failure]' };
+      dbg('members error network');
+      return;
+    }
+    if (isObj(j) && isObj(j.error)) {
+      var code = j.error.code;
+      S.membersErr = {
+        text: tornErrorText(code) + '  [GET /v2/faction/members → Torn error ' + code + ']',
+        keyLink: code === 16
+      };
+      if ([2, 10, 13, 18].indexOf(code) !== -1) { storeKey(''); el.apiKey.value = ''; }
+      dbg('members error ' + code);
+      return;
+    }
+    if (!isObj(j) || !Array.isArray(j.members)) {
+      S.membersErr = { text: 'Torn answered, but not with a member list. The endpoint may have changed.  [GET /v2/faction/members]' };
+      dbg('members error shape');
+      return;
+    }
+    var map = new Map();
+    j.members.forEach(function (m) {
+      if (!isObj(m) || (typeof m.id !== 'number' && !isStr(m.id))) return;
+      var st = isObj(m.status) ? m.status : null;
+      if (!st || !isStr(st.state) || st.state === '') return;
+      map.set(String(m.id), {
+        state: st.state,
+        description: isStr(st.description) ? st.description : '',
+        until: isNum(st.until) ? st.until : 0,
+        name: isStr(m.name) ? m.name : ''
+      });
+    });
+    S.members = map;
+    S.membersAt = Date.now();
+    map.forEach(function (m, id) { if (m.name && !S.names.has(id)) S.names.set(id, m.name); });
+    dbg('members ok');
+  }
+
+  function collectNames() {
+    var names = new Map();
+    var put = function (id, n) { if (id !== null && id !== undefined && isStr(n) && n) names.set(String(id), n); };
+    S.plan.ocs.forEach(function (o) {
+      o.slots.forEach(function (s) { put(s.current.userId, s.current.name); put(s.proposed.userId, s.proposed.name); });
+      o.changes.forEach(function (c) { put(c.userId, c.name); });
+      o.candidates.forEach(function (c) { put(c.userId, c.name); c.changes.forEach(function (x) { put(x.userId, x.name); }); });
+    });
+    S.plan.free.forEach(function (f) { put(f.userId, f.name); });
+    S.plan.noData.forEach(function (n) { put(n.userId, n.name); });
+    S.names = names;
+  }
+
+  async function run(why) {
+    if (S.running) return;
+    S.running = true;
+    var mine = ++S.run;
+    setBusy(true);
+    hideBox(el.errorBox); hideBox(el.okBox);
+    dbg('round ' + why);
+    try {
+      await round(el.apiKey.value.trim());
+    } catch (e) {
+      if (mine === S.run) failRound(mine, { text: T.UNEXPECTED });
+    } finally {
+      // A round that "Forget key" cancelled leaves the state alone: Forget already reset it.
+      if (mine === S.run) { S.ran = true; S.running = false; setBusy(false); }
+    }
+    if (mine === S.run) renderAll();
+  }
+
+  // ------------------------------------------------------------- the draw
+
+  function hideBox(b) { b.textContent = ''; b.hidden = true; }
+  function setBusy(on) {
+    el.loadBtn.disabled = on;
+    el.loadBtn.textContent = on ? 'Loading' : (S.plan ? 'Refresh' : 'Load');
+  }
+
+  function showError(box, e) {
+    clear(box);
+    add(box, e.text);
+    if (e.keyLink) {
+      add(box, ' ');
+      var a = h('a', '', 'Create the Leader Tools key');
+      a.href = KEY_LINK; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      box.appendChild(a);
+    }
+    box.hidden = false;
+  }
+
+  function signature() {
+    if (!S.plan) return '';
+    var now = planNow();
+    return S.plan.ocs.map(function (o) {
+      return o.crimeId + ':' + (o.readyAt !== null && o.readyAt < now ? 'o' : 'w') + (o.expiredAt < now ? 'x' : 'v');
+    }).join(',') + '|' + (S.plan.state.ageSeconds !== null && S.plan.state.ageSeconds + (Date.now() - S.fetchedLocal) / 1000 > S.plan.state.maxAgeSeconds ? 'old' : 'ok');
+  }
+
+  function renderAll() {
+    setBusy(S.running);
+    if (S.error) showError(el.errorBox, S.error); else hideBox(el.errorBox);
+    renderStatus();
+    renderStale();
+    renderFigures();
+    renderCrimes();
+    renderFree();
+    renderNoData();
+    S.renderSig = signature();
+    scheduleTick();
+  }
+
+  function statusLine(parts, cls) {
+    var p = h('p', cls || '');
+    return add.apply(null, [p].concat(parts));
+  }
+
+  function renderStatus() {
+    clear(el.statusRows);
+    el.statusPanel.hidden = !S.ran;
+    if (!S.ran) return;
+    var rows = el.statusRows;
+    if (S.session) {
+      var me = S.names.get(S.session.tornId);
+      rows.appendChild(statusLine(['Signed in as ' + (me ? me + ' ' : '') + '[' + S.session.tornId + ']' + (S.session.isLeader ? ' · OC leader' : '')]));
+    }
+    if (!S.plan) return;
+    var st = S.plan.state;
+    if (st.present && st.generatedAt !== null && st.ageSeconds !== null) {
+      var pastLimit = st.stale || st.ageSeconds + (Date.now() - S.fetchedLocal) / 1000 > st.maxAgeSeconds;
+      rows.appendChild(statusLine(['OC data: ', live('age0', st.ageSeconds), ' old (published by the KS server ' + clockTime(st.generatedAt) + ')' +
+        (pastLimit && !st.stale ? ' — older than the server’s own limit, press Refresh' : '')], pastLimit ? 'bad' : ''));
+    } else {
+      rows.appendChild(statusLine(['OC data: not published yet'], 'bad'));
+    }
+    var w = S.plan.weights;
+    if (w.fetchedAt !== null && w.ageSeconds !== null) rows.appendChild(statusLine(['Role weights: fetched ', live('age0', w.ageSeconds), ' ago']));
+    else rows.appendChild(statusLine(['Role weights: none']));
+    if (S.membersErr) {
+      var p = statusLine(['Member status from Torn: ' + S.membersErr.text], 'bad');
+      if (S.membersErr.keyLink) {
+        var a = h('a', '', 'Create the Leader Tools key');
+        a.href = KEY_LINK; a.target = '_blank'; a.rel = 'noopener noreferrer';
+        add(p, ' ', a);
+      }
+      rows.appendChild(p);
+    } else if (S.members) {
+      rows.appendChild(statusLine(['Member status from Torn: read ' + clockTime(S.membersAt / 1000) + ' (live from Torn)']));
+    }
+  }
+
+  function renderStale() {
+    var p = S.plan;
+    var f = p ? p.flags.filter(function (x) { return x.code === 'STATE_STALE'; })[0] : null;
+    if (!p || (!f && !p.state.stale)) { hideBox(el.staleBox); return; }
+    clear(el.staleBox);
+    var age = f && isNum(f.ageSeconds) ? f.ageSeconds : (p.state.present ? p.state.ageSeconds : null);
+    if (age === null || age === undefined) add(el.staleBox, 'The KS server has not published yet. No suggestions are shown until it does.');
+    else add(el.staleBox, 'The KS server has not published for ', live('age0', age), '. No suggestions are shown until it does.');
+    el.staleBox.hidden = false;
+  }
+
+  function figure(k, v, alert) {
+    var f = h('div', 'figure' + (alert ? ' alert' : ''));
+    add(f, h('span', 'k', k), h('span', 'v', String(v)));
+    return f;
+  }
+
+  function renderFigures() {
+    clear(el.figures);
+    el.figures.hidden = !S.plan;
+    if (!S.plan) return;
+    var s = S.plan.summary;
+    var holding = '–';
+    if (S.members && S.plan.ocs.length > 0) {
+      var seen = {};
+      S.plan.ocs.forEach(function (o) { blockersOf(o).forEach(function (b) { seen[b.id] = true; }); });
+      holding = Object.keys(seen).length;
+    }
+    add(el.figures,
+      figure('Members', s.membersTotal), figure('With shared CPR', s.membersWithData), figure('Without shared CPR', s.membersWithoutData, s.membersWithoutData > 0),
+      figure('Free', s.membersFree), figure('Recruiting', s.crimesRecruiting), figure('Planning', s.crimesPlanning),
+      figure('Holding up a crime', holding, typeof holding === 'number' && holding > 0));
+  }
+
+  function slotLabel(oc, positionId) {
+    for (var i = 0; i < oc.slots.length; i++) if (oc.slots[i].positionId === positionId) return oc.slots[i].label;
+    return positionId;
+  }
+
+  function flagText(f, oc) {
+    var who = f.userId !== undefined && f.userId !== null ? nameOf(f.userId) : '';
+    var lab = isStr(f.positionId) ? slotLabel(oc, f.positionId) : '';
+    switch (f.code) {
+      case 'CPR_IMPROVEMENT': case 'WEIGHTED_IMPROVEMENT': case 'FLOOR_IMPROVEMENT':
+      case 'NO_CHANGE': case 'EQUIVALENT': case 'NO_WEIGHTS':
+        return FLAG_LABELS[f.code];
+      case 'DATA_MISSING':
+        return f.reason === 'locked_cpr_unknown' ? who + '’s locked CPR on ' + lab + ' is unknown' : who + ' has no shared value for ' + lab;
+      case 'LOCKED':
+        return who + ' on ' + lab + ' has started planning (' + (isNum(f.progress) ? f.progress : '?') + '%) and is never moved';
+      case 'NO_QUALIFIED_MEMBER':
+        return 'Nobody with a shared value clears the minimum for ' + lab;
+      case 'STALE_CPR':
+        return who + '’s value for ' + lab + ' is ' + dur(isNum(f.ageSeconds) ? f.ageSeconds : 0) + ' old';
+      case 'STATE_STALE':
+        return 'OC data too old: ' + dur(isNum(f.ageSeconds) ? f.ageSeconds : 0);
+      case 'CPR_MISMATCH':
+        return who + ' on ' + lab + ': locked ' + pct(f.lockedCpr) + ', shared ' + pct(f.sharedCpr) + ' (' + dur(planNow() - f.sharedAt) + ' ago)';
+      default:
+        return 'UNKNOWN: ' + f.code;
+    }
+  }
+  function labelText(code, oc) { return FLAG_LABELS[code] ? FLAG_LABELS[code] : flagText({ code: code }, oc); }
+  function candidateText(c) {
+    if (c.code === 'OK_TO_JOIN') return 'OK to join';
+    if (c.code === 'BELOW_FLOOR') return 'Below the minimum (' + c.floor + '%)';
+    return 'UNKNOWN: ' + c.code;
+  }
+
+  function td(content, cls) {
+    var c = h('td', cls || '');
+    if (Array.isArray(content)) add.apply(null, [c].concat(content));
+    else if (content !== null && content !== undefined) add(c, content);
+    return c;
+  }
+  function th(text, cls) { return h('th', cls || '', text); }
+  function dash() { return h('span', 'dim', '–'); }
+  function empty() { return h('span', 'dim', 'empty'); }
+  function personCell(id) { return id === null ? td(empty()) : td(profileLink(id)); }
+
+  function changeText(s, oc) {
+    var o = s.proposed.origin;
+    if (o === 'move') {
+      for (var i = 0; i < oc.changes.length; i++) {
+        var c = oc.changes[i];
+        if (c.userId === s.proposed.userId && c.toPositionId === s.positionId) return 'moves here from ' + slotLabel(oc, c.fromPositionId);
+      }
+      return 'moves here';
+    }
+    if (o === 'stay') return 'stays';
+    if (o === 'empty') return 'empty';
+    return 'locked';
+  }
+
+  function seatTable(oc, noWeights) {
+    var wrap = h('div', 'tablewrap');
+    var t = h('table', 'seats');
+    var head = h('tr');
+    ['Role', 'Weight', 'Now', 'CPR now', 'Progress', 'Locked', 'Item', 'Torn status', 'Suggested', 'CPR suggested', 'Change'].forEach(function (c, i) {
+      add(head, th(c, (i === 1 || i === 3 || i === 4 || i === 9) ? 'num' : ''));
+    });
+    add(t, add(h('thead'), head));
+    var body = h('tbody');
+    oc.slots.forEach(function (s) {
+      var tr = h('tr');
+      var differs = s.proposed.userId !== s.current.userId;
+      if (differs) tr.className = 'diff';
+      add(tr, td(s.label));
+      add(tr, td(noWeights ? dash() : weightText(s.weight), 'num'));
+      add(tr, personCell(s.current.userId));
+      add(tr, td(s.current.cpr !== null ? pct(s.current.cpr) : dash(), 'num'));
+      var showProgress = s.current.progress !== null && (oc.status === 'Planning' || s.current.progress > 0);
+      add(tr, td(showProgress ? pct(s.current.progress) : dash(), 'num'));
+      add(tr, td(s.locked ? 'yes' : dash()));
+      add(tr, td(s.current.itemAvailable === true ? 'ok' : s.current.itemAvailable === false ? 'missing' : dash()));
+      add(tr, td(s.current.userId === null ? dash() : statusCell(s.current.userId)));
+      add(tr, personCell(s.proposed.userId));
+      var cprCell = td(s.proposed.cpr !== null && s.proposed.userId !== null ? pct(s.proposed.cpr) : dash(), 'num');
+      if (s.proposed.stale) cprCell.appendChild(h('span', 'mark', 'stale'));
+      add(tr, cprCell);
+      add(tr, td(changeText(s, oc)));
+      add(body, tr);
+    });
+    add(t, body);
+    return add(wrap, t);
+  }
+
+  function candidateTable(oc) {
+    var wrap = h('div', 'tablewrap');
+    var t = h('table', 'simple');
+    var head = h('tr');
+    ['Member', 'Best seat', 'CPR', 'Verdict', 'Moves needed', 'Missing'].forEach(function (c, i) { add(head, th(c, i === 2 ? 'num' : '')); });
+    add(t, add(h('thead'), head));
+    var body = h('tbody');
+    oc.candidates.forEach(function (c) {
+      var tr = h('tr');
+      add(tr, td(profileLink(c.userId, c.name)));
+      add(tr, td(c.label));
+      var cc = td(pct(c.cpr), 'num');
+      if (c.stale) cc.appendChild(h('span', 'mark', 'stale'));
+      add(tr, cc);
+      add(tr, td(pill(candidateText(c), c.code === 'OK_TO_JOIN' ? 'good' : 'warn')));
+      var moves = td(null);
+      if (c.changes.length === 0) moves.appendChild(dash());
+      c.changes.forEach(function (m) {
+        moves.appendChild(h('span', 'sub', (m.name || nameOf(m.userId)) + ' moves ' + slotLabel(oc, m.fromPositionId) + ' → ' + slotLabel(oc, m.toPositionId)));
+      });
+      add(tr, moves);
+      add(tr, td(c.missingPositions.length ? 'No shared value for: ' + c.missingPositions.map(function (p) { return slotLabel(oc, p); }).join(', ') : dash()));
+      add(body, tr);
+    });
+    add(t, body);
+    return add(wrap, t);
+  }
+
+  var collator = (function () {
+    try { return new Intl.Collator('sv', { sensitivity: 'base' }); } catch (e) { return new Intl.Collator(undefined, { sensitivity: 'base' }); }
+  })();
+
+  function matrixDetails(oc) {
+    var perMember = [];
+    Object.keys(S.plan.matrix).forEach(function (id) {
+      var sc = S.plan.matrix[id] && S.plan.matrix[id][oc.name];
+      if (!isObj(sc) || Object.keys(sc).length === 0) return;
+      perMember.push({ id: id, name: nameOf(id), values: sc });
+    });
+    perMember.sort(function (a, b) { return collator.compare(a.name, b.name) || (Number(a.id) - Number(b.id)); });
+    var d = h('details', 'inline');
+    add(d, h('summary', '', 'Shared CPR for ' + oc.name));
+    if (perMember.length === 0) {
+      d.appendChild(h('p', 'note', 'Nobody has shared a value for this scenario.'));
+      d.lastChild.style.padding = '0 14px 12px';
+      return d;
+    }
+    var wrap = h('div', 'tablewrap');
+    var t = h('table', 'simple');
+    var head = h('tr');
+    add(head, th('Member'));
+    oc.slots.forEach(function (s) { add(head, th(s.label)); });
+    add(t, add(h('thead'), head));
+    var body = h('tbody');
+    perMember.forEach(function (m) {
+      var tr = h('tr');
+      add(tr, td(profileLink(m.id, m.name)));
+      oc.slots.forEach(function (s) {
+        var v = m.values[s.positionId];
+        if (!isObj(v) || !isNum(v.cpr)) { add(tr, td(dash())); return; }
+        var age = planNow() - v.fetchedAt;
+        var below = v.cpr < oc.floor;
+        var cell = td(pct(v.cpr) + ' · ' + dur(age), below ? 'below' : '');
+        if (below) cell.appendChild(h('span', 'mark', 'below ' + pct(oc.floor)));
+        if (age > CPR_STALE_SECONDS) cell.appendChild(h('span', 'mark', 'stale'));
+        add(tr, cell);
+      });
+      add(body, tr);
+    });
+    add(t, body);
+    add(d, add(wrap, t));
+    return d;
+  }
+
+  // The text for the faction chat: crime, level, names and seats. No CPR number, no sum.
+  function chatText(oc) {
+    var lines = [oc.name + ' (level ' + oc.difficulty + ')'];
+    if (oc.status !== 'Recruiting') {
+      lines.push('No changes — line-up is locked.');
+      return lines.join('\n');
+    }
+    if (oc.changes.length === 0) lines.push('No changes suggested.');
+    else {
+      lines.push('Suggested moves:');
+      oc.changes.forEach(function (c) { lines.push('- ' + (c.name || nameOf(c.userId)) + ': ' + slotLabel(oc, c.fromPositionId) + ' → ' + slotLabel(oc, c.toPositionId)); });
+    }
+    if (oc.candidates.length) {
+      lines.push('Free members who could join:');
+      oc.candidates.forEach(function (c) {
+        var line = '- ' + c.name + ' could take ' + c.label;
+        if (c.code === 'BELOW_FLOOR') line += ' (below the minimum)';
+        if (c.changes.length) {
+          line += ' — ' + c.changes.map(function (m) { return (m.name || nameOf(m.userId)) + ' moves ' + slotLabel(oc, m.fromPositionId) + ' → ' + slotLabel(oc, m.toPositionId); }).join('; ');
+        }
+        lines.push(line);
+      });
+    }
+    return lines.join('\n');
+  }
+
+  function copyButton(oc) {
+    var box = h('div', 'toolbar');
+    var btn = h('button', 'btn', 'Copy for faction chat');
+    btn.type = 'button';
+    var toast = h('span', 'msg ok', '');
+    toast.hidden = true;
+    toast.setAttribute('role', 'status');
+    var area = h('textarea', '');
+    area.readOnly = true; area.hidden = true; area.rows = 6; area.style.width = '100%';
+    btn.addEventListener('click', function () {
+      var text = chatText(oc);
+      var done = function (ok) {
+        toast.className = ok ? 'msg ok' : 'msg err';
+        toast.textContent = ok ? 'Copied.' : 'Could not copy. Select the text below.';
+        toast.hidden = false;
+        if (!ok) { area.value = text; area.hidden = false; area.select(); }
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(false); });
+      else done(false);
+    });
+    return add(box, btn, toast, area);
+  }
+
+  function renderOc(oc) {
+    var noWeights = oc.flags.some(function (f) { return f.code === 'NO_WEIGHTS'; });
+    var block = h('div', 'crime');
+    block.setAttribute('data-crime', String(oc.crimeId));
+
+    var head = h('div', 'crime-head');
+    add(head, h('span', 'name', oc.name), pill('level ' + oc.difficulty, 'accent'), pill('needs ' + pct(oc.floor)),
+      pill(oc.status, oc.status === 'Planning' ? 'good' : 'warn'));
+    var now = planNow();
+    if (oc.status === 'Planning' && oc.readyAt !== null) {
+      if (oc.readyAt >= now) add(head, pill(['ready in ', live('until', oc.readyAt)]));
+      else add(head, pill(['overdue ', live('since', oc.readyAt)], 'bad'));
+    } else if (oc.status === 'Recruiting') {
+      if (oc.expiredAt >= now) add(head, pill(['expires in ', live('until', oc.expiredAt)]));
+      else add(head, pill(['expired ', live('since', oc.expiredAt), ' ago'], 'bad'));
+    }
+    add(head, pill(labelText(oc.flags[0].code, oc), oc.flags[0].code === 'NO_CHANGE' ? '' : 'good'));
+    if (noWeights) add(head, pill('No role weights', 'warn'));
+    block.appendChild(head);
+
+    if (oc.status === 'Planning' && oc.readyAt !== null && oc.readyAt < now && S.members) {
+      var bl = blockersOf(oc);
+      if (bl.length) {
+        var row = h('div', 'overdue');
+        add(row, 'Overdue ', live('since', oc.readyAt), '. Waiting on: ' + bl.map(function (b) { return b.name + ' (' + b.description + ')'; }).join(', '));
+        block.appendChild(row);
+      }
+    }
+
+    block.appendChild(seatTable(oc, noWeights));
+
+    var lines = h('div', 'lines');
+    if (oc.sums.before !== oc.sums.after) {
+      lines.appendChild(h('p', '', 'Sum weight × CPR: ' + sumText(oc.sums.before) + ' → ' + sumText(oc.sums.after)));
+    }
+    oc.changes.forEach(function (c) {
+      lines.appendChild(h('p', '', (c.name || nameOf(c.userId)) + ': ' + slotLabel(oc, c.fromPositionId) + ' → ' + slotLabel(oc, c.toPositionId)));
+    });
+    // "No shared value" is grouped per member: one line with all his seats, not one line per seat.
+    var missing = {}; var order = [];
+    oc.flags.slice(1).forEach(function (f) {
+      if (f.code === 'DATA_MISSING' && f.reason !== 'locked_cpr_unknown' && f.userId !== undefined && f.userId !== null && isStr(f.positionId)) {
+        var k = String(f.userId);
+        if (!missing[k]) { missing[k] = []; order.push({ missing: k }); }
+        missing[k].push(slotLabel(oc, f.positionId));
+        return;
+      }
+      order.push({ flag: f });
+    });
+    order.forEach(function (o) {
+      if (o.flag) lines.appendChild(h('p', '', flagText(o.flag, oc)));
+      else lines.appendChild(h('p', '', nameOf(o.missing) + ' has no shared value for ' + missing[o.missing].join(', ')));
+    });
+    if (lines.firstChild) block.appendChild(lines);
+
+    if (oc.candidates.length) {
+      block.appendChild(h('h3', '', 'Free members with a suggestion here'));
+      block.appendChild(h('p', 'note', T.FREE_NOTE));
+      block.appendChild(candidateTable(oc));
+    }
+    block.appendChild(matrixDetails(oc));
+    block.appendChild(copyButton(oc));
+    return block;
+  }
+
+  // While the OC data is out of date there are no crimes to draw, but the shared CPR is still known: one table per scenario, columns by position id.
+  function staleMatrices() {
+    var byScenario = {};
+    Object.keys(S.plan.matrix).forEach(function (id) {
+      var sc = S.plan.matrix[id];
+      if (!isObj(sc)) return;
+      Object.keys(sc).forEach(function (scenario) {
+        if (!isObj(sc[scenario]) || Object.keys(sc[scenario]).length === 0) return;
+        (byScenario[scenario] = byScenario[scenario] || []).push({ id: id, name: nameOf(id), values: sc[scenario] });
+      });
+    });
+    Object.keys(byScenario).sort(function (a, b) { return collator.compare(a, b); }).forEach(function (scenario) {
+      var rows = byScenario[scenario].sort(function (a, b) { return collator.compare(a.name, b.name) || (Number(a.id) - Number(b.id)); });
+      var cols = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'].filter(function (p) { return rows.some(function (r) { return isObj(r.values[p]); }); });
+      var d = h('details', 'inline');
+      d.style.margin = '12px 18px';
+      add(d, h('summary', '', 'Shared CPR for ' + scenario));
+      var wrap = h('div', 'tablewrap');
+      var t = h('table', 'simple');
+      var head = h('tr');
+      add(head, th('Member'));
+      cols.forEach(function (p) { add(head, th(p)); });
+      add(t, add(h('thead'), head));
+      var body = h('tbody');
+      rows.forEach(function (r) {
+        var tr = h('tr');
+        add(tr, td(profileLink(r.id, r.name)));
+        cols.forEach(function (p) {
+          var v = r.values[p];
+          if (!isObj(v) || !isNum(v.cpr)) { add(tr, td(dash())); return; }
+          var age = planNow() - v.fetchedAt;
+          var cell = td(pct(v.cpr) + ' · ' + dur(age));
+          if (age > CPR_STALE_SECONDS) cell.appendChild(h('span', 'mark', 'stale'));
+          add(tr, cell);
+        });
+        add(body, tr);
+      });
+      add(t, body);
+      add(d, add(wrap, t));
+      el.crimes.appendChild(d);
+    });
+  }
+
+  function renderCrimes() {
+    clear(el.crimes);
+    el.crimesPanel.hidden = !S.plan;
+    if (!S.plan) return;
+    var all = S.plan.ocs;
+    var groups = [
+      all.filter(function (o) { return o.status === 'Recruiting'; }),
+      all.filter(function (o) { return o.status === 'Planning'; }),
+      all.filter(function (o) { return o.status !== 'Recruiting' && o.status !== 'Planning'; })
+    ];
+    var ordered = groups[0].concat(groups[1], groups[2]);
+    el.crimesHint.textContent = ordered.length + (ordered.length === 1 ? ' crime' : ' crimes') + ' · Recruiting first, then Planning';
+    if (ordered.length === 0) {
+      el.crimes.appendChild(h('p', 'empty', S.plan.state.stale ? T.NO_PLAN_STALE : 'No crimes are recruiting or planning right now.'));
+      if (S.plan.state.stale) staleMatrices();
+      return;
+    }
+    ordered.forEach(function (oc) { el.crimes.appendChild(renderOc(oc)); });
+  }
+
+  function renderFree() {
+    clear(el.freeBody);
+    el.freePanel.hidden = !S.plan;
+    if (!S.plan) return;
+    if (S.plan.free.length === 0) { el.freeBody.appendChild(h('p', 'empty', S.plan.state.stale ? 'No list while the OC data is out of date.' : 'Everyone is in a crime.')); return; }
+    var wrap = h('div', 'tablewrap');
+    var t = h('table', 'simple');
+    var head = h('tr');
+    ['Member', 'Torn status', 'Shared CPR', 'Suggestions in'].forEach(function (c) { add(head, th(c)); });
+    add(t, add(h('thead'), head));
+    var body = h('tbody');
+    var crimeName = {};
+    S.plan.ocs.forEach(function (o) { crimeName[o.crimeId] = o.name; });
+    S.plan.free.forEach(function (f) {
+      var tr = h('tr');
+      add(tr, td(profileLink(f.userId, f.name)));
+      add(tr, td(statusCell(f.userId)));
+      add(tr, td(f.hasData && f.dataAgeSeconds !== null ? ['yes, ', live('age0', f.dataAgeSeconds), ' ago'] : 'no'));
+      var names = f.optionsIn.map(function (id) { return crimeName[id]; }).filter(Boolean);
+      add(tr, td(names.length ? names.join(', ') : dash()));
+      add(body, tr);
+    });
+    add(t, body);
+    add(el.freeBody, add(wrap, t));
+  }
+
+  function renderNoData() {
+    clear(el.noDataBody);
+    el.noDataPanel.hidden = !S.plan;
+    if (!S.plan) return;
+    var list = S.plan.noData.slice().sort(function (a, b) { return collator.compare(a.name, b.name) || (Number(a.userId) - Number(b.userId)); });
+    el.noDataHint.textContent = list.length + (list.length === 1 ? ' member' : ' members');
+    if (list.length === 0) { el.noDataBody.appendChild(h('p', 'empty', 'Everyone in the member list has shared CPR.')); return; }
+    el.noDataBody.appendChild(h('p', 'note', T.NODATA_NOTE));
+    var ul = h('ul', 'chips');
+    list.forEach(function (n) { ul.appendChild(add(h('li'), pill(profileLink(n.userId, n.name)))); });
+    el.noDataBody.appendChild(ul);
+  }
+
+  // ----------------------------------------------------------------- timer
+  // Only redraws the counting numbers (and the whole plan when a time passes a limit). It never reads anything.
+
+  function tick() {
+    S.tickTimer = null;
+    if (!S.plan) return;
+    var nodes = document.querySelectorAll('[data-live]');
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      n.textContent = liveText(n.getAttribute('data-live'), Number(n.getAttribute('data-val')));
+    }
+    if (signature() !== S.renderSig) renderAll(); else scheduleTick();
+  }
+  function scheduleTick() {
+    if (S.tickTimer !== null) clearTimeout(S.tickTimer);
+    S.tickTimer = S.plan ? setTimeout(tick, TICK_MS) : null;
+  }
+
+  // ------------------------------------------------------------- the buttons
+
+  el.toggleKey.addEventListener('click', function () {
+    var showing = el.apiKey.type === 'text';
+    el.apiKey.type = showing ? 'password' : 'text';
+    el.toggleKey.textContent = showing ? 'Show' : 'Hide';
+    el.toggleKey.setAttribute('aria-pressed', String(!showing));
+  });
+
+  el.loadBtn.addEventListener('click', function () { void run('button'); });
+  el.apiKey.addEventListener('keydown', function (e) { if (e.key === 'Enter') void run('enter'); });
+
+  el.forgetKey.addEventListener('click', function () {
+    storeKey('');
+    el.apiKey.value = '';
+    S.run++;                // whatever is on its way back is thrown away
+    S.session = null; S.plan = null; S.members = null; S.membersErr = null; S.error = null; S.ran = false;
+    S.running = false; S.names = new Map();
+    hideBox(el.errorBox);
+    renderAll();
+    el.okBox.textContent = 'Key removed from this browser. War Room and OC Roster Board will ask for it again.';
+    el.okBox.hidden = false;
+  });
+
+  // ----------------------------------------------------------------- start
+
+  var stored = readKey();
+  if (stored) {
+    el.apiKey.value = stored;
+    void run('open');
+  }
+})();
+</script>
+</body>
+</html>
