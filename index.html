@@ -425,7 +425,7 @@
           <button type="button" class="mini" id="ebxAwayCancel" data-ebx="away-cancel" hidden>Cancel</button>
         </div>
         <p class="note bad" id="ebxAwayErr" role="status" hidden></p>
-        <p class="ebx-sub">For time away outside wars. Wars use the Discord poll.</p>
+        <p class="ebx-sub">For time away outside wars.</p>
       </div>
     </div>
   </section>
@@ -1150,7 +1150,7 @@
 
     // -------------------------------------------------- event card block
     function isOpenEvent(event) {
-      if (event.type === 'Ranked War' || event.status !== 'Scheduled') return false;
+      if (event.status !== 'Scheduled') return false;
       var finish = event.endUtc || event.deadlineUtc || event.startUtc;
       return Date.now() < Date.parse(finish);
     }
@@ -1158,11 +1158,6 @@
     function decorate(card, event, isStale) {
       if (!state.on) return;
       var box = mk('div', 'ebx-answer');
-      if (event.type === 'Ranked War') {
-        box.appendChild(mk('p', 'note', 'Attendance for wars is a Discord poll.'));
-        card.appendChild(box);
-        return;
-      }
       var here = state.responses.filter(function (r) { return r.eventId === event.id; });
       var mine = null;
       here.forEach(function (r) { if (r.tornId === me()) mine = r; });
