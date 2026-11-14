@@ -663,14 +663,6 @@
         <span class="go">Open</span>
       </a>
 
-      <a class="card" href="oc.html">
-        <span class="tag">Live</span>
-        <span class="name">OC Roster Board</span>
-        <span class="what">Every crime in progress, who sits where, which seats are open with your
-          own pass rate for them, and who is free to fill one.</span>
-        <span class="go">Open</span>
-      </a>
-
       <a class="card" href="ocplanner.html">
         <span class="tag beta">Beta</span>
         <span class="name">KS OC Planner</span>
@@ -751,7 +743,6 @@
   // already reads. limit=1 keeps each one as small as Torn allows.
   var PROBES = [
     { id: 'rankedwars', path: '/faction/rankedwars?limit=1' },
-    { id: 'crimes', path: '/faction/crimes?cat=recruiting&limit=1' },
     { id: 'news', path: '/faction/news?cat=armoryAction&limit=1' },
     { id: 'inventory', path: '/faction/inventory?cat=weapons&limit=1' },
     { id: 'attacks', path: '/faction/attacks?limit=1' }
@@ -762,7 +753,6 @@
   var TOOLS = [
     { href: 'payout.html', needs: ['rankedwars', 'attacks'] },
     { href: 'history.html', needs: ['rankedwars'] },
-    { href: 'oc.html', needs: ['crimes'] },
     { href: 'armory.html', needs: ['news', 'inventory'] }
   ];
 
