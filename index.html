@@ -385,6 +385,7 @@
   .ebx-tl-hour { height: 16px; font-family: var(--mono); font-size: 11px; line-height: 16px; color: var(--muted); white-space: nowrap; overflow: visible; }
   .ebx-tl-day { height: 14px; font-family: var(--mono); font-size: 11px; line-height: 14px; color: var(--muted); white-space: nowrap; overflow: visible; }
   .ebx-tl-sum { font-size: 13px; color: var(--ink); }
+  .ebx-closed { margin: 0; font-size: 14px; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -1193,8 +1194,9 @@
 
     function isOpenEvent(event) {
       if (event.status !== 'Scheduled') return false;
-      var finish = event.endUtc || event.deadlineUtc || event.startUtc;
-      return Date.now() < Date.parse(finish);
+      // 0.3.1: endUtc, else deadlineUtc, else 48 h after the start (an event with no end is open while it runs).
+      var finish = event.endUtc ? Date.parse(event.endUtc) : event.deadlineUtc ? Date.parse(event.deadlineUtc) : Date.parse(event.startUtc) + OPEN_MS;
+      return Date.now() < finish;
     }
 
     // ---- time helpers. The fields are datetime-local: TCT is read as UTC, "local" as the browser's own zone.
@@ -1273,9 +1275,10 @@
       return best;
     }
 
-    function timelineNode(event, here) {
+    // Shown when someone is on (Yes/Partial) and, with force, on every card that still takes answers (all boxes 0 until someone answers).
+    function timelineNode(event, here, force) {
       var active = here.filter(function (r) { return r.answer === 'yes' || r.answer === 'partial'; });
-      if (active.length === 0) return null;
+      if (active.length === 0 && !force) return null;
       var span = timelineSpan(event, active);
       var slots = countSlots(span, active);
       if (slots.length === 0) return null;
@@ -1450,10 +1453,12 @@
         }
         if (d.dirty) actions.appendChild(mk('span', 'ebx-hint', 'Not saved yet.'));
         box.appendChild(actions);
+      } else if (!isOpenEvent(event)) {
+        box.appendChild(mk('p', 'ebx-closed', 'Answers are closed for this event.'));
       }
 
       box.appendChild(mk('div', 'ebx-count', 'Yes ' + yes.length + ' \u00b7 Partial ' + partial.length + ' \u00b7 No ' + no.length));
-      var line = timelineNode(event, here);
+      var line = timelineNode(event, here, isOpenEvent(event));
       if (line) box.appendChild(line);
       if (here.length > 0) {
         var details = mk('details', 'ebx-who');
