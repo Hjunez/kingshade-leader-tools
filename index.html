@@ -366,12 +366,12 @@
 
   /* Faction Events 0.3.0: Partial, time windows and the timeline. */
   .ebx-win { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface-2); }
-  .ebx-win-title { font-family: var(--display); font-weight: 600; font-size: 15px; color: var(--ink); margin: 0; }
+  .ebx-win-title, .ebx-chain-title { font-family: var(--display); font-weight: 600; font-size: 15px; color: var(--ink); margin: 0; }
   .ebx-win-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; min-width: 0; }
   .ebx-win-row .ebx-label { flex: 1 1 150px; }
   .ebx-zone { flex: 0 0 auto; max-width: 260px; }
   .ebx-tl { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-  .ebx-tl-title { font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .ebx-tl-title, .ebx-wl-title { font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
   .ebx-tl-scroll { overflow-x: auto; max-width: 100%; padding-bottom: 4px; }
   .ebx-tl-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .ebx-tl-grid { display: flex; width: max-content; gap: 2px; }
@@ -386,6 +386,28 @@
   .ebx-tl-day { height: 14px; font-family: var(--mono); font-size: 11px; line-height: 14px; color: var(--muted); white-space: nowrap; overflow: visible; }
   .ebx-tl-sum { font-size: 13px; color: var(--ink); }
   .ebx-closed { margin: 0; font-size: 14px; color: var(--muted); }
+
+  /* Faction Events 0.4.0: chain details and the watch row. */
+  .ebx-chain { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface-2); }
+  .ebx-check { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ink); cursor: pointer; }
+  .ebx-check input { width: 18px; height: 18px; flex: 0 0 18px; accent-color: var(--accent); }
+  .ebx-check input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .ebx-chain-watch { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding-left: 12px; border-left: 2px solid var(--line-strong); }
+  .ebx-chain-sub { font-family: var(--display); font-weight: 600; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0; }
+  .ebx-chain-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; min-width: 0; }
+  .ebx-chain-row .ebx-label { flex: 1 1 150px; }
+  .ebx-energy { flex: 0 0 auto; max-width: 260px; }
+  .ebx-tlset { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .ebx-wl { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .ebx-wl-scroll { overflow-x: auto; max-width: 100%; padding-bottom: 4px; }
+  .ebx-wl-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .ebx-wcell { height: 30px; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 13px; font-weight: 600; border-radius: 3px; border: 1px solid transparent; color: var(--ink); }
+  .ebx-wcell.ebx-l0 { background: transparent; border: 1px dashed var(--line-strong); color: var(--muted); }
+  .ebx-wcell.ebx-l1 { background: color-mix(in srgb, var(--accent) 18%, var(--surface-2)); }
+  .ebx-wcell.ebx-l2 { background: color-mix(in srgb, var(--accent) 34%, var(--surface-2)); }
+  .ebx-wcell.ebx-l3 { background: color-mix(in srgb, var(--accent) 50%, var(--surface-2)); }
+  .ebx-wcell.ebx-l4 { background: var(--accent); color: var(--accent-ink); }
+  .ebx-whour { height: 16px; font-family: var(--mono); font-size: 11px; line-height: 16px; color: var(--muted); white-space: nowrap; overflow: visible; }
 </style>
 </head>
 <body>
@@ -935,7 +957,7 @@
     if (board.tickerId === null) board.tickerId = setInterval(ebTickOnce, 1000);
   }
   // ================================================================
-  // Faction Events 0.3.0 - answers (Yes/Partial/No) with time windows and a timeline,
+  // Faction Events 0.4.0 - answers (Yes/Partial/No) with time windows, chain details and a timeline,
   // absences and messages to the staff.
   // The server decides everything (who may see a reason, who may change a post);
   // this code only shows what the server sent and never builds markup from it:
@@ -989,13 +1011,24 @@
       return out;
     }
 
+    // 0.4.0: chain details from the server (Chain events): only well-formed values, anything else is dropped; null when there are none.
+    function cleanChain(c) {
+      if (!c || typeof c !== 'object') return null;
+      return {
+        watch: c.watch === true,
+        watchWindows: cleanWindows(c.watchWindows),
+        stacked: c.stacked === true,
+        energy: c.energy === 'xanax' || c.energy === 'natural' ? c.energy : null
+      };
+    }
+
     function clean(d) {
       if (!d || d.ok !== true || !Array.isArray(d.responses) || !Array.isArray(d.away) || !Array.isArray(d.myComplaints)) return null;
       var out = { isStaff: d.isStaff === true, degraded: d.degraded === true, responses: [], away: [], myComplaints: [], complaints: null };
       d.responses.forEach(function (r) {
         if (r && typeof r.eventId === 'string' && typeof r.tornId === 'string' && ID_RE.test(r.tornId) &&
             (r.answer === 'yes' || r.answer === 'partial' || r.answer === 'no')) {
-          out.responses.push({ eventId: r.eventId, tornId: r.tornId, answer: r.answer, windows: cleanWindows(r.windows), reason: typeof r.reason === 'string' ? r.reason : null });
+          out.responses.push({ eventId: r.eventId, tornId: r.tornId, answer: r.answer, windows: cleanWindows(r.windows), chain: cleanChain(r.chain), reason: typeof r.reason === 'string' ? r.reason : null });
         }
       });
       d.away.forEach(function (a) {
@@ -1234,18 +1267,22 @@
     }
 
     // One count per whole TCT hour: how many expect to be on. Yes without windows counts the whole period; windows are clipped to it.
-    function countSlots(span, active) {
+    // pick(r) gives the windows to count for a person (default: their answer windows); null = not counted (used for the watch row).
+    function countSlots(span, active, pick) {
       var first = Math.floor(span.start / HOUR) * HOUR;
       var last = Math.ceil(span.end / HOUR) * HOUR;
-      var people = active.map(function (r) {
-        if (r.windows.length === 0) return [{ from: span.start, to: span.end }];
+      var people = [];
+      active.forEach(function (r) {
+        var wins = pick ? pick(r) : r.windows;
+        if (wins === null) return;
+        if (wins.length === 0) { people.push([{ from: span.start, to: span.end }]); return; }
         var clipped = [];
-        r.windows.forEach(function (w) {
+        wins.forEach(function (w) {
           var from = Math.max(Date.parse(w.fromUtc), span.start);
           var to = Math.min(Date.parse(w.toUtc), span.end);
           if (to > from) clipped.push({ from: from, to: to });
         });
-        return clipped;
+        people.push(clipped);
       });
       var slots = [];
       for (var t = first; t < last; t += HOUR) {
@@ -1325,13 +1362,76 @@
       fewest.dataset.ebxFewest = event.id;
       box.appendChild(most);
       box.appendChild(fewest);
+      if (event.type !== 'Chain') return box;
+      var set = mk('div', 'ebx-tlset');
+      set.appendChild(box);
+      set.appendChild(watchNode(event, active, span, scroll, base, multiDay));
+      return set;
+    }
+
+    // 0.4.0, Chain cards: a second row with the number of watchers per hour and the hours nobody watches.
+    function watchNode(event, active, span, firstScroll, base, multiDay) {
+      var slots = countSlots(span, active, function (r) {
+        if (!r.chain || !r.chain.watch) return null;
+        return r.chain.watchWindows.length > 0 ? r.chain.watchWindows : r.windows;
+      });
+      var max = 0;
+      slots.forEach(function (sl) { if (sl.count > max) max = sl.count; });
+      var box = mk('div', 'ebx-wl');
+      box.dataset.ebxWatch = event.id;
+      box.appendChild(mk('div', 'ebx-wl-title', 'Chain watch, hour by hour (TCT)'));
+      var scroll = mk('div', 'ebx-wl-scroll');
+      scroll.tabIndex = 0;
+      scroll.setAttribute('role', 'group');
+      scroll.setAttribute('aria-label', 'Chain watch: how many people can watch each hour in TCT. Scrolls sideways together with the row above.');
+      var grid = mk('div', 'ebx-tl-grid');
+      slots.forEach(function (sl) {
+        var hour = new Date(sl.start).getUTCHours();
+        var col = mk('div', 'ebx-tl-col');
+        var level = sl.count === 0 ? 0 : Math.max(1, Math.ceil(4 * sl.count / max));
+        var cell = mk('div', 'ebx-wcell ebx-l' + level, String(sl.count));
+        cell.dataset.hour = new Date(sl.start).toISOString();
+        cell.dataset.count = String(sl.count);
+        cell.setAttribute('role', 'img');
+        cell.setAttribute('aria-label', hhmm(sl.start) + ' TCT: ' + sl.count + (sl.count === 1 ? ' watcher' : ' watchers'));
+        col.appendChild(cell);
+        col.appendChild(mk('div', 'ebx-whour', hour % 3 === 0 ? pad2(hour) + ':00' : ''));
+        grid.appendChild(col);
+      });
+      scroll.appendChild(grid);
+      box.appendChild(scroll);
+      // the two rows scroll together (a scroll event only copies the position, no timers)
+      var syncing = false;
+      function follow(from, to) {
+        from.addEventListener('scroll', function () {
+          if (syncing) { syncing = false; return; }
+          if (to.scrollLeft !== from.scrollLeft) { syncing = true; to.scrollLeft = from.scrollLeft; }
+        });
+      }
+      follow(scroll, firstScroll);
+      follow(firstScroll, scroll);
+      // every run of hours with 0 watchers
+      var gaps = [];
+      var from = -1;
+      for (var i = 0; i <= slots.length; i++) {
+        if (i < slots.length && slots[i].count === 0) {
+          if (from < 0) from = i;
+        } else if (from >= 0) {
+          gaps.push(rangeText(slots[from].start, slots[i - 1].start + HOUR, base, multiDay) + ' TCT');
+          from = -1;
+        }
+      }
+      var line = mk('div', 'ebx-tl-sum', gaps.length === 0 ? 'Every hour has a watcher.' : 'No watcher: ' + gaps.join(', '));
+      line.dataset.ebxGaps = event.id;
+      box.appendChild(line);
       return box;
     }
 
     // ---- the draft of one answer: what the member has chosen but not saved yet (memory only, never stored in the browser)
     function getDraft(event, mine) {
       var d = state.draft[event.id];
-      if (!d) d = state.draft[event.id] = { tz: 'tct', dirty: false, answer: null, rows: [], reason: '' };
+      if (!d) d = state.draft[event.id] = { tz: 'tct', dirty: false, answer: null, rows: [], reason: '', chain: blankChain() };
+      d.isChain = event.type === 'Chain';
       d.start = Date.parse(event.startUtc);
       d.end = event.endUtc ? Date.parse(event.endUtc) : d.start + OPEN_MS;
 
@@ -1341,9 +1441,17 @@
         d.rows = mine ? mine.windows.map(function (w) {
           return { from: fieldStr(Date.parse(w.fromUtc), d.tz), to: fieldStr(Date.parse(w.toUtc), d.tz) };
         }) : [];
+        d.chain = mine && mine.chain ? {
+          watch: mine.chain.watch, stacked: mine.chain.stacked, energy: mine.chain.energy || '',
+          rows: mine.chain.watchWindows.map(function (w) {
+            return { from: fieldStr(Date.parse(w.fromUtc), d.tz), to: fieldStr(Date.parse(w.toUtc), d.tz) };
+          })
+        } : blankChain();
       }
       return d;
     }
+
+    function blankChain() { return { watch: false, rows: [], stacked: false, energy: '' }; }
 
     // A new row starts at the next full hour (not before the event starts) and lasts two hours, inside the event.
     function newRow(d) {
@@ -1406,6 +1514,91 @@
       return r.windows.map(function (w) { return rangeText(Date.parse(w.fromUtc), Date.parse(w.toUtc), base, multiDay); }).join(', ') + ' TCT';
     }
 
+    // ---- 0.4.0: "Chain details" (Chain events, with a Yes or Partial answer): watch, watch times, stacked, energy
+    function chainPanel(event, d) {
+      var panel = mk('div', 'ebx-chain');
+      panel.appendChild(mk('p', 'ebx-chain-title', 'Chain details'));
+      function check(key, text, value) {
+        var label = mk('label', 'ebx-check');
+        var box = mk('input');
+        box.type = 'checkbox';
+        box.checked = value;
+        box.dataset.ebxChain = key;
+        box.dataset.event = event.id;
+        label.appendChild(box);
+        label.appendChild(document.createTextNode(' ' + text));
+        return label;
+      }
+      panel.appendChild(check('watch', 'I can chain watch', d.chain.watch));
+      if (d.chain.watch) {
+        var watch = mk('div', 'ebx-chain-watch');
+        watch.appendChild(mk('p', 'ebx-chain-sub', 'Watch times'));
+        d.chain.rows.forEach(function (row, i) {
+          var line = mk('div', 'ebx-chain-row');
+          [['from', 'From'], ['to', 'To']].forEach(function (pair) {
+            var label = mk('label', 'ebx-label', pair[1]);
+            var input = mk('input', 'ebx-input');
+            input.type = 'datetime-local';
+            input.step = '60';
+            input.value = row[pair[0]];
+            input.dataset.ebxWwin = pair[0];
+            input.dataset.event = event.id;
+            input.dataset.idx = String(i);
+            label.appendChild(input);
+            line.appendChild(label);
+          });
+          var remove = mk('button', 'mini', 'Remove');
+          remove.type = 'button';
+          remove.dataset.ebx = 'wwin-remove'; remove.dataset.event = event.id; remove.dataset.idx = String(i);
+          line.appendChild(remove);
+          watch.appendChild(line);
+        });
+        var add = mk('button', 'mini', 'Add watch time');
+        add.type = 'button';
+        add.dataset.ebx = 'wwin-add'; add.dataset.event = event.id;
+        if (d.chain.rows.length >= WIN_MAX) add.disabled = true;
+        watch.appendChild(add);
+        watch.appendChild(mk('p', 'ebx-sub', 'Leave empty if you watch during all your on-times.'));
+        panel.appendChild(watch);
+      }
+      panel.appendChild(check('stacked', 'I will be stacked', d.chain.stacked));
+      var energy = mk('label', 'ebx-label ebx-energy', 'Energy');
+      var select = mk('select', 'ebx-input');
+      select.dataset.ebxChain = 'energy';
+      select.dataset.event = event.id;
+      [['', 'Not said'], ['xanax', 'Xanax on cooldown'], ['natural', 'Natural energy only']].forEach(function (pair) {
+        var option = mk('option', '', pair[1]);
+        option.value = pair[0];
+        if (d.chain.energy === pair[0]) option.selected = true;
+        select.appendChild(option);
+      });
+      energy.appendChild(select);
+      panel.appendChild(energy);
+      return panel;
+    }
+
+    var ENERGY_LABEL = { xanax: 'Xanax on cooldown', natural: 'Natural energy only' };
+
+    // What "Who answered" says after the name and the answer: the windows, then (Chain answers) watch times, stacked and energy.
+    function detailsText(r, span) {
+      var parts = [];
+      var when = windowsText(r, span);
+      if (when) parts.push(when);
+      if (r.chain) {
+        if (r.chain.watch) {
+          if (r.chain.watchWindows.length === 0) parts.push('Watch during on-times');
+          else {
+            var base = dateKey(span.start);
+            var multiDay = dateKey(span.start) !== dateKey(span.end - 1);
+            parts.push('Watch ' + r.chain.watchWindows.map(function (w) { return rangeText(Date.parse(w.fromUtc), Date.parse(w.toUtc), base, multiDay); }).join(', ') + ' TCT');
+          }
+        }
+        if (r.chain.stacked) parts.push('Stacked');
+        if (r.chain.energy) parts.push(ENERGY_LABEL[r.chain.energy]);
+      }
+      return parts.join(' \u00b7 ');
+    }
+
     function decorate(card, event, isStale) {
       if (!state.on) return;
       var box = mk('div', 'ebx-answer');
@@ -1430,6 +1623,7 @@
         box.appendChild(ask);
 
         if (d.answer === 'yes' || d.answer === 'partial') box.appendChild(windowsPanel(event, d));
+        if (d.isChain && (d.answer === 'yes' || d.answer === 'partial')) box.appendChild(chainPanel(event, d));
 
         var field = mk('div', 'ebx-field');
         var label = mk('label', 'ebx-label', 'Reason (only staff sees this)');
@@ -1468,7 +1662,7 @@
           var row = mk('div', 'ebx-who-row');
           var who = mk('div', 'ebx-line');
           who.appendChild(nameLink(r.tornId));
-          var when = windowsText(r, spanForText);
+          var when = detailsText(r, spanForText);
           who.appendChild(document.createTextNode(' \u2014 ' + LABEL[r.answer] + (when ? ' \u00b7 ' + when : '')));
           row.appendChild(who);
           if (staffView() && r.reason) row.appendChild(mk('div', 'ebx-reason', r.reason));
@@ -1489,31 +1683,54 @@
       return fallback;
     }
 
-    // Check the draft the way the server will, and turn the rows into UTC windows. Returns { error } or { windows }.
+    // Check a list of From/To rows the way the server will. Returns { error } or { list } (sorted, in ms).
+    function checkRows(rows, d) {
+      var list = [];
+      for (var i = 0; i < rows.length; i++) {
+        var row = rows[i];
+        if (!row.from && !row.to) continue;
+        var from = fieldMs(row.from, d.tz);
+        var to = fieldMs(row.to, d.tz);
+        if (!Number.isFinite(from) || !Number.isFinite(to)) return { error: 'Fill in both From and To for every time window.' };
+        if (!(to > from)) return { error: 'To must be after From.' };
+        if (to - from > WIN_MAX_MS) return { error: 'A time window can be at most 48 hours.' };
+        if (!(from < d.end && to > d.start)) return { error: 'Every time window must overlap the event.' };
+        list.push({ from: from, to: to });
+      }
+      list.sort(function (a, b) { return a.from - b.from; });
+      for (var k = 1; k < list.length; k++) {
+        if (list[k].from < list[k - 1].to) return { error: 'Time windows must not overlap.' };
+      }
+      return { list: list };
+    }
+
+    function toUtcList(list) {
+      return list.map(function (w) { return { fromUtc: new Date(w.from).toISOString(), toUtc: new Date(w.to).toISOString() }; });
+    }
+
+    // Check the draft the way the server will. Returns { error } or { windows, chain } (chain only when something is said).
     function checkDraft(d) {
       if (!d || !d.answer) return { error: 'Choose Yes, Partial or No first.' };
-      var list = [];
+      var out = { windows: [] };
       if (d.answer !== 'no') {
-        for (var i = 0; i < d.rows.length; i++) {
-          var row = d.rows[i];
-          if (!row.from && !row.to) continue;
-          var from = fieldMs(row.from, d.tz);
-          var to = fieldMs(row.to, d.tz);
-          if (!Number.isFinite(from) || !Number.isFinite(to)) return { error: 'Fill in both From and To for every time window.' };
-          if (!(to > from)) return { error: 'To must be after From.' };
-          if (to - from > WIN_MAX_MS) return { error: 'A time window can be at most 48 hours.' };
-          if (!(from < d.end && to > d.start)) return { error: 'Every time window must overlap the event.' };
-          list.push({ from: from, to: to });
+        var checked = checkRows(d.rows, d);
+        if (checked.error) return checked;
+        if (d.answer === 'partial' && checked.list.length === 0) return { error: 'Add at least one time window for Partial.' };
+        out.windows = toUtcList(checked.list);
+        if (d.isChain) {
+          var watchList = [];
+          if (d.chain.watch) {
+            var watchChecked = checkRows(d.chain.rows, d);
+            if (watchChecked.error) return watchChecked;
+            watchList = watchChecked.list;
+          }
+          // nothing said = no chain details at all (a call without chain removes the saved ones)
+          if (d.chain.watch || d.chain.stacked || d.chain.energy) {
+            out.chain = { watch: d.chain.watch, watchWindows: toUtcList(watchList), stacked: d.chain.stacked, energy: d.chain.energy || null };
+          }
         }
-        list.sort(function (a, b) { return a.from - b.from; });
-        for (var k = 1; k < list.length; k++) {
-          if (list[k].from < list[k - 1].to) return { error: 'Time windows must not overlap.' };
-        }
-        if (d.answer === 'partial' && list.length === 0) return { error: 'Add at least one time window for Partial.' };
       }
-      return {
-        windows: list.map(function (w) { return { fromUtc: new Date(w.from).toISOString(), toUtc: new Date(w.to).toISOString() }; })
-      };
+      return out;
     }
 
     async function saveAnswer(eventId) {
@@ -1521,6 +1738,7 @@
       var checked = checkDraft(d);
       if (checked.error) { state.cardMsg[eventId] = checked.error; cfg.rerender(); return; }
       var body = { eventId: eventId, answer: d.answer, windows: checked.windows, reason: d.reason };
+      if (checked.chain) body.chain = checked.chain;
       var out = await cfg.call('/responses/set', body);
       if (!cfg.signedIn()) return;
       if (out.ok) {
@@ -1556,7 +1774,7 @@
           if (draft) {
             draft.answer = target.dataset.answer;
             draft.dirty = true;
-            if (draft.answer === 'no') draft.rows = [];
+            if (draft.answer === 'no') { draft.rows = []; draft.chain = blankChain(); }
             else if (draft.answer === 'partial' && draft.rows.length === 0) draft.rows = [newRow(draft)];
             delete state.cardMsg[target.dataset.event];
             cfg.rerender();
@@ -1573,6 +1791,20 @@
           if (dRem) {
             dRem.rows.splice(Number(target.dataset.idx), 1);
             dRem.dirty = true;
+            cfg.rerender();
+          }
+        } else if (action === 'wwin-add') {
+          var dwAdd = state.draft[target.dataset.event];
+          if (dwAdd && dwAdd.chain.rows.length < WIN_MAX) {
+            dwAdd.chain.rows.push(newRow(dwAdd));
+            dwAdd.dirty = true;
+            cfg.rerender();
+          }
+        } else if (action === 'wwin-remove') {
+          var dwRem = state.draft[target.dataset.event];
+          if (dwRem) {
+            dwRem.chain.rows.splice(Number(target.dataset.idx), 1);
+            dwRem.dirty = true;
             cfg.rerender();
           }
         } else if (action === 'ans-save') {
@@ -1683,10 +1915,31 @@
       } else if (t.dataset.ebxWin !== undefined) {
         d = state.draft[t.dataset.event];
         if (d && d.rows[Number(t.dataset.idx)]) { d.rows[Number(t.dataset.idx)][t.dataset.ebxWin] = t.value; d.dirty = true; }
+      } else if (t.dataset.ebxWwin !== undefined) {
+        d = state.draft[t.dataset.event];
+        if (d && d.chain.rows[Number(t.dataset.idx)]) { d.chain.rows[Number(t.dataset.idx)][t.dataset.ebxWwin] = t.value; d.dirty = true; }
+      } else if (t.dataset.ebxChain !== undefined && event.type === 'change') {
+        d = state.draft[t.dataset.event];
+        if (d) {
+          var key = t.dataset.ebxChain;
+          if (key === 'watch') {
+            d.chain.watch = t.checked;
+            if (t.checked && d.chain.rows.length === 0) d.chain.rows = [];
+          } else if (key === 'stacked') d.chain.stacked = t.checked;
+          else if (key === 'energy') d.chain.energy = t.value === 'xanax' || t.value === 'natural' ? t.value : '';
+          d.dirty = true;
+          if (key === 'watch') cfg.rerender();
+        }
       } else if (t.dataset.ebxTz !== undefined && event.type === 'change') {
         d = state.draft[t.dataset.ebxTz];
         var next = t.value === 'local' ? 'local' : 'tct';
         if (d && next !== d.tz) {
+          d.chain.rows.forEach(function (row) {
+            ['from', 'to'].forEach(function (k) {
+              var ms = fieldMs(row[k], d.tz);
+              row[k] = Number.isFinite(ms) ? fieldStr(ms, next) : '';
+            });
+          });
           d.rows.forEach(function (row) {
             ['from', 'to'].forEach(function (k) {
               var ms = fieldMs(row[k], d.tz);
