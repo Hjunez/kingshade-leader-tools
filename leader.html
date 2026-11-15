@@ -499,6 +499,28 @@
   .ebx-sub { font-size: 13px; color: var(--muted); margin: 0; }
   .ebx-form-title { font-family: var(--display); font-weight: 600; font-size: 16px; color: var(--ink); margin: 0; }
   .ebx-sec { min-width: 0; }
+
+  /* Faction Events 0.3.0: Partial, time windows and the timeline. */
+  .ebx-win { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface-2); }
+  .ebx-win-title { font-family: var(--display); font-weight: 600; font-size: 15px; color: var(--ink); margin: 0; }
+  .ebx-win-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; min-width: 0; }
+  .ebx-win-row .ebx-label { flex: 1 1 150px; }
+  .ebx-zone { flex: 0 0 auto; max-width: 260px; }
+  .ebx-tl { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .ebx-tl-title { font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .ebx-tl-scroll { overflow-x: auto; max-width: 100%; padding-bottom: 4px; }
+  .ebx-tl-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .ebx-tl-grid { display: flex; width: max-content; gap: 2px; }
+  .ebx-tl-col { display: flex; flex-direction: column; width: 30px; flex: 0 0 30px; }
+  .ebx-tl-cell { height: 30px; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 13px; font-weight: 600; border-radius: 3px; border: 1px solid transparent; color: var(--ink); }
+  .ebx-tl-cell.ebx-l0 { background: transparent; border: 1px dashed var(--line-strong); color: var(--muted); }
+  .ebx-tl-cell.ebx-l1 { background: color-mix(in srgb, var(--accent) 18%, var(--surface-2)); }
+  .ebx-tl-cell.ebx-l2 { background: color-mix(in srgb, var(--accent) 34%, var(--surface-2)); }
+  .ebx-tl-cell.ebx-l3 { background: color-mix(in srgb, var(--accent) 50%, var(--surface-2)); }
+  .ebx-tl-cell.ebx-l4 { background: var(--accent); color: var(--accent-ink); }
+  .ebx-tl-hour { height: 16px; font-family: var(--mono); font-size: 11px; line-height: 16px; color: var(--muted); white-space: nowrap; overflow: visible; }
+  .ebx-tl-day { height: 14px; font-family: var(--mono); font-size: 11px; line-height: 14px; color: var(--muted); white-space: nowrap; overflow: visible; }
+  .ebx-tl-sum { font-size: 13px; color: var(--ink); }
 </style>
 </head>
 <body>
@@ -719,8 +741,8 @@
 
   <footer>
     <p>These pages read through Torn's official API and never act on your behalf in Torn. Faction
-      Events is the one thing here that stores anything: the events, the answers to them, absences and
-      messages to the staff live on Kingshade's own server. Only the Leader and Co-Leader can put events
+      Events is the one thing here that stores anything: the events, the answers to them (with the times people
+      expect to be on), absences and messages to the staff live on Kingshade's own server. Only the Leader and Co-Leader can put events
       there, and only the staff (Rabid, Cheese, Kingshade, MooSlayerOfGods, Tatz and Kneato) can read reasons and messages.</p>
     <p>The status beside each name is that person's status <em>in Torn</em>, read once when this page
       opens. It is not a signal that they have this page open — nothing here watches anyone.</p>
@@ -1882,7 +1904,8 @@
   });
 
   // ================================================================
-  // Faction Events 0.2.0 - answers (Yes/No), absences and messages to the staff.
+  // Faction Events 0.3.0 - answers (Yes/Partial/No) with time windows and a timeline,
+  // absences and messages to the staff.
   // The server decides everything (who may see a reason, who may change a post);
   // this code only shows what the server sent and never builds markup from it:
   // textContent everywhere. A server without these routes answers 404 and every
@@ -1908,7 +1931,7 @@
       return {
         gen: gen, on: false, loaded: false, isStaff: false, degraded: false, error: false,
         responses: [], away: [], myComplaints: [], complaints: null,
-        names: {}, cardMsg: {}, editId: null, deleteId: null, awayDeleteId: null, busy: false
+        names: {}, cardMsg: {}, editId: null, deleteId: null, awayDeleteId: null, busy: false, draft: {}
       };
     }
     state = fresh();
@@ -1923,13 +1946,25 @@
     function staffView() { return cfg.staffView === true && state.isStaff === true; }
     function me() { return cfg.myId(); }
 
+    // Windows from the server: only well-formed ones (ISO UTC, to after from); anything else is dropped.
+    function cleanWindows(list) {
+      var out = [];
+      if (!Array.isArray(list)) return out;
+      list.forEach(function (w) {
+        if (w && isIso(w.fromUtc) && isIso(w.toUtc) && Date.parse(w.toUtc) > Date.parse(w.fromUtc)) {
+          out.push({ fromUtc: w.fromUtc, toUtc: w.toUtc });
+        }
+      });
+      return out;
+    }
+
     function clean(d) {
       if (!d || d.ok !== true || !Array.isArray(d.responses) || !Array.isArray(d.away) || !Array.isArray(d.myComplaints)) return null;
       var out = { isStaff: d.isStaff === true, degraded: d.degraded === true, responses: [], away: [], myComplaints: [], complaints: null };
       d.responses.forEach(function (r) {
         if (r && typeof r.eventId === 'string' && typeof r.tornId === 'string' && ID_RE.test(r.tornId) &&
-            (r.answer === 'yes' || r.answer === 'no')) {
-          out.responses.push({ eventId: r.eventId, tornId: r.tornId, answer: r.answer, reason: typeof r.reason === 'string' ? r.reason : null });
+            (r.answer === 'yes' || r.answer === 'partial' || r.answer === 'no')) {
+          out.responses.push({ eventId: r.eventId, tornId: r.tornId, answer: r.answer, windows: cleanWindows(r.windows), reason: typeof r.reason === 'string' ? r.reason : null });
         }
       });
       d.away.forEach(function (a) {
@@ -2119,10 +2154,223 @@
     }
 
     // -------------------------------------------------- event card block
+    var HOUR = 3600000;
+    var WIN_MAX = 3;
+    var WIN_MAX_MS = 48 * HOUR;
+    var OPEN_MS = 48 * HOUR;
+    var DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    var LABEL = { yes: 'Yes', partial: 'Partial', no: 'No' };
+
     function isOpenEvent(event) {
       if (event.status !== 'Scheduled') return false;
       var finish = event.endUtc || event.deadlineUtc || event.startUtc;
       return Date.now() < Date.parse(finish);
+    }
+
+    // ---- time helpers. The fields are datetime-local: TCT is read as UTC, "local" as the browser's own zone.
+    function pad2(n) { return (n < 10 ? '0' : '') + n; }
+    function tctStr(ms) { return new Date(ms).toISOString().slice(0, 16); }
+    function localStr(ms) {
+      var d = new Date(ms);
+      return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + 'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+    }
+    function fieldStr(ms, tz) { return tz === 'local' ? localStr(ms) : tctStr(ms); }
+    function fieldMs(str, tz) {
+      if (typeof str !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(str)) return NaN;
+      var core = str.slice(0, 16) + ':00';
+      return tz === 'local' ? new Date(core).getTime() : Date.parse(core + '.000Z');
+    }
+    function dateKey(ms) { return tctStr(ms).slice(0, 10); }
+    function hhmm(ms) { return tctStr(ms).slice(11); }
+    function dayLabel(ms) { var d = new Date(ms); return DAYS[d.getUTCDay()] + ' ' + d.getUTCDate(); }
+    // "07:00-11:00" (an en dash in the page); the day is added when the span covers several days or the time is on another day.
+    function rangeText(from, to, base, multiDay) {
+      var left = (multiDay || dateKey(from) !== base ? dayLabel(from) + ' ' : '') + hhmm(from);
+      var right = (dateKey(to) !== dateKey(from) ? dayLabel(to) + ' ' : '') + hhmm(to);
+      return left + '\u2013' + right;
+    }
+
+    // ---- the period of the card's timeline: start to end, or (no end) to the last window end, at least 6 h and at most 48 h
+    function timelineSpan(event, active) {
+      var start = Date.parse(event.startUtc);
+      if (event.endUtc) return { start: start, end: Date.parse(event.endUtc) };
+      var last = start;
+      active.forEach(function (r) {
+        r.windows.forEach(function (w) { var t = Date.parse(w.toUtc); if (t > last) last = t; });
+      });
+      return { start: start, end: Math.min(Math.max(last, start + 6 * HOUR), start + 48 * HOUR) };
+    }
+
+    // One count per whole TCT hour: how many expect to be on. Yes without windows counts the whole period; windows are clipped to it.
+    function countSlots(span, active) {
+      var first = Math.floor(span.start / HOUR) * HOUR;
+      var last = Math.ceil(span.end / HOUR) * HOUR;
+      var people = active.map(function (r) {
+        if (r.windows.length === 0) return [{ from: span.start, to: span.end }];
+        var clipped = [];
+        r.windows.forEach(function (w) {
+          var from = Math.max(Date.parse(w.fromUtc), span.start);
+          var to = Math.min(Date.parse(w.toUtc), span.end);
+          if (to > from) clipped.push({ from: from, to: to });
+        });
+        return clipped;
+      });
+      var slots = [];
+      for (var t = first; t < last; t += HOUR) {
+        var n = 0;
+        people.forEach(function (list) {
+          for (var i = 0; i < list.length; i++) {
+            if (list[i].from < t + HOUR && list[i].to > t) { n++; break; }
+          }
+        });
+        slots.push({ start: t, count: n });
+      }
+      return slots;
+    }
+
+    // The longest run of slots whose count equals target (the earliest on a tie).
+    function bestRun(slots, target) {
+      var best = null;
+      var from = -1;
+      for (var i = 0; i <= slots.length; i++) {
+        if (i < slots.length && slots[i].count === target) {
+          if (from < 0) from = i;
+        } else if (from >= 0) {
+          if (best === null || i - from > best.to - best.from) best = { from: from, to: i };
+          from = -1;
+        }
+      }
+      return best;
+    }
+
+    function timelineNode(event, here) {
+      var active = here.filter(function (r) { return r.answer === 'yes' || r.answer === 'partial'; });
+      if (active.length === 0) return null;
+      var span = timelineSpan(event, active);
+      var slots = countSlots(span, active);
+      if (slots.length === 0) return null;
+      var max = 0;
+      var min = Infinity;
+      slots.forEach(function (sl) { if (sl.count > max) max = sl.count; if (sl.count < min) min = sl.count; });
+      var base = dateKey(span.start);
+      var multiDay = dateKey(span.start) !== dateKey(span.end - 1);
+
+      var box = mk('div', 'ebx-tl');
+      box.dataset.ebxTimeline = event.id;
+      box.appendChild(mk('div', 'ebx-tl-title', 'Who is on, hour by hour (TCT)'));
+      var scroll = mk('div', 'ebx-tl-scroll');
+      scroll.tabIndex = 0;
+      scroll.setAttribute('role', 'group');
+      scroll.setAttribute('aria-label', 'Timeline: how many people expect to be on each hour in TCT. Scrolls sideways.');
+      var grid = mk('div', 'ebx-tl-grid');
+      slots.forEach(function (sl, i) {
+        var hour = new Date(sl.start).getUTCHours();
+        var col = mk('div', 'ebx-tl-col');
+        var level = sl.count === 0 ? 0 : Math.max(1, Math.ceil(4 * sl.count / max));
+        var cell = mk('div', 'ebx-tl-cell ebx-l' + level, String(sl.count));
+        cell.dataset.hour = new Date(sl.start).toISOString();
+        cell.dataset.count = String(sl.count);
+        cell.setAttribute('role', 'img');
+        cell.setAttribute('aria-label', hhmm(sl.start) + ' TCT: ' + sl.count + (sl.count === 1 ? ' person' : ' people'));
+        col.appendChild(cell);
+        var label = mk('div', 'ebx-tl-hour', hour % 3 === 0 ? pad2(hour) + ':00' : '');
+        col.appendChild(label);
+        col.appendChild(mk('div', 'ebx-tl-day', i === 0 || hour === 0 ? dayLabel(sl.start) : ''));
+        grid.appendChild(col);
+      });
+      scroll.appendChild(grid);
+      box.appendChild(scroll);
+
+      function runLine(prefix, value) {
+        var run = bestRun(slots, value);
+        var text = run === null ? '-' : rangeText(slots[run.from].start, slots[run.to - 1].start + HOUR, base, multiDay);
+        return mk('div', 'ebx-tl-sum', prefix + ': ' + text + ' TCT (' + value + ')');
+      }
+      var most = runLine('Most people', max);
+      most.dataset.ebxMost = event.id;
+      var fewest = runLine('Fewest people', min);
+      fewest.dataset.ebxFewest = event.id;
+      box.appendChild(most);
+      box.appendChild(fewest);
+      return box;
+    }
+
+    // ---- the draft of one answer: what the member has chosen but not saved yet (memory only, never stored in the browser)
+    function getDraft(event, mine) {
+      var d = state.draft[event.id];
+      if (!d) d = state.draft[event.id] = { tz: 'tct', dirty: false, answer: null, rows: [], reason: '' };
+      d.start = Date.parse(event.startUtc);
+      d.end = event.endUtc ? Date.parse(event.endUtc) : d.start + OPEN_MS;
+
+      if (!d.dirty) {
+        d.answer = mine ? mine.answer : null;
+        d.reason = mine && mine.reason !== null ? mine.reason : '';
+        d.rows = mine ? mine.windows.map(function (w) {
+          return { from: fieldStr(Date.parse(w.fromUtc), d.tz), to: fieldStr(Date.parse(w.toUtc), d.tz) };
+        }) : [];
+      }
+      return d;
+    }
+
+    // A new row starts at the next full hour (not before the event starts) and lasts two hours, inside the event.
+    function newRow(d) {
+      var from = Math.max(Date.now(), d.start);
+      from = Math.ceil(from / HOUR) * HOUR;
+      var to = Math.min(from + 2 * HOUR, d.end);
+      if (!(to > from)) return { from: '', to: '' };
+      return { from: fieldStr(from, d.tz), to: fieldStr(to, d.tz) };
+    }
+
+    function windowsPanel(event, d) {
+      var panel = mk('div', 'ebx-win');
+      panel.appendChild(mk('p', 'ebx-win-title', 'When will you be on?'));
+      var zone = mk('label', 'ebx-label ebx-zone', 'Time zone');
+      var select = mk('select', 'ebx-input');
+      select.dataset.ebxTz = event.id;
+      [['tct', 'TCT'], ['local', 'My local time']].forEach(function (pair) {
+        var option = mk('option', '', pair[1]);
+        option.value = pair[0];
+        if (d.tz === pair[0]) option.selected = true;
+        select.appendChild(option);
+      });
+      zone.appendChild(select);
+      panel.appendChild(zone);
+      d.rows.forEach(function (row, i) {
+        var line = mk('div', 'ebx-win-row');
+        [['from', 'From'], ['to', 'To']].forEach(function (pair) {
+          var label = mk('label', 'ebx-label', pair[1]);
+          var input = mk('input', 'ebx-input');
+          input.type = 'datetime-local';
+          input.step = '60';
+          input.value = row[pair[0]];
+          input.dataset.ebxWin = pair[0];
+          input.dataset.event = event.id;
+          input.dataset.idx = String(i);
+          label.appendChild(input);
+          line.appendChild(label);
+        });
+        var remove = mk('button', 'mini', 'Remove');
+        remove.type = 'button';
+        remove.dataset.ebx = 'win-remove'; remove.dataset.event = event.id; remove.dataset.idx = String(i);
+        line.appendChild(remove);
+        panel.appendChild(line);
+      });
+      var add = mk('button', 'mini', 'Add time');
+      add.type = 'button';
+      add.dataset.ebx = 'win-add'; add.dataset.event = event.id;
+      if (d.rows.length >= WIN_MAX) add.disabled = true;
+      panel.appendChild(add);
+      if (d.answer === 'yes') panel.appendChild(mk('p', 'ebx-sub', 'Leave empty if you are on for the whole event.'));
+      else panel.appendChild(mk('p', 'ebx-sub', 'Partial needs at least one time window.'));
+      return panel;
+    }
+
+    function windowsText(r, span) {
+      if (r.answer === 'no') return '';
+      if (r.windows.length === 0) return r.answer === 'yes' ? 'whole event' : '';
+      var base = dateKey(span.start);
+      var multiDay = dateKey(span.start) !== dateKey(span.end - 1);
+      return r.windows.map(function (w) { return rangeText(Date.parse(w.fromUtc), Date.parse(w.toUtc), base, multiDay); }).join(', ') + ' TCT';
     }
 
     function decorate(card, event, isStale) {
@@ -2132,47 +2380,62 @@
       var mine = null;
       here.forEach(function (r) { if (r.tornId === me()) mine = r; });
       var yes = here.filter(function (r) { return r.answer === 'yes'; }).sort(nameSort);
+      var partial = here.filter(function (r) { return r.answer === 'partial'; }).sort(nameSort);
       var no = here.filter(function (r) { return r.answer === 'no'; }).sort(nameSort);
 
-      var reasonInput = null;
       if (isOpenEvent(event) && !isStale) {
+        var d = getDraft(event, mine);
         var ask = mk('div', 'ebx-ask');
         ask.appendChild(mk('span', 'ebx-q', 'Are you in?'));
-        ['yes', 'no'].forEach(function (answer) {
-          var b = mk('button', 'mini ebx-ans', answer === 'yes' ? 'Yes' : 'No');
+        ['yes', 'partial', 'no'].forEach(function (answer) {
+          var b = mk('button', 'mini ebx-ans', LABEL[answer]);
           b.type = 'button';
           b.dataset.ebx = 'ans'; b.dataset.event = event.id; b.dataset.answer = answer;
-          b.setAttribute('aria-pressed', mine && mine.answer === answer ? 'true' : 'false');
+          b.setAttribute('aria-pressed', d.answer === answer ? 'true' : 'false');
           ask.appendChild(b);
         });
         box.appendChild(ask);
 
+        if (d.answer === 'yes' || d.answer === 'partial') box.appendChild(windowsPanel(event, d));
+
         var field = mk('div', 'ebx-field');
         var label = mk('label', 'ebx-label', 'Reason (only staff sees this)');
-        reasonInput = mk('input', 'ebx-input');
+        var reasonInput = mk('input', 'ebx-input');
         reasonInput.type = 'text';
         reasonInput.maxLength = 200;
         reasonInput.dataset.ebxReason = event.id;
-        // The server sends a member their OWN saved reason back, so the field shows what is saved.
-        reasonInput.value = mine && mine.reason !== null ? mine.reason : '';
+        reasonInput.value = d.reason;
         label.appendChild(reasonInput);
         field.appendChild(label);
-        var save = mk('button', 'mini', 'Save reason'); save.type = 'button';
-        save.dataset.ebx = 'reason-save'; save.dataset.event = event.id;
-        field.appendChild(save);
         box.appendChild(field);
+
+        var actions = mk('div', 'ebx-actions');
+        var save = mk('button', 'mini primary', 'Save'); save.type = 'button';
+        save.dataset.ebx = 'ans-save'; save.dataset.event = event.id;
+        actions.appendChild(save);
+        if (mine) {
+          var drop = mk('button', 'mini', 'Remove my answer'); drop.type = 'button';
+          drop.dataset.ebx = 'ans-remove'; drop.dataset.event = event.id;
+          actions.appendChild(drop);
+        }
+        if (d.dirty) actions.appendChild(mk('span', 'ebx-hint', 'Not saved yet.'));
+        box.appendChild(actions);
       }
 
-      box.appendChild(mk('div', 'ebx-count', 'Yes ' + yes.length + ' · No ' + no.length));
+      box.appendChild(mk('div', 'ebx-count', 'Yes ' + yes.length + ' \u00b7 Partial ' + partial.length + ' \u00b7 No ' + no.length));
+      var line = timelineNode(event, here);
+      if (line) box.appendChild(line);
       if (here.length > 0) {
         var details = mk('details', 'ebx-who');
         details.appendChild(mk('summary', '', 'Who answered'));
-        yes.concat(no).forEach(function (r) {
+        var spanForText = timelineSpan(event, here.filter(function (r) { return r.answer !== 'no'; }));
+        yes.concat(partial, no).forEach(function (r) {
           var row = mk('div', 'ebx-who-row');
-          var line = mk('div', 'ebx-line');
-          line.appendChild(nameLink(r.tornId));
-          line.appendChild(document.createTextNode(' — ' + (r.answer === 'yes' ? 'Yes' : 'No')));
-          row.appendChild(line);
+          var who = mk('div', 'ebx-line');
+          who.appendChild(nameLink(r.tornId));
+          var when = windowsText(r, spanForText);
+          who.appendChild(document.createTextNode(' \u2014 ' + LABEL[r.answer] + (when ? ' \u00b7 ' + when : '')));
+          row.appendChild(who);
           if (staffView() && r.reason) row.appendChild(mk('div', 'ebx-reason', r.reason));
           details.appendChild(row);
         });
@@ -2191,23 +2454,57 @@
       return fallback;
     }
 
-    function findReasonInput(eventId) {
-      var inputs = document.querySelectorAll('input[data-ebx-reason]');
-      for (var i = 0; i < inputs.length; i++) if (inputs[i].dataset.ebxReason === eventId) return inputs[i];
-      return null;
+    // Check the draft the way the server will, and turn the rows into UTC windows. Returns { error } or { windows }.
+    function checkDraft(d) {
+      if (!d || !d.answer) return { error: 'Choose Yes, Partial or No first.' };
+      var list = [];
+      if (d.answer !== 'no') {
+        for (var i = 0; i < d.rows.length; i++) {
+          var row = d.rows[i];
+          if (!row.from && !row.to) continue;
+          var from = fieldMs(row.from, d.tz);
+          var to = fieldMs(row.to, d.tz);
+          if (!Number.isFinite(from) || !Number.isFinite(to)) return { error: 'Fill in both From and To for every time window.' };
+          if (!(to > from)) return { error: 'To must be after From.' };
+          if (to - from > WIN_MAX_MS) return { error: 'A time window can be at most 48 hours.' };
+          if (!(from < d.end && to > d.start)) return { error: 'Every time window must overlap the event.' };
+          list.push({ from: from, to: to });
+        }
+        list.sort(function (a, b) { return a.from - b.from; });
+        for (var k = 1; k < list.length; k++) {
+          if (list[k].from < list[k - 1].to) return { error: 'Time windows must not overlap.' };
+        }
+        if (d.answer === 'partial' && list.length === 0) return { error: 'Add at least one time window for Partial.' };
+      }
+      return {
+        windows: list.map(function (w) { return { fromUtc: new Date(w.from).toISOString(), toUtc: new Date(w.to).toISOString() }; })
+      };
     }
 
-    async function answer(eventId, value, reasonMode) {
-      var input = findReasonInput(eventId);
-      var body = { eventId: eventId, answer: value };
-      // Yes/No sends a reason only when one is typed; "Save reason" always sends what is in the field.
-      if (input && (reasonMode === 'always' || input.value !== '')) body.reason = input.value;
+    async function saveAnswer(eventId) {
+      var d = state.draft[eventId];
+      var checked = checkDraft(d);
+      if (checked.error) { state.cardMsg[eventId] = checked.error; cfg.rerender(); return; }
+      var body = { eventId: eventId, answer: d.answer, windows: checked.windows, reason: d.reason };
       var out = await cfg.call('/responses/set', body);
       if (!cfg.signedIn()) return;
       if (out.ok) {
         delete state.cardMsg[eventId];
+        delete state.draft[eventId];
       } else {
         state.cardMsg[eventId] = describe(out, 'Your answer could not be saved.');
+      }
+      await load({ rerender: true });
+    }
+
+    async function removeAnswer(eventId) {
+      var out = await cfg.call('/responses/set', { eventId: eventId, answer: null });
+      if (!cfg.signedIn()) return;
+      if (out.ok) {
+        delete state.cardMsg[eventId];
+        delete state.draft[eventId];
+      } else {
+        state.cardMsg[eventId] = describe(out, 'Your answer could not be removed.');
       }
       await load({ rerender: true });
     }
@@ -2220,19 +2517,33 @@
       state.busy = true;
       try {
         if (action === 'ans') {
-          var current = null;
-          state.responses.forEach(function (r) { if (r.eventId === target.dataset.event && r.tornId === me()) current = r; });
-          var pressed = target.dataset.answer;
-          await answer(target.dataset.event, current && current.answer === pressed ? null : pressed, 'typed');
-        } else if (action === 'reason-save') {
-          var mineNow = null;
-          state.responses.forEach(function (r) { if (r.eventId === target.dataset.event && r.tornId === me()) mineNow = r; });
-          if (!mineNow) {
-            state.cardMsg[target.dataset.event] = 'Choose Yes or No first.';
+          var draft = state.draft[target.dataset.event];
+          if (draft) {
+            draft.answer = target.dataset.answer;
+            draft.dirty = true;
+            if (draft.answer === 'no') draft.rows = [];
+            else if (draft.answer === 'partial' && draft.rows.length === 0) draft.rows = [newRow(draft)];
+            delete state.cardMsg[target.dataset.event];
             cfg.rerender();
-          } else {
-            await answer(target.dataset.event, mineNow.answer, 'always');
           }
+        } else if (action === 'win-add') {
+          var dAdd = state.draft[target.dataset.event];
+          if (dAdd && dAdd.rows.length < WIN_MAX) {
+            dAdd.rows.push(newRow(dAdd));
+            dAdd.dirty = true;
+            cfg.rerender();
+          }
+        } else if (action === 'win-remove') {
+          var dRem = state.draft[target.dataset.event];
+          if (dRem) {
+            dRem.rows.splice(Number(target.dataset.idx), 1);
+            dRem.dirty = true;
+            cfg.rerender();
+          }
+        } else if (action === 'ans-save') {
+          await saveAnswer(target.dataset.event);
+        } else if (action === 'ans-remove') {
+          await removeAnswer(target.dataset.event);
         } else if (action === 'away-save') {
           await saveAway();
         } else if (action === 'away-edit') {
@@ -2327,7 +2638,35 @@
       await load();
     }
 
+    function onField(event) {
+      var t = event.target;
+      if (!t || !t.dataset) return;
+      var d;
+      if (t.dataset.ebxReason !== undefined) {
+        d = state.draft[t.dataset.ebxReason];
+        if (d) { d.reason = t.value; d.dirty = true; }
+      } else if (t.dataset.ebxWin !== undefined) {
+        d = state.draft[t.dataset.event];
+        if (d && d.rows[Number(t.dataset.idx)]) { d.rows[Number(t.dataset.idx)][t.dataset.ebxWin] = t.value; d.dirty = true; }
+      } else if (t.dataset.ebxTz !== undefined && event.type === 'change') {
+        d = state.draft[t.dataset.ebxTz];
+        var next = t.value === 'local' ? 'local' : 'tct';
+        if (d && next !== d.tz) {
+          d.rows.forEach(function (row) {
+            ['from', 'to'].forEach(function (k) {
+              var ms = fieldMs(row[k], d.tz);
+              row[k] = Number.isFinite(ms) ? fieldStr(ms, next) : '';
+            });
+          });
+          d.tz = next;
+          cfg.rerender();
+        }
+      }
+    }
+
     document.addEventListener('click', function (event) { void onClick(event); });
+    document.addEventListener('input', onField);
+    document.addEventListener('change', onField);
 
     return { load: load, reset: reset, decorate: decorate };
   }
