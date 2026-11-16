@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         KS Chain Dibs PC
 // @namespace    kingshade.torn.chaindibs
-// @version      0.8.0
-// @description  A small floating window with your faction chain: timer, the queue for the next hit, and the Im here rule so the chain does not break. Only the member who made the hit leaves the queue. When anybody may hit, FREE HIT links to a free target. Im here is locked when you cannot hit. Stand first without pressing Im here for 5 hits and you are removed as AFK. A bonus hit is announced. The minimized window still shows who is first and who is the hitter, and a yellow frame tells you when you hold the hit. If you hold the hit and fail, the button I failed - free hit lets everybody hit at once and shows them who released it. Minimized, the window becomes a Dibs row under Torns own Chain bar in the left side menu; click it to open. The window looks like the boxes of Torns side menu.
+// @version      0.8.1
+// @description  A small floating window with your faction chain: timer, the queue for the next hit, and the Im here rule so the chain does not break. Only the member who made the hit leaves the queue. When anybody may hit, FREE HIT links to a free target. Im here is locked when you cannot hit. Stand first without pressing Im here for 3 hits and you are removed as AFK. A bonus hit is announced. The minimized window still shows who is first and who is the hitter, and a yellow frame tells you when you hold the hit. If you hold the hit and fail, the button I failed - free hit lets everybody hit at once and shows them who released it. Minimized, the window becomes a Dibs row under Torns own Chain bar in the left side menu; click it to open. The window looks like the boxes of Torns side menu.
 // @author       Kingshade
 // @downloadURL  https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Chain_Dibs_PC.user.js
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Chain_Dibs_PC.user.js
@@ -20,8 +20,9 @@
 // ==/UserScript==
 
 /*
- * KS Chain Dibs PC 0.8.0
+ * KS Chain Dibs PC 0.8.1
  *
+ * 0.8.1  ONE MAIN CHANGE: Rejoin cannot be lost by mistake. It is ON unless you turned it off, the button sits at the bottom away from Im here, and a change shows a short line. Also: AFK now after 3 hits as first without Im here (was 5). Also: if your hit is not found, the window says why and the KS server logs the reason, so the cause can be found.
  * 0.8.0  ONE MAIN CHANGE: looks like Torn. Minimized, the window becomes a Dibs row under Torns own Chain bar in the left sidebar. Click it to open. Without the sidebar it stays a small floating window. Nothing else changed.
  * 0.7.3  ONE MAIN CHANGE: the KS server address is now warroom.kingshadeprotocol.com.
  *        Nothing else changed.
@@ -61,7 +62,7 @@
  * anybody may hit; with nobody confirmed, from 1:30. Nobody is taken out of
  * the queue by the rule: only the member who made a hit leaves it, and his own
  * copy of this script tells the server so. The one other way out is AFK: a
- * member who stands first in the queue and has not pressed Im here at 5
+ * member who stands first in the queue and has not pressed Im here at 3
  * decisions in a row is removed by the server. The KS server decides with its
  * own clock; this window only shows it. Minimized, the window still shows who
  * is first in the queue and who is the hitter. When you hold the hit its frame
@@ -79,6 +80,17 @@
  * folded, another page layout, or Torn changed its class names) the small
  * floating window stays, as before. The row has no timer of its own: Torns
  * Chain bar is right above it.
+ *
+ * 0.8.1: Rejoin after my hit is ON unless you turned it off on this PC (a
+ * choice you saved before is kept as it is). Its button is the last one in the
+ * window, with space above it, so it is never next to Im here. When you change
+ * it the window says so for 8 seconds. A click on Rejoin in the second after a
+ * row above the buttons came or went is ignored: the window had just moved
+ * under the click.
+ * If your hit is not found (the search ends without a report) while you stand in the queue,
+ * the window says why for 15 seconds and a short message goes to the KS server: the hit
+ * numbers it looked for, how many tries, the reason, and how many attacks Torn listed. No
+ * attack details. No extra Torn call is made for it.
  *
  * Network (and nothing else):
  *  - api.torn.com, every 3 s while Watch is on and only from ONE open tab:
@@ -177,7 +189,7 @@
   if (window[INSTANCE_KEY]) return;
   window[INSTANCE_KEY] = true;
 
-  var VERSION = '0.8.0';
+  var VERSION = '0.8.1';
 
   // The ONE place the server address lives.
   var SERVER_BASE = 'https://warroom.kingshadeprotocol.com';
@@ -252,6 +264,8 @@
   var HIT_RETRY_MS = 2000;             // no hit found: ask again after this
   var HIT_MAX_RETRIES = 3;             // ... at most this many more times for each new hit
   var HIT_BUSY_MS = 250;               // an older call is still on its way: look again after this
+  var HIT_DIAG_MSG_MS = 15000;         // 0.8.1: how long "Your hit was not found" stays in the window
+  var HIT_DIAG_TEXT = 'Your hit was not found - you keep your place in the queue. Reason: ';
   var HIT_SEEN_FRESH_MS = 30000;       // a leader that takes over trusts the shared turn only if it is this fresh
   var HIT_WINDOW_MS = 60000;
   var HIT_WINDOW_MAX = 10;            // at most this many attacks calls in any 60 s: 20 chain + 18 extra + 15 status + 10 attacks + names = 65 or fewer
@@ -305,7 +319,13 @@
   var MOVED_TEXT = 'You are now first - press Im here';
   var AFK_LIST_MAX = 50;               // afkRecent is cleaned to at most this many IDs
   var AFK_NAMES_SHOWN = 2;             // "removed as AFK" names two, then +N
-  var AFK_SELF_TEXT = 'You were removed from the queue as AFK (5 hits without Im here).';
+  var AFK_SELF_TEXT = 'You were removed from the queue as AFK (3 hits without Im here).';
+  // 0.8.1: Rejoin is ON unless the member turned it off; its button is the last one, away from Im here.
+  var REJOIN_GAP_PX = 16;              // space above the Rejoin button (at least 10)
+  var REJOIN_NOTE_MS = 8000;           // how long the "Rejoin is now ..." line stays
+  var REJOIN_STEADY_MS = 1000;         // a click on Rejoin this soon after the window moved under it is ignored
+  var REJOIN_ON_NOTE = 'Rejoin is now ON - you stay in the queue after your hit';
+  var REJOIN_OFF_NOTE = 'Rejoin is now OFF - you leave the queue after your hit';
 
   // 0.7.0: the hitter lets go of the hit ("I failed - free hit").
   var FAIL_BTN_TEXT = 'I failed - free hit';
@@ -333,7 +353,7 @@
   };
 
   var TOS_ROWS = [
-    ['Data Storage', 'The KS server keeps the chain queue (Torn IDs, join time, Im here, and how many hits in a row you stood first without pressing it), who released the current hit and why, and the latest chain reading, deleted 12 hours after the last change, for one minute the Torn IDs of members it removed as AFK, and the free hit list (Torn IDs of targets set by the faction leader) until the leader changes it.'],
+    ['Data Storage', 'The KS server keeps the chain queue (Torn IDs, join time, Im here, and how many hits in a row you stood first without pressing it), who released the current hit and why, and the latest chain reading, deleted 12 hours after the last change, for one minute the Torn IDs of members it removed as AFK, and the free hit list (Torn IDs of targets set by the faction leader) until the leader changes it. If your hit is not found, the server log keeps a short reason and the hit numbers it looked for (no attack details).'],
     ['Data Sharing', 'Faction members who use KS Chain Dibs see the queue, the free hit list, who released the current hit and, for one minute, who was removed as AFK. Nobody outside the faction. Your own attacks are read only to see if you made the chain hit; only that fact is sent to the KS server. Your own energy and status are read only to see if you can hit; they are not sent anywhere.'],
     ['Purpose of Use', 'Coordinate who takes the next chain hit so the chain does not break, and point to a free target when anybody may hit.'],
     ['Key Storage & Sharing', 'Stored only in Tampermonkey on this PC. Sent to api.torn.com, and once per sign-in to the KS server to confirm your Torn ID and faction. The KS server never stores it.'],
@@ -387,6 +407,9 @@
   var hitSeen = null;
   var hitCtl = null;
   var hitGen = 0;
+  var noBasePending = false;  // 0.8.1: this tab took over as leader without a fresh shared turn
+  var noBaseSent = false;     // 0.8.1: at most one such message from this tab
+  var lastOwned = null;       // 0.8.1: { chainId, current } of the last turn HE owned (in memory, per tab)
   var hitTimer = null;
   var attackTimes = [];       // when the attacks calls were made (the last 60 s)
   var targetsOpen = false;    // the Targets panel is unfolded
@@ -395,6 +418,8 @@
   var inactiveSince = 0;
   var localMsg = '';
   var localMsgUntil = 0;
+  var rejoinTop = null;        // 0.8.1: where the Rejoin button stood when the window was last drawn
+  var rejoinSteadyAt = 0;      // 0.8.1: a click on Rejoin before this time is ignored (the window just moved)
   var ui = {};
   var pos = { left: DEFAULT_LEFT, top: DEFAULT_TOP };
   var minimized = false;
@@ -485,7 +510,7 @@
 
   var STATUSES = { live: 1, stale: 1, inactive: 1, no_reading: 1 };
   var PHASES = { waiting: 1, confirm: 1, get_ready: 1, hit_now: 1, no_confirmed: 1, free_hit: 1, ended: 1 };
-  var ACTIONS = { joined: 1, already_in_queue: 1, queue_full: 1, left: 1, not_in_queue: 1, confirmed: 1, already_confirmed: 1, turn_resolved: 1, no_turn: 1, targets_set: 1, hit_removed: 1, hit_rejoined: 1, hit_ignored: 1, unconfirmed: 1, owner_released: 1, not_confirmed: 1 };
+  var ACTIONS = { joined: 1, already_in_queue: 1, queue_full: 1, left: 1, not_in_queue: 1, confirmed: 1, already_confirmed: 1, turn_resolved: 1, no_turn: 1, targets_set: 1, hit_removed: 1, hit_rejoined: 1, hit_ignored: 1, unconfirmed: 1, owner_released: 1, not_confirmed: 1, diag_logged: 1, diag_dropped: 1 };
 
   // Everything from the server is checked before it is shown. null = unusable.
   function cleanSnap(j) {
@@ -686,10 +711,15 @@
       var fresh = shared && shared.snapAt && Date.now() - shared.snapAt < HIT_SEEN_FRESH_MS;
       var seenTurn = (fresh && shared.snap && shared.snap.turn) ? shared.snap.turn : null;
       hitSeen = seenTurn ? { chainId: seenTurn.chainId, current: seenTurn.current } : null;
+      // 0.8.1 measurement: he owned the turn the fresh shared answer shows (else nothing is known)
+      lastOwned = (seenTurn && seenTurn.resolved === true && shared.snap.you && shared.snap.you.isOwner === true) ? { chainId: seenTurn.chainId, current: seenTurn.current } : null;
+      // 0.8.1 measurement: no fresh base while he stands in the queue - a turn change may pass unseen.
+      noBasePending = !seenTurn && !noBaseSent && !!(shared && shared.snap && shared.snap.you && shared.snap.you.inQueue === true);
       startPoll();
     } else {
-      stopPoll();
+      stopPoll('lost_leader');
       hitSeen = null;
+      lastOwned = null;
       freeAbort(false);
       abilityAbort(false);
     }
@@ -751,7 +781,7 @@
   function stopTimers() {
     if (timers.ui) { window.clearInterval(timers.ui); timers.ui = null; }
     if (timers.leader) { window.clearInterval(timers.leader); timers.leader = null; }
-    stopPoll();
+    stopPoll('stopped');
     hitSeen = null;
     detachBar();
   }
@@ -762,13 +792,13 @@
     timers.poll = window.setInterval(cycle, POLL_MS);
   }
 
-  function stopPoll() {
+  function stopPoll(why) {
     if (timers.poll) { window.clearInterval(timers.poll); timers.poll = null; }
     if (kickTimer) { window.clearTimeout(kickTimer); kickTimer = null; }
     if (extraTimer) { window.clearTimeout(extraTimer); extraTimer = null; }
     kickState = null;
     pendingExtra = false;
-    hitAbort();
+    hitAbort(why);
   }
 
   // ------------------------------------------------------------ Torn's chain bar (read only)
@@ -1091,7 +1121,7 @@
     fetchChain(key, function (reading) {
       chainCall('state', reading, function (r, j) {
         var snap = takeAnswer(r, j, true);
-        if (snap) { afterSnap(snap); hitWatch(snap); }
+        if (snap) { afterSnap(snap); hitWatch(snap); noteOwned(snap); sendNoBase(snap); }
         cycleBusy = false;
         maybeNames(key);
         afterCycle(snap);
@@ -1479,13 +1509,16 @@
     return attackTimes.length;
   }
 
+  // 0.8.1: ON unless a saved choice says false. A saved true or false is kept as it is.
   function getRejoin() {
-    return gmGet(K_REJOIN, false) === true;
+    return gmGet(K_REJOIN, true) !== false;
   }
 
   // Forgets the hit being looked for. An answer that is still on its way is not
   // believed when it comes.
-  function hitAbort() {
+  function hitAbort(why) {
+    // 0.8.1 measurement: a search that is cut off (leadership lost, Watch off, page left) says so.
+    if (why && hitCtl) sendHitDiag(hitCtl, why, true);
     hitGen += 1;
     hitCtl = null;
     if (hitTimer) { window.clearTimeout(hitTimer); hitTimer = null; }
@@ -1522,8 +1555,9 @@
       hitCtl.high = cur;
       hitCtl.tries = 0;
       hitCtl.gen = hitGen;
+      if (ownedBetween(chainId, prev, cur)) hitCtl.wasOwner = true;
     } else {
-      hitCtl = { gen: hitGen, chainId: chainId, low: prev + 1, high: cur, tries: 0 };
+      hitCtl = { gen: hitGen, chainId: chainId, low: prev + 1, high: cur, tries: 0, lastKind: 'not_found', lastSeen: 'none', lastAttacks: 0, diagSent: false, wasOwner: ownedBetween(chainId, prev, cur) };
     }
     hitTry();
   }
@@ -1537,14 +1571,21 @@
     var ctl = hitCtl;
     if (!ctl || !isLeader || !watchOn || !running) return;
     var key = getKey();
-    if (!key || (shared && shared.hitKeyBad === true)) { hitCtl = null; return; }
+    if (!key) { hitCtl = null; return; }
+    if (shared && shared.hitKeyBad === true) { sendHitDiag(ctl, 'torn_error_16', false); hitCtl = null; return; }
     // He is not in the queue (he left by hand): no call, not even a retry.
     var seenSnap = (shared && shared.snap) ? shared.snap : null;
     if (seenSnap && !seenSnap.you.inQueue) { hitCtl = null; return; }
     if (attacksBusy) { hitTimer = window.setTimeout(hitTry, HIT_BUSY_MS); return; }
     ctl.tries += 1;
     var gen = ctl.gen;
-    if (Date.now() < tornPausedUntil || attacksInWindow() >= HIT_WINDOW_MAX) { hitMiss(ctl); return; }
+    ctl.lastAttacks = 0;
+    ctl.lastSeen = 'none';
+    if (Date.now() < tornPausedUntil || attacksInWindow() >= HIT_WINDOW_MAX) {
+      ctl.lastKind = Date.now() < tornPausedUntil ? 'paused' : 'window';
+      hitMiss(ctl);
+      return;
+    }
 
     attackTimes.push(Date.now());
     attacksBusy = true;
@@ -1564,15 +1605,19 @@
           tornPausedUntil = Date.now() + TORN_PAUSE_MS;
           publish({ torn: { kind: 'paused', until: tornPausedUntil, msg: 'Torn asked us to wait' } });
         } else if (code === 16) {
+          sendHitDiag(ctl, 'torn_error_16', false);
           hitCtl = null;
           publish({ hitKeyBad: true });
           return;
         }
+        ctl.lastKind = 'error:' + diagCode(code);
         hitMiss(ctl);
         return;
       }
-      var found = (j && typeof j === 'object') ? findMyHit(j, ctl) : null;
-      if (!found) { hitMiss(ctl); return; }
+      if (!j || typeof j !== 'object') { ctl.lastKind = 'no_answer'; hitMiss(ctl); return; }
+      noteAttacks(j, ctl);
+      var found = findMyHit(j, ctl);
+      if (!found) { ctl.lastKind = 'not_found'; hitMiss(ctl); return; }
       hitCtl = null;
       reportHit(ctl.chainId, found);
     });
@@ -1580,8 +1625,77 @@
 
   function hitMiss(ctl) {
     if (hitCtl !== ctl) return;
-    if (ctl.tries > HIT_MAX_RETRIES) { hitCtl = null; return; }
+    if (ctl.tries > HIT_MAX_RETRIES) { sendHitDiag(ctl, diagOutcome(ctl), false); hitCtl = null; return; }
     hitTimer = window.setTimeout(hitTry, HIT_RETRY_MS);
+  }
+
+  // ---- 0.8.1 measurement: why a hit search ended without a report (no extra Torn call)
+
+  function diagCode(code) {
+    return (isInt(code) && code >= 0 && code <= 999) ? code : 0;
+  }
+
+  // The outcome word of a search that ran out of tries, from how its LAST try ended.
+  function diagOutcome(ctl) {
+    var k = ctl.lastKind;
+    if (k === 'paused') return 'torn_paused';
+    if (k === 'window') return 'window_full';
+    if (k === 'no_answer') return 'no_answer';
+    if (typeof k === 'string' && k.indexOf('error:') === 0) return 'torn_error_' + k.slice(6);
+    return 'not_found';
+  }
+
+  // What the Torn answer held, as numbers only: how many attacks, and where the newest
+  // chain number lay against the hit numbers looked for (none = no attack with a
+  // chain number, or the newest one lay inside the range but could not be used).
+  function noteAttacks(j, ctl) {
+    var list = Array.isArray(j.attacks) ? j.attacks : [];
+    var newest = -1;
+    for (var i = 0; i < list.length; i++) {
+      var a = list[i];
+      if (a && typeof a === 'object' && isInt(a.chain) && a.chain > 0 && a.chain > newest) newest = a.chain;
+    }
+    ctl.lastAttacks = Math.min(list.length, HIT_LIMIT);
+    ctl.lastSeen = newest < 0 ? 'none' : (newest < ctl.low ? 'below' : (newest > ctl.high ? 'above' : 'none'));
+  }
+
+  // He owned (decided, isOwner) the last turn the answers showed: kept in memory, per tab.
+  function noteOwned(snap) {
+    if (snap.turn && snap.turn.resolved === true && snap.you.isOwner === true) lastOwned = { chainId: snap.turn.chainId, current: snap.turn.current };
+  }
+
+  // Did he own a turn the chain has now left (hit numbers prev .. cur - 1)?
+  function ownedBetween(chainId, prev, cur) {
+    return !!lastOwned && lastOwned.chainId === chainId && lastOwned.current >= prev && lastOwned.current <= cur - 1;
+  }
+
+  // Tells the KS server why the search ended. At most one per search. Nothing when he
+  // is not in the queue. A search that is cut off (needSession) only speaks if a valid
+  // session is already there: no sign-in is started for it.
+  function sendHitDiag(ctl, outcome, needSession) {
+    if (!ctl || ctl.diagSent) return;
+    ctl.diagSent = true;
+    // Only the member who OWNED the turn the chain moved on from is measured; the others look for a hit they did not make.
+    if (outcome !== 'leader_no_base' && ctl.wasOwner !== true) return;
+    var snap = (shared && shared.snap) ? shared.snap : null;
+    if (snap && snap.you && snap.you.inQueue === false) return;
+    if (needSession && !(session && session.validUntil > Date.now())) return;
+    var notFound = outcome === 'not_found';
+    var diag = { chainId: ctl.chainId, low: ctl.low, high: ctl.high, tries: ctl.tries, outcome: outcome, seen: notFound ? ctl.lastSeen : 'na', attacks: ctl.lastAttacks };
+    chainCall('hitdiag', null, function (r, j) { takeAnswer(r, j, false); }, { diag: diag });
+    if (notFound || outcome === 'torn_paused' || outcome === 'window_full' || outcome.indexOf('torn_error_') === 0) {
+      setLocalMsg(HIT_DIAG_TEXT + outcome, HIT_DIAG_MSG_MS);
+    }
+  }
+
+  // A tab that took over as leader without a fresh shared turn tells the server once,
+  // after its first good answer, if he still stands in the queue.
+  function sendNoBase(snap) {
+    if (!noBasePending) return;
+    noBasePending = false;
+    if (noBaseSent || !snap.you.inQueue) return;
+    noBaseSent = true;
+    sendHitDiag({ chainId: snap.turn ? snap.turn.chainId : 0, low: 0, high: 0, tries: 0, lastSeen: 'na', lastAttacks: 0, diagSent: false }, 'leader_no_base', false);
   }
 
   // The newest attack of the member's that carries a hit number from low to high.
@@ -1998,7 +2112,9 @@
       session = null;
       setLocalMsg('Key removed.');
     }), 'forget');
-    ui.rejoinBtn = mark(makeButton('Rejoin after my hit: OFF', '#4a4f57', '#ffffff', onRejoinClick), 'rejoin');
+    ui.rejoinBtn = mark(makeButton('Rejoin after my hit: ON', '#2e8b57', '#ffffff', onRejoinClick), 'rejoin');
+    // The last button of the window, with space above it: never next to Im here.
+    ui.rejoinBtn.style.marginTop = REJOIN_GAP_PX + 'px';
     ui.targetsBtn = mark(makeButton('Targets', '#6a4fb3', '#ffffff', onTargetsClick), 'targetsbtn');
     ui.targets = buildTargetsPanel();
 
@@ -2019,11 +2135,11 @@
     ui.body.appendChild(ui.watchBtn);
     ui.body.appendChild(ui.joinBtn);
     ui.body.appendChild(ui.leaveBtn);
-    ui.body.appendChild(ui.rejoinBtn);
     ui.body.appendChild(ui.hereBtn);
     ui.body.appendChild(ui.forgetBtn);
     ui.body.appendChild(ui.targetsBtn);
     ui.body.appendChild(ui.targets.wrap);
+    ui.body.appendChild(ui.rejoinBtn);
     ui.box.appendChild(ui.body);
     root.appendChild(ui.box);
 
@@ -2329,8 +2445,12 @@
 
   // The choice lives in Tampermonkey on this PC, not on the server.
   function onRejoinClick() {
-    gmSet(K_REJOIN, !getRejoin());
-    render();
+    // A row above the buttons came or went a moment ago: the click was meant for something that stood here before.
+    if (Date.now() < rejoinSteadyAt) return;
+    var now = !getRejoin();
+    gmSet(K_REJOIN, now);
+    // setLocalMsg draws the window once; the line stays 8 s.
+    setLocalMsg(now ? REJOIN_ON_NOTE : REJOIN_OFF_NOTE, REJOIN_NOTE_MS);
   }
 
   function onWatchClick() {
@@ -2612,6 +2732,7 @@
       show(ui.joinBtn, false);
       show(ui.leaveBtn, false);
       show(ui.rejoinBtn, false);
+      rejoinTop = null;
       show(ui.hereBtn, false);
       show(ui.forgetBtn, hasKey);
       show(ui.freeLink, false);
@@ -2729,6 +2850,12 @@
       ui.hereBtn.style.background = on ? '#ffffff' : '#e0a800';
       ui.hereBtn.style.opacity = ui.hereBtn.disabled ? '0.5' : '1';
     }
+
+    // 0.8.1: did a row above the buttons come or go since the last drawing? Then Rejoin stands
+    // somewhere else, and a click on it in the next second was aimed at something else.
+    var rjTop = hasKey ? Math.round(ui.rejoinBtn.getBoundingClientRect().top - ui.body.getBoundingClientRect().top + ui.body.scrollTop) : null;
+    if (rejoinTop !== null && rjTop !== null && rjTop !== rejoinTop) rejoinSteadyAt = Date.now() + REJOIN_STEADY_MS;
+    rejoinTop = rjTop;
   }
 
   // ------------------------------------------------------------ lifecycle
