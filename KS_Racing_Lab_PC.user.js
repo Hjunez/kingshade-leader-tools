@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Racing Lab
 // @namespace    https://github.com/Hjunez/kingshade-leader-tools
-// @version      0.7.0
+// @version      0.7.1
 // @description  Shows the value of each racing part for the car and track you choose, on the Parts & Modifications page of Torn. Display only on the page. Two optional switches, both off until you switch them on: share your own races and cars with Kingshade, and show real race results from the KS server on Change car.
 // @author       Kingshade [4295791]
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Racing_Lab_PC.user.js
@@ -3015,7 +3015,7 @@ const KSRL = (function () {
 })();
 
 /* ksrl-parts BEGIN - pure logic, no DOM, runs in Node the same way as the engine */
-const SCRIPT_VERSION = '0.7.0';
+const SCRIPT_VERSION = '0.7.1';
 // Claude choice 2026-11-09 (TUNE-LIMIT 2026-10-08: ratio/turbo differences of 0.2-0.5 % do not show in real races). Change only on owner decision.
 const EQUAL_WITHIN_PCT = 0.5;
 // 0.6.0: open for every member of faction 48039. Kingshade and Cheese are let in as before, with no extra call; anyone else is checked once with
@@ -3810,14 +3810,7 @@ function rankCarsForTrack(cars, track, model) {
     if (fixedDirt) out.lineSegs.push([{ t: 'Dirt builds (dirt tires and suspension): ' }].concat(dirt.length ? carNameList(dirt, function () { return true; }) : [{ t: 'none' }]));
     out.badges = {};
     for (const e of cars) out.badges[String(e.id)] = fixedDirt ? (tuneCode(e.parts || [])[0] === 'D' ? 'dirt build' : 'not a dirt build') : 'no estimate';
-    out.tableSegs = [{ t: track.title + ' (' + sName + ') \u00b7 no estimate' + (fixedDirt ? ' \u00b7 dirt builds: ' : '') }];
-    if (fixedDirt) {
-      if (dirt.length) dirt.forEach(function (e, k) { if (k > 0) out.tableSegs.push({ t: ', ' }); out.tableSegs.push({ t: carName(e), g: true }); });
-      else out.tableSegs.push({ t: 'none' });
-    }
     out.lines = out.lineSegs.map(segText);
-    out.tableLine = segText(out.tableSegs);
-    out.tableGreen = out.tableSegs.filter(function (x) { return x.g; }).map(function (x) { return x.t; });
     return out;
   }
   const ranked = [];
@@ -3864,25 +3857,11 @@ function rankCarsForTrack(cars, track, model) {
   if (unknown.length) lineSegs.push([{ t: 'No estimate: ' }].concat(carNameList(unknown)));
   out.lineSegs = lineSegs;
   out.lines = lineSegs.map(segText);
-  const nxt = out.rows.length > 1 ? out.rows[1] : null;
-  const n2 = nxt ? ranked[1].car : null;
-  out.tableSegs = [{ t: track.title + ' (' + sName + ') \u00b7 ' }, best ? { t: carName(best.car), g: true } : { t: 'no estimate' }];
-  if (nxt) out.tableSegs.push({ t: ' \u00b7 next: ' }, { t: carName(n2), g: nxt.withinMargin }, { t: ' +' + carsF2(nxt.pctVsBest) + ' %' + (nxt.withinMargin ? ' (within the margin)' : '') });
-  out.tableLine = segText(out.tableSegs);
-  out.tableGreen = out.tableSegs.filter(function (x) { return x.g; }).map(function (x) { return x.t; });
   return out;
 }
 
 function carTracksSorted(tracks) {
   return tracks.filter(function (t) { return t.title !== null; }).sort(function (a, b) { return a.title < b.title ? -1 : (a.title > b.title ? 1 : 0); });
-}
-
-// "Your best car per track": one line per track, alphabetical by title.
-function carTableLines(tracks, cars, model) {
-  return carTracksSorted(tracks).map(function (tr) { return rankCarsForTrack(cars, tr, model).tableLine; });
-}
-function carTableSegs(tracks, cars, model) {
-  return carTracksSorted(tracks).map(function (tr) { return rankCarsForTrack(cars, tr, model).tableSegs; });
 }
 
 // The lines of the Change car view as segments, with " · in this race" on the row of the car that is entered (only when it is among the listed rows).
@@ -3896,10 +3875,9 @@ function carsChangeSegs(rank, inRaceCarId) {
 }
 function carsChangeLines(rank, inRaceCarId) { return carsChangeSegs(rank, inRaceCarId).map(segText); }
 
-// The colour of a badge: red for a wrong surface, green for the cars the panel recommends (the best one and those within the margin; on Mudpit the dirt
-// builds), grey for the rest.
+// The colour of a badge: red for a wrong surface, green for the car the panel recommends (0.7.1: YOURS, the best of your cars here), grey for the rest.
 function carBadgeKind(text, isGreen) {
-  if (text === 'wrong surface') return 'bad';
+  if (text === 'wrong surface' || / wrong parts for this track$/.test(text)) return 'bad';
   return isGreen ? 'good' : 'plain';
 }
 
@@ -3907,9 +3885,13 @@ function carBadgeKind(text, isGreen) {
 // -> { ok, view: 'change' | 'list', wrap, anchor, trackText, cars: [{ id, li, info, inRace }] }
 function readCarsPage(root) {
   const scope = root || document;
-  const out = { ok: false, view: null, wrap: null, anchor: null, trackText: null, cars: [] };
+  const out = { ok: false, view: null, wrap: null, anchor: null, trackText: null, cars: [], playerClass: null };
   const wrap = scope.querySelector('#racingAdditionalContainer .enlist-wrap.enlisted-wrap');
   if (!wrap) return out;
+  // 0.7.1: the class of the driver, from the banner "CLASS A" at the top of the racing page (a race lets in this class and the lower ones)
+  const letter = scope.querySelector('.racing-main-wrap .banner .class-letter');
+  const letterText = letter ? letter.textContent.trim().toUpperCase() : '';
+  out.playerClass = KSRL.CLASSES.indexOf(letterText) >= 0 ? letterText : null;
   const list = wrap.querySelector('ul.enlist-list');
   if (!list || list.querySelector('a[step-value="selectParts"]')) return out;   // the car picker of the Parts tab is not a car view
   for (const li of list.querySelectorAll(':scope > li')) {
@@ -4152,7 +4134,22 @@ async function loadCarsData(deps, key, signal, stale) {
     const old = en.err ? deps.store.peek('user/enlistedcars') : null;
     return old ? Object.assign({}, en, { staleAgeMs: deps.now() - old.fetchedAtMs }) : en;
   }
-  return { ok: true, data: { tracks: tr.items.filter(function (x) { return x.title !== null; }), cars: en.items.filter(function (e) { return e.is_removed !== true; }), fetchedAtMs: en.fetchedAtMs } };
+  // 0.7.1: the car models and the parts of the Torn API (the same two selections and the same 24 h cache as the Parts panel), so the model can name the fastest build of
+  // every car model. They are only a help: when they cannot be had the answer goes on without the model's builds.
+  const rc = await load('racing/cars', false);
+  if (!rc.ok && rc.stale) return rc;
+  const ru = rc.ok ? await load('racing/carupgrades', false) : { ok: false };
+  if (!ru.ok && ru.stale) return ru;
+  const racingCars = rc.ok ? rc.items : null;
+  const upgrades = ru.ok ? ru.items : null;
+  const partsClass = upgrades ? KSRL.partsClassFromEnlisted(en.items, upgrades).cls : null;
+  return {
+    ok: true,
+    data: {
+      tracks: tr.items.filter(function (x) { return x.title !== null; }), cars: en.items.filter(function (e) { return e.is_removed !== true; }), fetchedAtMs: en.fetchedAtMs,
+      racingCars: racingCars, upgrades: upgrades, partsClass: partsClass,
+    },
+  };
 }
 
 async function loadPanelData(deps, key, page, signal, stale) {
@@ -4945,7 +4942,8 @@ function viewsSource(view, nowMs) {
   return 'KS server, updated ' + shareAgoText(ms) + (ms > VIEWS_STALE_S * 1000 ? ' · STALE' : '');
 }
 function viewsPlural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
-function viewsStatText(g) { return g.n_timed > 0 && g.median !== null && g.best !== null ? 'median ' + fmtTime(g.median) + ' · best ' + fmtTime(g.best) : 'no timed laps'; }
+// 0.7.1: the words of the data part ("Show the data"): races, average lap (the median), top 10 % lap (p10), fastest lap (the best)
+function viewsStatText(g) { return g.n_timed > 0 && g.median !== null && g.best !== null ? 'average lap ' + fmtTime(g.median) + ' · fastest lap ' + fmtTime(g.best) : 'no timed laps'; }
 
 function realResultsRows(snap, ctx, nowMs) {
   const rows = [];
@@ -4986,7 +4984,7 @@ function realResultsRows(snap, ctx, nowMs) {
       any = true;
       for (const g of gs) {
         const build = g.snap === null ? 'build unknown' : (g.snap === latest[g.car_id] ? 'current build' : 'older build');
-        row(mark(stale, [text(carName(e) + ' #' + e.id + ' · ' + (g.official === 1 ? 'official' : 'custom') + ' · ' + viewsPlural(g.laps, 'lap', 'laps') + ' · n ' + g.n + ' · ' + viewsStatText(g) + ' · ' + viewsPlural(g.wins, 'win', 'wins') + ' · ' + build)]));
+        row(mark(stale, [text(carName(e) + ' #' + e.id + ' · ' + (g.official === 1 ? 'official' : 'custom') + ' · ' + viewsPlural(g.laps, 'lap', 'laps') + ' · ' + viewsPlural(g.n, 'race', 'races') + ' · ' + viewsStatText(g) + ' · ' + viewsPlural(g.wins, 'win', 'wins') + ' · ' + build)]));
       }
     }
     if (!any) row(mark(stale, [text('No races here yet')]));
@@ -5016,8 +5014,8 @@ function realResultsRows(snap, ctx, nowMs) {
       const gap = k === 0 ? 0 : (g.p10 - list[0].p10) * 100 / list[0].p10;
       const tag = k === 0 ? ' · fastest' : (gap <= 1.0 ? ' · inside 1 % = coin flip' : '');
       const own = mine.has(g.car_item_id) && !stale;
-      row(stale ? [text((k + 1) + '. ' + g.car_item_name + ' · p10 ' + fmtTime(g.p10) + ' · median ' + fmtTime(g.median) + ' · n ' + g.n + ' · ' + viewsPlural(g.drivers, 'driver', 'drivers') + tag, { d: true })]
-        : [text((k + 1) + '. '), text(g.car_item_name, own ? { g: true } : {}), text(' · p10 ' + fmtTime(g.p10) + ' · median ' + fmtTime(g.median) + ' · n ' + g.n + ' · ' + viewsPlural(g.drivers, 'driver', 'drivers') + tag)]);
+      row(stale ? [text((k + 1) + '. ' + g.car_item_name + ' · top 10 % lap ' + fmtTime(g.p10) + ' · average lap ' + fmtTime(g.median) + ' · ' + viewsPlural(g.n, 'race', 'races') + ' · ' + viewsPlural(g.drivers, 'driver', 'drivers') + tag, { d: true })]
+        : [text((k + 1) + '. '), text(g.car_item_name, own ? { g: true } : {}), text(' · top 10 % lap ' + fmtTime(g.p10) + ' · average lap ' + fmtTime(g.median) + ' · ' + viewsPlural(g.n, 'race', 'races') + ' · ' + viewsPlural(g.drivers, 'driver', 'drivers') + tag)]);
     });
     const bt = p.below_threshold.filter(function (b) { return b.track_id === ctx.trackId && b.car_class === cls && b.laps === laps; });
     const more = bt.reduce(function (sum, b) { return sum + b.models; }, 0);
@@ -5030,21 +5028,414 @@ function realResultsRows(snap, ctx, nowMs) {
       .sort(function (a, b) { return (b.official - a.official) || ((a.median === null ? 1e12 : a.median) - (b.median === null ? 1e12 : b.median)) || (a.car_item_id - b.car_item_id) || (String(a.parts) < String(b.parts) ? -1 : (String(a.parts) > String(b.parts) ? 1 : 0)); }).slice(0, 5);
     if (list.length === 0) row(mark(stale, [text('No shared builds on this track yet')]));
     let usedStats = false;
-    let usedTune = false;
     for (const g of list) {
       const tune = tuneCode(g.parts);
       let what;
-      if (tune !== '---') { what = 'tune ' + tune; usedTune = true; }
+      if (tune !== '---') what = tune;
       else if (g.stats) { what = 'stats ' + g.stats.top_speed + '/' + g.stats.acceleration + '/' + g.stats.braking + '/' + g.stats.handling + '/' + g.stats.safety; usedStats = true; }
-      else what = 'tune unknown';
-      row(mark(stale, [text(g.car_item_name + ' · ' + (g.official === 1 ? 'official' : 'custom') + ' · ' + what + ' · ' + viewsStatText(g) + ' · n ' + g.n + ' · ' + viewsPlural(g.owners, 'owner', 'owners') + (g.n < 3 ? ' · few races' : ''))]));
+      else what = 'code unknown';
+      row(mark(stale, [text(g.car_item_name + ' · ' + (g.official === 1 ? 'official' : 'custom') + ' · ' + what + ' · ' + viewsStatText(g) + ' · ' + viewsPlural(g.n, 'race', 'races') + ' · ' + viewsPlural(g.owners, 'owner', 'owners') + (g.n < 3 ? ' · few races' : ''))]));
     }
-    if (usedTune) row([text(TUNE_LEGEND, { d: true })], 'ksrl-rr ksrl-rr-dim');
     if (usedStats) row([text('stats = top speed / acceleration / braking / handling / safety', { d: true })], 'ksrl-rr ksrl-rr-dim');
   });
   return rows;
 }
 /* ksrl-views END */
+
+/* ksrl-decide BEGIN - 0.7.1: ONE answer per track instead of raw data. Pure: the cars, the data and the clock go in, the decision comes out. No DOM, no requests, nothing stored
+   except the one tick "Chase track records" (settings). Everything the KS server gave is used only when it is there and not STALE; the order of the sources is fixed. */
+const SETTINGS_STORE = 'ksrl.v1.settings';
+const CHASE_TITLE = 'Chase track records';
+const CHASE_TEXT = 'For racers chasing track records: shows the exact fastest build down to gearbox and turbo, even when the difference is too small to show up in races.';
+const CODE_LEGEND = 'T/D = tarmac or dirt parts · S/L = short or long gearbox · 2/3 = turbo stage';
+const DECIDE_MIN_RACES = 15;       // a car model needs this many races ...
+const DECIDE_MIN_DRIVERS = 5;      // ... by this many drivers before it can be the best car (the server filters the same way)
+const DECIDE_OWN_MIN_RACES = 3;    // timed own races with the current build before they can overrule the model
+const DECIDE_BUILD_MIN_RACES = 3;  // races of a build that KS members shared before its code is used
+const DECIDE_REAL_DIFF_PCT = EQUAL_WITHIN_PCT;   // the medians of two own cars must differ by more than this before the races overrule the model
+const DECIDE_KEEP_PCT = EQUAL_WITHIN_PCT;        // under this the difference has not shown up in real races: keep what you have
+// Car models that cannot be bought: tournament prizes. 519 = Stormatti Casteon (Kingshade 2026-11-16; source: KS_Racing_Guide_v2.2, "a tournament prize you cannot buy").
+const UNBUYABLE_CAR_ITEM_IDS = { 519: 'Stormatti Casteon' };
+const BEST_UNKNOWN_OFF_TEXT = 'unknown without KS data — switch on ' + VIEWS_TITLE + '.';
+
+// The tick: anything that does not look right is OFF (fail-closed: garbage never switches the chase on). Missing = OFF (migration from 0.7.0).
+function settingsReadChase(gm) {
+  let v = null;
+  try { v = gm.get(SETTINGS_STORE, null); } catch (e) { v = null; }
+  return isPlainObject(v) && v.schemaVersion === 1 && v.chase === true;
+}
+function settingsSetChase(gm, on) { gm.set(SETTINGS_STORE, { schemaVersion: 1, chase: on === true }); }
+
+// The classes a race of class `cls` lets in: that class and every lower one (A is the highest).
+function classesFrom(cls) { const i = KSRL.CLASSES.indexOf(cls); return i < 0 ? [] : KSRL.CLASSES.slice(i); }
+function highestClass(cars) {
+  let c = null;
+  for (const e of cars || []) { const i = KSRL.CLASSES.indexOf(e && e.class); if (i >= 0 && (c === null || i < KSRL.CLASSES.indexOf(c))) c = e.class; }
+  return c;
+}
+
+// What the decision may use of the KS server. snap = views.snapshot(). A view that is off, not loaded, missing, unreadable or older than 12 h (STALE) is NOT used;
+// the reason says why (it goes into the "Why" row). Exactly 12 h is not STALE (as in the "Real results" rows).
+function decisionData(snap, nowMs, base) {
+  const out = { model: base.model || KSRL.LAP_MODEL, racing_cars: base.racingCars || null, upgrades: base.upgrades || null, partsClass: base.partsClass || null,
+    records: base.records || null, track_models: null, faction_builds: null, car_track_stats: null, reasons: {} };
+  for (const name of VIEW_NAMES) {
+    let reason = null;
+    const cache = snap && snap.enabled ? snap.cache : null;
+    if (!snap || !snap.enabled) reason = 'KS faction data is off';
+    else if (!cache) reason = snap.stop || (snap.last && snap.last.kind !== 'OK') ? 'KS faction data could not be read' : 'KS faction data is not loaded yet';
+    else if (cache.missing[name] !== undefined) reason = 'KS faction data is not published yet';
+    else if (cache.bad[name] !== undefined || !cache.views[name]) reason = 'KS faction data could not be read';
+    else if (viewsAgeMs(cache.views[name], nowMs) > VIEWS_STALE_S * 1000) reason = 'KS faction data is too old (STALE)';
+    else out[name] = cache.views[name].payload;
+    out.reasons[name] = reason;
+  }
+  return out;
+}
+
+function decidePctText(p, chase) { return Math.max(0, p).toFixed(chase ? 2 : 1) + ' %'; }
+// "x.x % slower"; under 0.5 % (and no chase) the difference has not shown up in races: "same speed in races"
+function decideSlower(p, chase) {
+  if (chase) return p < 0.005 ? 'same speed' : decidePctText(p, true) + ' slower';
+  return p < DECIDE_KEEP_PCT ? 'same speed in races' : decidePctText(p, false) + ' slower';
+}
+
+// track: { id, title }. laps: the laps of the race, or null (then the official laps of the track: the group with the most races in track_models).
+// allowedClasses: the classes the race lets in. myCars: your enlisted cars (user/enlistedcars items). data: decisionData(...) = { model, track_models, faction_builds,
+// car_track_stats, records (the stored Torn records or null), racing_cars, upgrades, partsClass, reasons }. chase: the tick.
+function decideTrack(track, laps, allowedClasses, myCars, data, chase) {
+  const model = data.model || KSRL.LAP_MODEL;
+  const tid = track.id;
+  const title = track.title;
+  const surface = trackSurfaceLabel(tid);
+  const allowed = (allowedClasses || []).filter(function (c) { return KSRL.CLASSES.indexOf(c) >= 0; });
+  const isChase = chase === true;
+  const tm = data.track_models || null;
+  const fb = data.faction_builds || null;
+  const cts = data.car_track_stats || null;
+  const reasons = data.reasons || {};
+  const upgrades = Array.isArray(data.upgrades) ? data.upgrades : null;
+  const out = {
+    trackId: tid, trackTitle: title, surface: surface, allowed: allowed, chase: isChase, laps: null, best: null, yours: null, allWrong: false,
+    have: false, gap: null, rec: null, swaps: [], why: '', badges: {}, badgeKinds: {}, rows: [],
+  };
+
+  // ---- laps and the races of all drivers on this track (car models of the allowed classes, enough races and drivers)
+  const tmTrack = tm ? tm.groups.filter(function (g) { return g.track_id === tid && allowed.indexOf(g.car_class) >= 0 && g.n >= DECIDE_MIN_RACES && g.drivers >= DECIDE_MIN_DRIVERS; }) : [];
+  let L = Number.isInteger(laps) && laps > 0 ? laps : null;
+  if (L === null && tmTrack.length) {
+    let g0 = null;
+    for (const g of tmTrack) if (g0 === null || g.n > g0.n || (g.n === g0.n && g.laps < g0.laps)) g0 = g;
+    L = g0.laps;
+  }
+  out.laps = L;
+  const p10Of = new Map();
+  for (const g of tmTrack) if (g.laps === L && (!p10Of.has(g.car_item_id) || g.p10 < p10Of.get(g.car_item_id).p10)) p10Of.set(g.car_item_id, g);
+
+  // ---- the model: the exactly fastest build of a car model on this track
+  const rcById = new Map();
+  for (const c of Array.isArray(data.racing_cars) ? data.racing_cars : []) if (c && c.complete === true) rcById.set(c.car_item_id, c);
+  const mbCache = new Map();
+  function modelBest(id) {
+    if (mbCache.has(id)) return mbCache.get(id);
+    let r = null;
+    const c = rcById.get(id);
+    if (c && upgrades) {
+      const est = KSRL.estimateBestBuild(model, tid, c, upgrades, data.partsClass);
+      if (est.state !== 'UNKNOWN' && est.lap > 0 && Array.isArray(est.parts)) r = { lap: est.lap, parts: est.parts, code: tuneCode(est.parts.map(function (u) { return u.id; })) };
+    }
+    mbCache.set(id, r);
+    return r;
+  }
+
+  // ---- 1a) BEST: the absolute best car model on this track among the allowed classes. First source that is enough: races, Torn record, model.
+  // 0.7.1: car models that cannot be bought (tournament prizes; source: the guide) are skipped: BEST is the best car you can BUY. The faster prize car gets a line of its own.
+  function pickBest(skip) {
+  let best = null;
+  const raceList = Array.from(p10Of.values()).filter(function (g) { return !skip[g.car_item_id]; }).sort(function (a, b) { return (a.p10 - b.p10) || (a.median - b.median) || (a.car_item_id - b.car_item_id); });
+  if (raceList.length) {
+    const g = raceList[0];
+    best = { source: 'races', carItemId: g.car_item_id, name: g.car_item_name, cls: g.car_class, p10: g.p10, n: g.n, drivers: g.drivers };
+  }
+  if (best === null && data.records && isPlainObject(data.records.classes)) {
+    let rb = null;
+    for (const cls of allowed) {
+      const en = data.records.classes[cls];
+      const t = en && en.tracks ? en.tracks[String(tid)] : null;
+      for (const r of t && Array.isArray(t.records) ? t.records : []) {
+        if (r && Number.isInteger(r.car_item_id) && !skip[r.car_item_id] && typeof r.lap_time === 'number' && Number.isFinite(r.lap_time) && r.lap_time > 0 && (rb === null || r.lap_time < rb.lap_time)) rb = r;
+      }
+    }
+    if (rb) {
+      const c = rcById.get(rb.car_item_id);
+      best = { source: 'track record', carItemId: rb.car_item_id, name: (c && c.car_item_name) || rb.car_item_name || ('car ' + rb.car_item_id), cls: c ? c.class : null };
+    }
+  }
+  if (best === null) {
+    let mbest = null;
+    for (const c of rcById.values()) {
+      if (allowed.indexOf(c.class) < 0 || skip[c.car_item_id]) continue;
+      const mb = modelBest(c.car_item_id);
+      if (mb && (mbest === null || mb.lap < mbest.lap || (mb.lap === mbest.lap && c.car_item_id < mbest.c.car_item_id))) mbest = { c: c, lap: mb.lap };
+    }
+    if (mbest) best = { source: 'model', carItemId: mbest.c.car_item_id, name: mbest.c.car_item_name, cls: mbest.c.class };
+  }
+  if (best) {
+    if (best.p10 === undefined) { const g = p10Of.get(best.carItemId); best.p10 = g ? g.p10 : null; }
+    const mb = modelBest(best.carItemId);
+    best.lap = mb ? mb.lap : null;
+    best.codeNote = null;
+    if (mb) { best.code = mb.code; best.codeFrom = 'model'; }
+    else {
+      let bf = null;   // the fastest build that KS members shared for this model on this track (official races, the same laps)
+      if (fb) for (const g of fb.groups) {
+        if (g.car_item_id !== best.carItemId || g.track_id !== tid || g.official !== 1 || g.n < DECIDE_BUILD_MIN_RACES || g.median === null || (L !== null && g.laps !== L) || tuneCode(g.parts) === '---') continue;
+        if (bf === null || g.median < bf.median) bf = g;
+      }
+      if (bf) { best.code = tuneCode(bf.parts); best.codeFrom = 'members'; }
+      else if (surface === 'dirt' || surface === 'tarmac') { best.code = surface === 'dirt' ? 'D' : 'T'; best.codeFrom = 'surface'; best.codeNote = surface + ' parts'; }
+      else { best.code = '?'; best.codeFrom = 'unknown'; }
+    }
+  }
+  return best;
+  }
+  const anyBest = pickBest({});
+  let best = anyBest;
+  if (anyBest && UNBUYABLE_CAR_ITEM_IDS[anyBest.carItemId]) {
+    best = pickBest(UNBUYABLE_CAR_ITEM_IDS);
+    // how much faster the prize car is: from the same source for both (p10 of both models, else the model), else just "faster"
+    let pct = null;
+    if (best && anyBest.p10 !== null && best.p10 !== null) pct = (best.p10 / anyBest.p10 - 1) * 100;
+    else if (best && anyBest.lap !== null && best.lap !== null) pct = (best.lap / anyBest.lap - 1) * 100;
+    out.faster = { name: anyBest.name, pct: pct };
+  }
+  out.best = best;
+  out.ksOff = reasons.track_models === 'KS faction data is off';
+
+  // ---- 1b) YOURS: the best of your own cars in the allowed classes
+  const mine = (myCars || []).filter(function (e) { return e && e.is_removed !== true; });
+  const latest = {};
+  if (cts) for (const g of cts.groups) if (g.snap !== null && (latest[g.car_id] === undefined || g.snap > latest[g.car_id])) latest[g.car_id] = g.snap;
+  const rows = mine.map(function (e) {
+    const parts = e.parts || [];
+    const code = tuneCode(parts);
+    let surf = 1;                                   // 0 = the surface of the track, 1 = neither, 2 = the other surface
+    if (surface === 'tarmac') surf = parts.some(function (p) { return DIRT_SURFACE_PARTS.indexOf(p) >= 0; }) ? 2 : (code[0] === 'T' ? 0 : 1);
+    else if (surface === 'dirt') surf = code[0] === 'D' ? 0 : (code[0] === 'T' ? 2 : 1);
+    const inClass = allowed.indexOf(e.class) >= 0;
+    let lap = null;
+    if (inClass && !(surface === 'tarmac' && surf === 2)) {      // the model cannot weigh dirt parts on tarmac
+      const est = KSRL.estimateFromStats(model, tid, e.class, e.stats);
+      if (est.state !== 'UNKNOWN' && est.lap > 0) lap = est.lap;
+    }
+    let own = null;                                 // real races with the CURRENT build (the newest snapshot of the car), this track and these laps
+    if (cts && L !== null && latest[e.id] !== undefined) {
+      const g = cts.groups.find(function (x) { return x.car_id === e.id && x.track_id === tid && x.laps === L && x.official === 1 && x.snap === latest[e.id]; });
+      if (g && g.n_timed >= DECIDE_OWN_MIN_RACES && g.median !== null) own = { median: g.median, n: g.n_timed };
+    }
+    const grp = p10Of.get(e.car_item_id) || null;
+    return { car: e, id: e.id, carItemId: e.car_item_id, name: e.car_item_name, code: code, surf: surf, inClass: inClass, lap: lap, own: own, p10: grp ? grp.p10 : null };
+  });
+  out.rows = rows;
+  const cands = rows.filter(function (r) { return r.inClass; });
+  const hasModel = cands.some(function (r) { return r.lap !== null; });
+  const surfaceFirst = surface === 'tarmac' || !hasModel;
+  // a is better than b. Real races decide when both cars have enough of them with the current build and the medians differ by more than 0.5 %.
+  function better(a, b) {
+    if (surfaceFirst && a.surf !== b.surf) return a.surf < b.surf;
+    if (a.own && b.own && Math.abs(a.own.median - b.own.median) / Math.min(a.own.median, b.own.median) * 100 > DECIDE_REAL_DIFF_PCT) return a.own.median < b.own.median;
+    if (hasModel) {
+      if (a.lap !== b.lap) { if (a.lap === null) return false; if (b.lap === null) return true; return a.lap < b.lap; }
+    } else {
+      if (a.own && b.own && a.own.median !== b.own.median) return a.own.median < b.own.median;
+      if ((a.own !== null) !== (b.own !== null)) return a.own !== null;
+      if (a.p10 !== b.p10) { if (a.p10 === null) return false; if (b.p10 === null) return true; return a.p10 < b.p10; }
+    }
+    return a.id < b.id;
+  }
+  let yours = null;
+  for (const r of cands.slice().sort(function (a, b) { return ((a.lap === null ? 1 : 0) - (b.lap === null ? 1 : 0)) || ((a.lap || 0) - (b.lap || 0)) || (a.id - b.id); })) {
+    if (yours === null || better(r, yours)) yours = r;
+  }
+  if (yours && surfaceFirst && yours.surf === 2) { out.allWrong = true; yours = null; }       // every car in the class has the other surface
+  if (yours) out.yours = { id: yours.id, name: yours.name, carItemId: yours.carItemId, code: yours.code, surf: yours.surf, lap: yours.lap, p10: yours.p10, own: yours.own, car: yours.car };
+
+  // ---- 1c) the gap between YOURS and BEST, in %, both from the same source: races (p10 of both models) or the model
+  function gapBetween(y, ref) {
+    if (y.carItemId === ref.carItemId && y.code === ref.code) return { pct: 0, source: null };
+    if (y.carItemId !== ref.carItemId && y.p10 !== null && ref.p10 !== null) return { pct: (y.p10 - ref.p10) / ref.p10 * 100, source: 'races' };
+    if (y.lap !== null && ref.lap !== null) return { pct: (y.lap - ref.lap) / ref.lap * 100, source: 'model' };
+    return null;
+  }
+  const sameModel = !!(best && yours && yours.carItemId === best.carItemId);
+  if (best && yours) {
+    let gap = gapBetween(yours, { carItemId: best.carItemId, code: best.code, p10: best.p10, lap: best.lap });
+    if (sameModel && best.codeFrom === 'surface' && yours.surf === 0) gap = { pct: 0, source: null };   // all that is known is the surface, and it is right
+    out.gap = gap;
+    out.have = gap !== null && gap.pct <= 0;
+    // 0.7.1 (Kingshade): the same car model with the same surface and under 0.5 % apart counts as having it (no tick); with the tick the exact code is needed
+    out.haveWithin = false;
+    if (!out.have && !isChase && sameModel && gap !== null && gap.pct < DECIDE_KEEP_PCT && yours.code[0] === best.code[0]) { out.have = true; out.haveWithin = true; }
+  }
+
+  // ---- 1d) the recommendation
+  const g = out.gap ? out.gap.pct : null;
+  const src = out.gap && out.gap.source ? out.gap.source : 'model';
+  if (best && yours && sameModel && !out.have) {      // which parts turn this car into the best build (gearbox, turbo, surface ...)
+    const mb = modelBest(best.carItemId);
+    if (mb && upgrades) {
+      const byId = partsById(upgrades);
+      const fitted = (yours.car.parts || []).map(function (id) { return byId.get(id); }).filter(function (u) { return !!u; });
+      for (const bp of mb.parts) {
+        if ((yours.car.parts || []).indexOf(bp.id) >= 0) continue;
+        const was = fitted.find(function (f) { return f.subcategory === bp.subcategory; });
+        out.swaps.push({ id: bp.id, name: bp.name, points: bp.cost.points, subcategory: bp.subcategory, replaces: was ? was.name : null });
+      }
+    }
+  }
+  if (best && yours) {
+    if (isChase) {
+      if (out.have) out.rec = { kind: 'chase-ok', text: 'This is the fastest build here: ' + yours.name + ' ' + yours.code + '.' };
+      else if (g === null) out.rec = { kind: 'chase', text: 'The exact fastest build here is ' + best.code + '.' };
+      else if (sameModel) {
+        out.rec = { kind: 'chase', text: 'Your ' + yours.name + ' ' + yours.code + ' is ' + decideSlower(g, true) + ' (' + src + ').' +
+          out.swaps.map(function (s) { return ' ' + (s.replaces ? 'Swap to ' : 'Buy ') + s.name + ': ' + s.points + ' RP.'; }).join('') };
+      } else out.rec = { kind: 'chase', text: 'Your ' + yours.name + ' ' + yours.code + ' is ' + decideSlower(g, true) + ' than the ' + best.name + ' ' + best.code + ' (' + src + ').' };
+    } else if (!out.have) {
+      if (sameModel) {
+        if (g !== null && g < DECIDE_KEEP_PCT) out.rec = { kind: 'keep', text: 'Keep it: your ' + yours.code + ' is as fast as ' + best.code + ' in races. A rebuild would be wasted points.' };
+        else if (g !== null) out.rec = { kind: 'rebuild', text: 'Build ' + best.code + ' on this car to be ' + decidePctText(g, false) + ' faster. Parts & Modifications shows what to buy.' };
+        else out.rec = { kind: 'build', text: 'The fastest build here is ' + best.code + '.' };
+      } else if (g !== null && g < DECIDE_KEEP_PCT) out.rec = { kind: 'close', text: 'The ' + best.name + ' would be too little faster to show in races. Keep your car.' };
+      else if (yours.surf !== 0 && (surface === 'dirt' || surface === 'tarmac')) out.rec = { kind: 'surface', text: 'Fit ' + surface + ' parts (' + (surface === 'dirt' ? 'D' : 'T') + ') on your ' + yours.name + ' to go faster here.' };
+      else if (g !== null) out.rec = { kind: 'other', text: 'A ' + best.name + ' ' + best.code + ' would be ' + decidePctText(g, false) + ' faster than your ' + yours.name + '.' };
+    }
+  }
+
+  // ---- why this is the answer, in words
+  if (!best) out.why = 'No best car for ' + title + ' could be found: ' + (reasons.track_models || 'too few KS races') + ' and the model has no estimate here.';
+  else if (best.source === 'races') out.why = 'Races of KS members: fastest car on ' + title + ' in ' + best.n + ' races by ' + best.drivers + ' drivers.';
+  else out.why = (reasons.track_models || ('Too few KS races on ' + title)) + ' — based on the ' + (best.source === 'track record' ? 'Torn track record' : 'model') + '.';
+
+  // ---- the badges on your cars in Torn's list
+  const yref = yours ? { carItemId: yours.carItemId, code: yours.code, p10: yours.p10, lap: yours.lap } : null;
+  for (const r of rows) {
+    const key = String(r.id);
+    if (yours && r.id === yours.id) { out.badges[key] = (isChase ? 'BEST FOR RECORDS' : 'BEST CAR HERE') + ' · ' + r.code; out.badgeKinds[key] = 'good'; }
+    else if (!r.inClass) { out.badges[key] = r.code + ' · class too high for this race'; out.badgeKinds[key] = 'plain'; }
+    else if (r.surf === 2) { out.badges[key] = r.code + ' · wrong parts for this track'; out.badgeKinds[key] = 'bad'; }
+    else {
+      const gp = yref ? gapBetween(r, yref) : null;
+      out.badges[key] = r.code + ' · ' + (gp === null ? 'no estimate' : decideSlower(gp.pct, isChase));
+      out.badgeKinds[key] = 'plain';
+    }
+  }
+  return out;
+}
+
+// ---- what is shown. Lines of segments { t: text, g: true when green }; { cls, segs }. Pure.
+function ansT(s, green) { return green ? { t: s, g: true } : { t: s }; }
+function bestLabel(d) { return d.best ? d.best.name + ' ' + d.best.code : null; }
+
+// Change car: the best car, whether you have it, why, and what would help
+function changeAnswerRows(d, ctx) {
+  const rows = [];
+  const add = function (cls, segs) { rows.push({ cls: 'ksrl-ans ' + cls, segs: segs }); };
+  if (!d.best) add('ksrl-ans-head', [ansT(d.ksOff ? 'Best car for ' + d.trackTitle + ': ' + BEST_UNKNOWN_OFF_TEXT : 'No best car known for ' + d.trackTitle + ' yet.')]);
+  else add('ksrl-ans-head', [ansT('Best car for ' + d.trackTitle + ': ' + bestLabel(d) + (d.best.codeNote ? ' (' + d.best.codeNote + ')' : ''))]);
+  if (d.best) {
+    const y = d.yours;
+    if (d.have) {
+      const inRace = ctx && ctx.inRaceCarId === y.id;
+      const within = d.haveWithin ? ' (as fast as ' + d.best.code + ' in races)' : '';
+      add('ksrl-ans-line', [ansT('✔ You have it: ' + y.name + ' ' + y.code + ' #' + y.id + within + '. ' + (inRace ? 'It is already entered in this race.' : 'Click Change car on the green car below.'), true)]);
+    } else if (y) {
+      const phrase = d.gap ? ' — ' + decideSlower(d.gap.pct, d.chase) + ' (' + (d.gap.source || 'model') + ')' : '';
+      add('ksrl-ans-line', [ansT('You do not have it. Use your ' + y.name + ' ' + y.code + ' (green below)' + phrase + '.')]);
+    } else if (d.allWrong) add('ksrl-ans-line', [ansT('You do not have it. None of your cars has ' + d.surface + ' parts, which ' + d.trackTitle + ' needs.')]);
+    else add('ksrl-ans-line', [ansT('You do not have it. None of your cars is in a class this race lets in.')]);
+  }
+  add('ksrl-ans-why', [ansT('Why: ' + d.why)]);
+  const fl = fasterLine(d);
+  if (fl) add('ksrl-ans-rec', [ansT(fl)]);
+  if (d.rec) add('ksrl-ans-rec', [ansT(d.rec.text)]);
+  return rows;
+}
+
+// 0.7.1: the prize car that cannot be bought is faster than the best car you can buy: one extra line (nothing when it is not faster)
+function fasterLine(d) {
+  if (!d.faster) return null;
+  if (d.faster.pct === null) return d.faster.name + ' is faster but can only be won in racing events.';
+  if (d.faster.pct < (d.chase ? 0.005 : 0.05)) return null;
+  return d.faster.name + ' is ' + decidePctText(d.faster.pct, d.chase) + ' faster but can only be won in racing events.';
+}
+
+// Your Cars: one row per track
+function listAnswerRows(decs) {
+  return decs.map(function (d) {
+    const y = d.yours;
+    const head = d.trackTitle + ' (' + d.surface + ') · Best: ' + (d.best ? bestLabel(d) : (d.ksOff ? BEST_UNKNOWN_OFF_TEXT : 'unknown')) + ' · ';
+    let segs;
+    if (d.have) segs = [ansT(head), ansT('✔ Yours: ' + y.name + ' ' + y.code + (d.haveWithin ? ' (as fast as ' + d.best.code + ' in races)' : ''), true)];
+    else if (y) segs = [ansT(head + 'Yours: ' + y.name + ' ' + y.code + (d.gap ? ', ' + decideSlower(d.gap.pct, d.chase) : ''))];
+    else segs = [ansT(head + 'Yours: none')];
+    return { cls: 'ksrl-ans ksrl-ans-track', segs: segs };
+  });
+}
+
+// The sources behind each track of Your Cars, for "Show the data"
+function listSourceLines(decs) {
+  return decs.map(function (d) { return d.trackTitle + ': ' + d.why + (d.gap && d.gap.source ? ' Compared by ' + d.gap.source + '.' : '') + (fasterLine(d) ? ' ' + fasterLine(d) : ''); });
+}
+
+// Parts & Modifications: ONE sentence for the chosen car and track. view = computePartsView/computeDirtBuildView. ctx: { carName, fittedCode, trackTitle, chase, byId (partsById), fittedIds }
+// -> { kind, text } | null (null = no sentence: the view is UNKNOWN)
+function partsAnswer(view, ctx) {
+  if (!view || view.state === 'UNKNOWN') return null;
+  const who = ctx.carName + ' ' + ctx.fittedCode;
+  const dec = ctx.chase ? 2 : 1;
+  if (view.dirt === true) {
+    const left = view.leftToDirtBuild;
+    if (left.parts === 0) return { kind: 'built', text: 'Your ' + who + ' is fully built for dirt tracks. Nothing to buy.' };
+    let pick = null;
+    for (const id of left.ids) {
+      const u = ctx.byId.get(id);
+      if (u && (pick === null || u.cost.points < pick.cost.points || (u.cost.points === pick.cost.points && u.id < pick.id))) pick = u;
+    }
+    if (!pick) return { kind: 'none', text: 'Your ' + who + ' needs more parts for the dirt build of ' + ctx.trackTitle + '.' };
+    return { kind: 'buy', text: 'Buy next: ' + pick.name + ' (' + pick.cost.points + ' RP) — part of the dirt build for ' + ctx.trackTitle + '.' };
+  }
+  const fitted = new Set(ctx.fittedIds || []);
+  const surfaceWord = view.surface === 'dirt' ? 'dirt' : 'tarmac';
+  const built = { kind: 'built', text: 'Your ' + who + ' is fully built for ' + surfaceWord + ' tracks. Nothing to buy.' };
+  if (view.buyCandidates.length === 0 && view.bestPartIds.every(function (id) { return fitted.has(id); })) return built;
+  const alt = view.sameModelAlternatives && view.sameModelAlternatives.length ? view.sameModelAlternatives[0] : null;
+  if (!ctx.chase && alt) return { kind: 'alt', text: 'Use your ' + altName(alt) + ' #' + alt.carId + ' instead — it is already built for ' + ctx.trackTitle + '. Nothing to buy.' };
+  if (!ctx.chase && view.keepFitted) {
+    if (view.fittedTune === view.bestTune) return built;
+    return { kind: 'aim', text: 'Aim for ' + view.bestTune + ' on this car: you have ' + view.fittedTune + '. Nothing to buy — ' + view.fittedTune + ' is just as fast.' };
+  }
+  const cand = view.nextBuyId === null ? null : view.buyCandidates.find(function (c) { return c.id === view.nextBuyId; });
+  let pick = null;
+  if (cand && (!ctx.chase || view.wrongSurface)) pick = { name: cand.name, points: cand.points, gain: cand.gainPct, id: cand.id };
+  else if (ctx.chase) {       // the best swap per RP, even when the gain is too small to show in races
+    const pool = [];
+    for (const c of view.buyCandidates) if (c.gainPct > 0) pool.push({ name: c.name, points: c.points, gain: c.gainPct, id: c.id });
+    for (const fid of Object.keys(view.labels)) {
+      if (view.labels[fid] !== 'EQUAL') continue;
+      const to = view.swapTo[fid];
+      const u = to === null || to === undefined ? null : ctx.byId.get(to);
+      const gn = view.gapPct[fid];
+      if (u && gn > 0) pool.push({ name: u.name, points: u.cost.points, gain: gn, id: u.id });
+    }
+    const rate = function (p) { return p.points > 0 ? p.gain / p.points : Infinity; };
+    pool.sort(function (a, b) { return (rate(b) === rate(a) ? 0 : (rate(b) > rate(a) ? 1 : -1)) || (a.points - b.points) || (a.id - b.id); });
+    pick = pool.length ? pool[0] : null;
+  }
+  if (!pick) return { kind: 'none', text: 'Your ' + who + ' is as good as it gets for ' + ctx.trackTitle + '. Nothing to buy.' };
+  return { kind: 'buy', text: 'Buy next: ' + pick.name + ' (' + pick.points + ' RP) — ' + Math.max(0, pick.gain).toFixed(dec) + ' % faster on ' + ctx.trackTitle + '.' };
+}
+/* ksrl-decide END */
 
 /* ksrl-ui BEGIN - the panel, the badges, the page lifecycle */
 const INSTANCE_KEY = '__ksrlPartsPanel';
@@ -5107,18 +5498,31 @@ const CSS = [
   '.ksrl-rr-dim{font-size:12px;color:#c4c4c4}',
   '.ksrl-rr-warn{color:#ffcc66}',
   '.ksrl-grey{color:#8f8f8f}',
+  '.ksrl-answer{margin:2px 0 6px}',
+  '.ksrl-ans{margin:5px 0;font-size:14px;line-height:1.45;color:#e4e4e4}',
+  '.ksrl-ans-head{font-size:15px;font-weight:bold;color:#fff}',
+  '.ksrl-ans-why,.ksrl-ans-rec{font-size:13px;color:#d6d6d6}',
+  '.ksrl-ans-warn{color:#ffcc66}',
+  '.ksrl-ans-track{font-size:13px;margin:3px 0}',
+  '.ksrl-ans-parts{font-size:14px;font-weight:bold;color:#fff}',
+  '.ksrl-ans-note{margin:4px 0;font-size:12px;color:#b8b8b8}',
+  '.ksrl-data-toggle{display:block;margin:2px 0 4px;padding:6px 8px 6px 0;min-height:28px;border:0;background:none;font:12px Arial,Helvetica,sans-serif;color:#7ea6d6;text-decoration:underline;text-align:left;cursor:pointer}',
+  '.ksrl-data[hidden]{display:none !important}',
+  '.ksrl-chase[hidden]{display:none !important}',
 ].join('\n');
 
 const ABOUT_LINES = [
   'Purpose: shows the value of each racing part for the car and track you choose, on the Parts & Modifications page. On the page it only displays. It never clicks, buys or navigates.',
-  'Stored in this browser (Tampermonkey storage): your Torn API key, cached answers from the Torn API, the track you chose for each car, and the settings of the sharing switch (on or off, whether its details are folded away, how far your races were sent), the settings of the "' + VIEWS_TITLE + '" switch (on or off, whether its details are folded away), the answers read from the KS server for it (at most 15 minutes old when used), a short login to the KS server, and whether you have read what changed in the sharing text. The key is never shown again after you save it.',
+  'Stored in this browser (Tampermonkey storage): your Torn API key, cached answers from the Torn API, the track you chose for each car, and the settings of the sharing switch (on or off, whether its details are folded away, how far your races were sent), the settings of the "' + VIEWS_TITLE + '" switch (on or off, whether its details are folded away), the answers read from the KS server for it (at most 15 minutes old when used), the tick "' + CHASE_TITLE + '" (on or off), a short login to the KS server, and whether you have read what changed in the sharing text. The key is never shown again after you save it.',
   'Kept until you press Remove key, which deletes all of it. Cached answers are replaced when they expire: 5 minutes for your enlisted cars, 24 hours for the rest.',
   'Shared: nothing, unless you switch on "' + SHARE_TITLE + '" (off to begin with). The script talks to api.torn.com (your key goes there) and, only with a switch on, to racing.kingshadeprotocol.com. What the sharing switch sends is listed under that switch. "' + VIEWS_TITLE + '" (also off to begin with) only reads from the KS server and is listed in the Cars panel.',
   'Key level: Custom, with access to user → basic, enlistedcars, faction, races and racing → cars, carupgrades, records, tracks.',
   'Who can use it: members of faction ' + FACTION_ID + '. Kingshade and Cheese are let in directly. For everyone else the script asks the Torn API (user → faction, with your own key) which faction you are in, at most once a day, and keeps the answer in this browser. If you are not in the faction, or the check fails, the panels stay closed.',
   TUNE_LEGEND,
   'Race panel: reads only the race leaderboard on the page you are viewing. No requests, nothing stored.',
-  'Cars panel: ranks your enlisted cars per track with the lap-time model, from the same Torn API answers as the Parts panel. It never clicks Change car, Remove or Save. On Change car, with "' + VIEWS_TITLE + '" on, it also shows real results from the KS server for the track of the race.',
+  'Cars panel: names the best car and build for the track and the best of your own cars (on Your Cars for every track, on Change car for the track of the race), from the lap-time model and the Torn API answers of the Parts panel, and with "' + VIEWS_TITLE + '" on also from real races read from the KS server. The ranking and the numbers are under "Show the data". It never clicks Change car, Remove or Save.',
+  'Parts panel: one sentence for the car and track you chose (what to buy next, or that nothing is needed); the details are under "Show the data".',
+  CHASE_TITLE + ': off to begin with. ' + CHASE_TEXT,
 ].concat(SHARE_DISCLOSURE.map(function (l, i) { return (i === 0 ? SHARE_TITLE + ': ' : '') + l; }), VIEWS_DISCLOSURE.map(function (l, i) { return (i === 0 ? VIEWS_TITLE + ': ' : '') + l; }));
 
 function boot() {
@@ -5175,7 +5579,7 @@ function boot() {
     share: { timer: null, waitVisible: false, statusEl: null, cbEl: null, detailsEl: null, toggleEl: null, noticeEl: null, wasEnabled: share.isEnabled() },
     gen: 0, sig: null, timer: null, abort: null, observer: null, observed: null, parentObserved: null,
     panel: null, style: null, hidden: false, waitVisible: false, tick: 0, counterBoxes: new Set(),
-    cars: { panel: null, gen: 0, sig: null, abort: null, state: null, paused: false, waitVisible: false, badgeEls: new Set(), last: null, viewsDetailsEl: null, viewsToggleEl: null },
+    cars: { panel: null, gen: 0, sig: null, abort: null, state: null, paused: false, waitVisible: false, badgeEls: new Set(), last: null, viewsDetailsEl: null, viewsToggleEl: null, dataOpen: false },
     race: { panel: null, boardEl: null, infoEl: null, boardObs: null, infoObs: null, timer: null, lastReadMs: 0, tracker: null, paused: false, waitVisible: false },
     ui: { kind: 'loading', message: '', notice: '', aboutOpen: false, changingKey: false, keyError: '', data: null, view: null, trackId: null, points: 'UNKNOWN', fittedIds: [] },
   };
@@ -5417,6 +5821,7 @@ function boot() {
     share.clearAll();                      // Remove key deletes the sharing switch, its cursor and its login too
     views.clearAll();                      // 0.7.0: and the "Show KS faction race data" switch with what it read
     gm.del(SHARE_NOTICE_STORE);
+    gm.del(SETTINGS_STORE);                // 0.7.1: and the tick "Chase track records"
     if (st.share.timer !== null) { clearTimeout(st.share.timer); st.share.timer = null; }
     st.ui.notice = ''; st.ui.changingKey = false; st.ui.keyError = '';
     st.tick++;
@@ -5456,12 +5861,18 @@ function boot() {
       footer(body, hasKey);
     } else if (ui.kind === 'ready') {
       const d = ui.data;
-      body.appendChild(row('Car: ' + d.car.car_item_name + ' (' + (d.enlisted.car_name || '—') + ') · class ' + d.enlisted.class + ' · #' + d.enlisted.id));
+      // 0.7.1: ONE sentence for the car and track (what to buy next, or that nothing is needed). The rows below it move under "Show the data" (closed to begin with);
+      // where no sentence can be made (no track chosen, the model has no estimate) the rows stay as they were.
       const tuneNow = tuneCode(ui.fittedIds);
-      body.appendChild(row(tuneRowText(ui.trackId === null ? null : ui.view, tuneNow)));
+      const chosen = ui.trackId === null ? null : d.tracks.find(function (x) { return x.id === ui.trackId; });
+      const sentence = ui.trackId === null || !ui.view || !chosen ? null : partsAnswer(ui.view, { carName: d.car.car_item_name, fittedCode: tuneNow, trackTitle: chosen.title, chase: settingsReadChase(gm), byId: partsById(d.upgrades), fittedIds: ui.fittedIds });
+      const dataRows = [];
+      const dRow = function (text, cls) { const r = row(text, cls); dataRows.push(r); return r; };
+      const carRow = dRow('Car: ' + d.car.car_item_name + ' (' + (d.enlisted.car_name || '—') + ') · class ' + d.enlisted.class + ' · #' + d.enlisted.id);
+      const tuneRow = dRow(tuneRowText(ui.trackId === null ? null : ui.view, tuneNow));
       const built = ui.trackId === null ? null : alreadyBuiltText(ui.view);
-      if (built) body.appendChild(row(built, 'ksrl-warn'));
-      body.appendChild(row(TUNE_LEGEND, 'ksrl-legend'));
+      const builtRow = built ? dRow(built, 'ksrl-warn') : null;
+      const legendRow = dRow(TUNE_LEGEND, 'ksrl-legend');
       const trackLine = h('div', 'ksrl-row');
       trackLine.appendChild(h('span', null, 'Track:'));
       const sel = h('select', 'ksrl-select');
@@ -5480,19 +5891,42 @@ function boot() {
         cycle();
       });
       trackLine.appendChild(sel);
-      body.appendChild(trackLine);
-      if (ui.trackId === null) body.appendChild(row('Choose a track to see the value of each part.', 'ksrl-dim'));
+      const tail = [];       // the rows under the track line, in their old order
+      let newerRow = null;
+      if (ui.trackId === null) tail.push(row('Choose a track to see the value of each part.', 'ksrl-dim'));
       else {
         const rows = describeView(ui.view, ui.view.dirt === true ? dirtContext(d, ui.view, ui.trackId, ui.points) : { racingPoints: ui.points });
         const first = rows.shift();
-        body.appendChild(row(first.text));
+        tail.push(dRow(first.text));
         if (ui.view.state !== 'UNKNOWN' && d.pageNewer > 0) {
-          body.appendChild(row('The page is newer than the API for ' + d.pageNewer + ' part(s) — using the page.', 'ksrl-warn'));
+          newerRow = row('The page is newer than the API for ' + d.pageNewer + ' part(s) — using the page.', 'ksrl-warn');
+          tail.push(newerRow);
         }
-        for (const r of rows) body.appendChild(row(r.text));
+        for (const r of rows) tail.push(dRow(r.text));
         const av = activeView();
         const catText = av ? categoriesRowText(categoryList(av, readPartsPage(document))) : null;
-        if (catText) body.appendChild(row(catText));
+        if (catText) tail.push(dRow(catText));
+      }
+      if (sentence) {
+        // the sentence first, the track line to change it, then "Show the data" with everything else; the warning about the page stays in view
+        body.appendChild(h('div', 'ksrl-ans ksrl-ans-parts', sentence.text));
+        body.appendChild(trackLine);
+        if (newerRow) body.appendChild(newerRow);
+        const toggle = h('button', 'ksrl-data-toggle');
+        toggle.type = 'button';
+        const apply = function () {
+          for (const r of dataRows) r.hidden = !ui.dataOpen;
+          toggle.textContent = ui.dataOpen ? 'Hide the data ▾' : 'Show the data ▸';
+          toggle.setAttribute('aria-expanded', ui.dataOpen ? 'true' : 'false');
+        };
+        toggle.addEventListener('click', function () { ui.dataOpen = !ui.dataOpen; apply(); });
+        body.appendChild(toggle);
+        for (const r of [carRow, tuneRow, builtRow, legendRow].concat(tail)) if (r && r !== newerRow) body.appendChild(r);
+        apply();
+      } else {
+        for (const r of [carRow, tuneRow, builtRow, legendRow]) if (r) body.appendChild(r);
+        body.appendChild(trackLine);
+        for (const r of tail) body.appendChild(r);
       }
       footer(body, true);
     }
@@ -5595,6 +6029,13 @@ function boot() {
   }
 
   // 0.7.0: opts.real = rows of "Real results on <track>" (Change car only, below the ranking, in own elements ksrl-rr), opts.withSwitch = the "Show KS faction race data" switch in the foot
+  // 0.7.1: opts.answer = the ONE answer (lines of segments, own elements ksrl-ans) shown first; everything else (the rows, the real results, the grey lines) goes under
+  // "Show the data" (closed to begin with). opts.withSwitch also puts the tick "Chase track records" above the switch.
+  function ansLine(r) {
+    const el = h('div', r.cls);
+    for (const sg of r.segs) { if (sg.g) el.appendChild(h('span', 'ksrl-green', sg.t)); else el.appendChild(document.createTextNode(sg.t)); }
+    return el;
+  }
   function carsRenderRows(rows, footers, opts) {
     const p = st.cars.panel;
     if (!p) return;
@@ -5602,6 +6043,28 @@ function boot() {
     head.appendChild(h('span', null, 'KS Racing Lab \u00b7 Cars'));
     head.appendChild(h('span', 'ksrl-ver', 'v' + SCRIPT_VERSION));
     const body = h('div', 'ksrl-body');
+    const answer = opts && opts.answer ? opts.answer : null;
+    let into = body;
+    let data = null;
+    if (answer) {
+      const box = h('div', 'ksrl-answer');
+      for (const r of answer) box.appendChild(ansLine(r));
+      body.appendChild(box);
+      const toggle = h('button', 'ksrl-data-toggle');
+      toggle.type = 'button';
+      data = h('div', 'ksrl-data');
+      const apply = function () {
+        data.hidden = !st.cars.dataOpen;
+        toggle.textContent = st.cars.dataOpen ? 'Hide the data \u25be' : 'Show the data \u25b8';
+        toggle.setAttribute('aria-expanded', st.cars.dataOpen ? 'true' : 'false');
+      };
+      toggle.addEventListener('click', function () { st.cars.dataOpen = !st.cars.dataOpen; apply(); });
+      apply();
+      body.appendChild(toggle);
+      body.appendChild(data);
+      data.appendChild(h('div', 'ksrl-ans-note', CODE_LEGEND));
+      into = data;
+    }
     for (const r of rows) {
       const el = h('div', 'ksrl-row');
       if (typeof r === 'string') el.textContent = r;
@@ -5613,7 +6076,7 @@ function boot() {
         a.rel = 'noopener noreferrer';
         el.appendChild(a);
       } else for (const s of r) { if (s.g) el.appendChild(h('span', 'ksrl-green', s.t)); else el.appendChild(document.createTextNode(s.t)); }
-      body.appendChild(el);
+      into.appendChild(el);
     }
     if (opts && opts.real) for (const r of opts.real) {
       const el = h('div', r.cls);
@@ -5622,11 +6085,30 @@ function boot() {
         else if (sg.d) el.appendChild(h('span', 'ksrl-grey', sg.t));
         else el.appendChild(document.createTextNode(sg.t));
       }
-      body.appendChild(el);
+      into.appendChild(el);
     }
-    for (const r of footers || []) body.appendChild(h('div', 'ksrl-row ksrl-legend', r));
-    if (opts && opts.withSwitch) body.appendChild(viewsSection());
+    for (const r of footers || []) into.appendChild(h('div', 'ksrl-row ksrl-legend', r));
+    if (opts && opts.withSwitch) { body.appendChild(chaseSection()); body.appendChild(viewsSection()); }
     p.replaceChildren(head, body);
+  }
+
+  // 0.7.1: the tick "Chase track records" (OFF to begin with, kept in ksrl.v1.settings). It only changes what the panels say; nothing is sent anywhere.
+  function chaseSection() {
+    const box = h('div', 'ksrl-share ksrl-chase');
+    const label = h('label', 'ksrl-share-switch');
+    const cb = h('input');
+    cb.type = 'checkbox';
+    cb.checked = settingsReadChase(gm);
+    cb.addEventListener('change', function () {
+      settingsSetChase(gm, cb.checked);
+      carsRedraw();
+      if (st.panel && st.ui.kind === 'ready') render();
+    });
+    label.appendChild(cb);
+    label.appendChild(h('span', null, CHASE_TITLE));
+    box.appendChild(label);
+    box.appendChild(h('div', 'ksrl-share-line', CHASE_TEXT));
+    return box;
   }
 
   // 0.7.0: the switch "Show KS faction race data" with its foldable text and its status line (same look as the sharing switch; own elements)
@@ -5741,6 +6223,10 @@ function boot() {
     const c = st.cars;
     c.last = { data: data };
     const footers = [CARS_NOTE, 'Your cars: Torn API data from ' + carsAgeText(ageMs) + ' ago'];
+    // 0.7.1: what the answers may use: the model, your cars, and the three KS views when the switch is on and they are there and not STALE
+    const chase = settingsReadChase(gm);
+    const dd = decisionData(views.snapshot(), deps.now(), { racingCars: data.racingCars, upgrades: data.upgrades, partsClass: data.partsClass });
+    const allowed = classesFrom(page.playerClass || highestClass(data.cars));
     if (page.view === 'change') {
       const track = resolveCurrentTrack(page.trackText, data.tracks);
       if (!track) {
@@ -5751,6 +6237,17 @@ function boot() {
       const rank = rankCarsForTrack(data.cars, track);
       const inRace = page.cars.find(function (x) { return x.inRace; });
       c.state = { badges: rank.badges, green: new Set(rank.greenCarIds) };
+      // 0.7.1: the ONE answer for this track (the ranking above and the real results below move under "Show the data"). A problem in it falls back to the ranking and its badges.
+      let answer = null;
+      if (allowed.length === 0) answer = [{ cls: 'ksrl-ans ksrl-ans-warn', segs: [{ t: 'UNKNOWN: your racing class could not be read, so no best car can be named.' }] }];
+      else {
+        try {
+          const lapsM = /(\d+)\s+laps?\b/i.exec(page.trackText || '');
+          const dec = decideTrack(track, lapsM ? Number(lapsM[1]) : null, allowed, data.cars, dd, chase);
+          answer = changeAnswerRows(dec, { inRaceCarId: inRace ? inRace.id : null });
+          c.state = { badges: dec.badges, green: new Set(dec.yours ? [dec.yours.id] : []) };
+        } catch (e) { answer = [{ cls: 'ksrl-ans ksrl-ans-warn', segs: [{ t: 'UNKNOWN: the answer for this track could not be worked out.' }] }]; }
+      }
       // 0.7.0: the real results of the track below the ranking. A problem here never changes the ranking or the badges above (they are made before).
       let real = null;
       try {
@@ -5758,11 +6255,16 @@ function boot() {
         const pageCars = page.cars.map(function (x) { return data.cars.find(function (e) { return e.id === x.id; }); }).filter(function (e) { return !!e; });
         real = realResultsRows(views.snapshot(), { trackId: track.id, trackTitle: track.title, laps: lm ? Number(lm[1]) : null, cars: pageCars }, deps.now());
       } catch (e) { real = [{ cls: 'ksrl-rr ksrl-rr-warn', segs: [{ t: 'UNKNOWN: the real results could not be shown.' }] }]; }
-      carsRenderRows(carsChangeSegs(rank, inRace ? inRace.id : null), footers, { real: real, withSwitch: true });
+      carsRenderRows(carsChangeSegs(rank, inRace ? inRace.id : null), footers, { answer: answer, real: real, withSwitch: true });
       if (!redrawOnly) viewsTick(false);
     } else {
       c.state = { badges: null };
-      carsRenderRows(['Your best car per track'].concat(carTableSegs(data.tracks, data.cars)), footers, { withSwitch: true });
+      // 0.7.1: one row per track (the best car and yours); the sources of each row are under "Show the data". The table with the "next:" row is gone.
+      if (allowed.length === 0) { carsRenderRows(['UNKNOWN: your racing class could not be read, so no best car can be named.'], footers, { withSwitch: true }); return; }
+      let decs = null;
+      try { decs = carTracksSorted(data.tracks).map(function (tr) { return decideTrack(tr, null, allowed, data.cars, dd, chase); }); } catch (e) { decs = null; }
+      if (decs === null) carsRenderRows(['UNKNOWN: the answers for the tracks could not be worked out.'], footers, { withSwitch: true });
+      else carsRenderRows(listSourceLines(decs), footers, { answer: listAnswerRows(decs), withSwitch: true });
     }
   }
 
@@ -6072,7 +6574,7 @@ if (typeof document === 'undefined') {
   // Node (tests): hand out the pure parts. No DOM, no boot.
   module.exports = {
     KSRL: KSRL, SCRIPT_VERSION: SCRIPT_VERSION, EQUAL_WITHIN_PCT: EQUAL_WITHIN_PCT, ALWAYS_ALLOWED_IDS: ALWAYS_ALLOWED_IDS, FACTION_ID: FACTION_ID, NOT_MEMBER_TEXT: NOT_MEMBER_TEXT, GATE_ACCESS_TEXT: GATE_ACCESS_TEXT, checkMembership: checkMembership,
-    carName: carName, resolveCurrentTrack: resolveCurrentTrack, rankCarsForTrack: rankCarsForTrack, carTableLines: carTableLines, carTableSegs: carTableSegs, carsChangeLines: carsChangeLines, carsChangeSegs: carsChangeSegs, fmtTime: fmtTime, fmtTimeSigned: fmtTimeSigned,
+    carName: carName, resolveCurrentTrack: resolveCurrentTrack, rankCarsForTrack: rankCarsForTrack, carsChangeLines: carsChangeLines, carsChangeSegs: carsChangeSegs, fmtTime: fmtTime, fmtTimeSigned: fmtTimeSigned,
     carBadgeKind: carBadgeKind, CARS_NOTE: CARS_NOTE, loadCarsData: loadCarsData,
     parseRaceTime: parseRaceTime, createRaceTracker: createRaceTracker, computeRaceView: computeRaceView, computeFinishView: computeFinishView, RACE_MAX_SAMPLES: RACE_MAX_SAMPLES,
     raceLiveRows: raceLiveRows, raceFinishRow: raceFinishRow, RACE_LEGEND: RACE_LEGEND,
@@ -6089,6 +6591,9 @@ if (typeof document === 'undefined') {
     viewsDetailsOpen: viewsDetailsOpen, shareNoticePending: shareNoticePending, shareNoticeAck: shareNoticeAck,
     VIEWS_SWITCH_STORE: VIEWS_SWITCH_STORE, VIEWS_CACHE_STORE: VIEWS_CACHE_STORE, VIEWS_DETAILS_STORE: VIEWS_DETAILS_STORE, SHARE_NOTICE_STORE: SHARE_NOTICE_STORE, VIEW_NAMES: VIEW_NAMES, VIEWS_INTERVAL_MS: VIEWS_INTERVAL_MS, VIEWS_STALE_S: VIEWS_STALE_S,
     VIEWS_TITLE: VIEWS_TITLE, VIEWS_DISCLOSURE: VIEWS_DISCLOSURE, VIEWS_NOT_ALLOWED_TEXT: VIEWS_NOT_ALLOWED_TEXT, VIEWS_OFF_ROW: VIEWS_OFF_ROW, SHARE_NOTICE_TEXT: SHARE_NOTICE_TEXT,
+    decideTrack: decideTrack, decisionData: decisionData, classesFrom: classesFrom, highestClass: highestClass, settingsReadChase: settingsReadChase, settingsSetChase: settingsSetChase,
+    changeAnswerRows: changeAnswerRows, listAnswerRows: listAnswerRows, listSourceLines: listSourceLines, partsAnswer: partsAnswer, SETTINGS_STORE: SETTINGS_STORE,
+    CHASE_TITLE: CHASE_TITLE, CHASE_TEXT: CHASE_TEXT, CODE_LEGEND: CODE_LEGEND, decideSlower: decideSlower,
   };
 } else {
   boot();
