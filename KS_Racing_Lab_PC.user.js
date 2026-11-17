@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Racing Lab
 // @namespace    https://github.com/Hjunez/kingshade-leader-tools
-// @version      0.7.2
+// @version      0.7.3
 // @description  Shows the value of each racing part for the car and track you choose, on the Parts & Modifications page of Torn. Display only on the page. Two optional switches, both off until you switch them on: share your own races and cars with Kingshade, and show real race results from the KS server on Change car.
 // @author       Kingshade [4295791]
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Racing_Lab_PC.user.js
@@ -3015,12 +3015,12 @@ const KSRL = (function () {
 })();
 
 /* ksrl-parts BEGIN - pure logic, no DOM, runs in Node the same way as the engine */
-const SCRIPT_VERSION = '0.7.2';
+const SCRIPT_VERSION = '0.7.3';
 // Claude choice 2026-11-09 (TUNE-LIMIT 2026-10-08: ratio/turbo differences of 0.2-0.5 % do not show in real races). Change only on owner decision.
 const EQUAL_WITHIN_PCT = 0.5;
-// 0.6.0: open for every member of faction 48039. Kingshade and Cheese are let in as before, with no extra call; anyone else is checked once with
+// 0.6.0: open for every member of faction 48039. Kingshade, Cheese and Schosetta are let in, with no extra call; anyone else is checked once with
 // user -> faction (Public level, own key), cached 24 h (ksrl-api).
-const ALWAYS_ALLOWED_IDS = [4295791, 3246916];   // Kingshade, Cheese
+const ALWAYS_ALLOWED_IDS = [4295791, 3246916, 4368477];   // Kingshade, Cheese, Schosetta
 const FACTION_ID = 48039;
 const STAT_KEYS = KSRL.STAT_KEYS;
 const MODEL_MISMATCH_TEXT = 'Stat model does not match Torn for this car.';
@@ -4011,7 +4011,7 @@ function createStore(gm) {
   function writeGate(playerId, factionId, nowMs) {
     gm.set(CACHE_PREFIX + 'user/faction', { value: { playerId: playerId, factionId: factionId }, fetchedAt: new Date(nowMs).toISOString(), source: 'user/faction', schemaVersion: 1 });
   }
-  // The race panel never calls Torn: it asks this. Kingshade and Cheese: yes. Anyone else: only with a valid cached answer that says faction 48039.
+  // The race panel never calls Torn: it asks this. Kingshade, Cheese and Schosetta: yes. Anyone else: only with a valid cached answer that says faction 48039.
   function isAllowedCached(playerId, nowMs) {
     if (ALWAYS_ALLOWED_IDS.indexOf(playerId) >= 0) return true;
     const g = readGate(playerId, nowMs);
@@ -4107,7 +4107,7 @@ function makeLoader(deps, key, signal, stale) {
 
 // 0.6.0: the gate. -> {ok:true} | {ok:false, privateUse:true} (not in faction 48039) | {ok:false, gateAccess:true, err} (Torn error 16: the key lacks user -> faction)
 // | {ok:false, err} (anything else Torn says or does not say: NOT let in, the reason is in err) | {ok:false, stale:true}.
-// Kingshade and Cheese: let in with no call. Others: the cached answer when it is valid, else ONE call to user/faction with their own key (Public level).
+// Kingshade, Cheese and Schosetta: let in with no call. Others: the cached answer when it is valid, else ONE call to user/faction with their own key (Public level).
 async function checkMembership(deps, key, signal, stale, playerId) {
   if (ALWAYS_ALLOWED_IDS.indexOf(playerId) >= 0) return { ok: true };
   let g = deps.store.readGate(playerId, deps.now());
@@ -5585,7 +5585,7 @@ const ABOUT_LINES = [
   'Kept until you press Remove key, which deletes all of it. Cached answers are replaced when they expire: 5 minutes for your enlisted cars, 24 hours for the rest.',
   'Shared: nothing, unless you switch on "' + SHARE_TITLE + '" (off to begin with). The script talks to api.torn.com (your key goes there) and, only with a switch on, to racing.kingshadeprotocol.com. What the sharing switch sends is listed under that switch. "' + VIEWS_TITLE + '" (also off to begin with) only reads from the KS server and is listed in the Cars panel.',
   'Key level: Custom, with access to user → basic, enlistedcars, faction, races and racing → cars, carupgrades, records, tracks.',
-  'Who can use it: members of faction ' + FACTION_ID + '. Kingshade and Cheese are let in directly. For everyone else the script asks the Torn API (user → faction, with your own key) which faction you are in, at most once a day, and keeps the answer in this browser. If you are not in the faction, or the check fails, the panels stay closed.',
+  'Who can use it: members of faction ' + FACTION_ID + '. Kingshade, Cheese and Schosetta are let in directly. For everyone else the script asks the Torn API (user → faction, with your own key) which faction you are in, at most once a day, and keeps the answer in this browser. If you are not in the faction, or the check fails, the panels stay closed.',
   TUNE_LEGEND,
   'Race panel: reads only the race leaderboard on the page you are viewing. No requests, nothing stored.',
   'Cars panel: names the best car and build for the track and the best of your own cars (on Your Cars for every track, on Change car for the track of the race), from the lap-time model and the Torn API answers of the Parts panel, and with "' + VIEWS_TITLE + '" on also from real races read from the KS server. The ranking and the numbers are under "Details & settings" → "Show the data". It never clicks Change car, Remove or Save.',
