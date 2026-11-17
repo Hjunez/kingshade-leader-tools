@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Racing Lab
 // @namespace    https://github.com/Hjunez/kingshade-leader-tools
-// @version      0.7.1
+// @version      0.7.2
 // @description  Shows the value of each racing part for the car and track you choose, on the Parts & Modifications page of Torn. Display only on the page. Two optional switches, both off until you switch them on: share your own races and cars with Kingshade, and show real race results from the KS server on Change car.
 // @author       Kingshade [4295791]
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Racing_Lab_PC.user.js
@@ -3015,7 +3015,7 @@ const KSRL = (function () {
 })();
 
 /* ksrl-parts BEGIN - pure logic, no DOM, runs in Node the same way as the engine */
-const SCRIPT_VERSION = '0.7.1';
+const SCRIPT_VERSION = '0.7.2';
 // Claude choice 2026-11-09 (TUNE-LIMIT 2026-10-08: ratio/turbo differences of 0.2-0.5 % do not show in real races). Change only on owner decision.
 const EQUAL_WITHIN_PCT = 0.5;
 // 0.6.0: open for every member of faction 48039. Kingshade and Cheese are let in as before, with no extra call; anyone else is checked once with
@@ -3875,9 +3875,10 @@ function carsChangeSegs(rank, inRaceCarId) {
 }
 function carsChangeLines(rank, inRaceCarId) { return carsChangeSegs(rank, inRaceCarId).map(segText); }
 
-// The colour of a badge: red for a wrong surface, green for the car the panel recommends (0.7.1: YOURS, the best of your cars here), grey for the rest.
+// The colour of a badge: red for a wrong surface and for a car that makes the time worse ("x.x % slower", 0.7.2), green for the car the panel recommends
+// (0.7.1: YOURS, the best of your cars here), grey for the rest ("same speed ...").
 function carBadgeKind(text, isGreen) {
-  if (text === 'wrong surface' || / wrong parts for this track$/.test(text)) return 'bad';
+  if (text === 'wrong surface' || /(^| )wrong parts for this track$/.test(text) || /[0-9] % slower$/.test(text)) return 'bad';
   return isGreen ? 'good' : 'plain';
 }
 
@@ -3886,12 +3887,13 @@ function carBadgeKind(text, isGreen) {
 function readCarsPage(root) {
   const scope = root || document;
   const out = { ok: false, view: null, wrap: null, anchor: null, trackText: null, cars: [], playerClass: null };
-  const wrap = scope.querySelector('#racingAdditionalContainer .enlist-wrap.enlisted-wrap');
-  if (!wrap) return out;
-  // 0.7.1: the class of the driver, from the banner "CLASS A" at the top of the racing page (a race lets in this class and the lower ones)
+  // 0.7.1: the class of the driver, from the banner "CLASS A" at the top of the racing page (a race lets in this class and the lower ones).
+  // 0.7.2: read before the car list is looked for, so the Parts tab (no car list) gets the same class as Your Cars.
   const letter = scope.querySelector('.racing-main-wrap .banner .class-letter');
   const letterText = letter ? letter.textContent.trim().toUpperCase() : '';
   out.playerClass = KSRL.CLASSES.indexOf(letterText) >= 0 ? letterText : null;
+  const wrap = scope.querySelector('#racingAdditionalContainer .enlist-wrap.enlisted-wrap');
+  if (!wrap) return out;
   const list = wrap.querySelector('ul.enlist-list');
   if (!list || list.querySelector('a[step-value="selectParts"]')) return out;   // the car picker of the Parts tab is not a car view
   for (const li of list.querySelectorAll(':scope > li')) {
@@ -3940,6 +3942,8 @@ const CACHE_TTL_MS = {
 const NOT_MEMBER_TEXT = 'KS Racing Lab is for members of faction ' + FACTION_ID + ' only.';
 const GATE_ACCESS_TEXT = 'Your key is missing access to user → faction. Make a new key:';   // the link under it is SHARE_KEY_LINK (the one key link of the script)
 const ENLISTED_REFETCH_MIN_AGE_MS = 60 * 1000;
+// 0.7.2: the enlisted cars of the API come a little after a purchase; a reload a minute later was enough (seen 2026-11-16, a new car)
+const NOT_LISTED_TEXT = "Torn's API does not list this car yet. If you just bought it, reload the page in a minute.";
 const ACCESS_TEXT = 'Your key is missing access: user → basic, enlistedcars, faction; racing → cars, carupgrades, records, tracks';
 const BUSY_TEXT = 'Torn API is busy — try again in a minute';
 
@@ -4174,7 +4178,7 @@ async function loadPanelData(deps, key, page, signal, stale) {
   const ageOk = function () { return nowFn() - en.fetchedAtMs >= ENLISTED_REFETCH_MIN_AGE_MS; };
   let enl = findCar();
   if (!enl && ageOk()) { if (!(await refetch())) return en; enl = findCar(); }
-  if (!enl) return { ok: false, unknownReason: 'This car is not in your Torn API garage data.' };
+  if (!enl) return { ok: false, unknownReason: NOT_LISTED_TEXT };
   if (enl.complete !== true) return { ok: false, unknownReason: 'Your enlisted car data from the Torn API is incomplete.' };
   const diffCount = function () {
     const api = new Set(enl.parts);
@@ -4188,7 +4192,7 @@ async function loadPanelData(deps, key, page, signal, stale) {
   if (pageNewer > 0 && ageOk()) {
     if (!(await refetch())) return en;
     enl = findCar();
-    if (!enl) return { ok: false, unknownReason: 'This car is not in your Torn API garage data.' };
+    if (!enl) return { ok: false, unknownReason: NOT_LISTED_TEXT };
     pageNewer = diffCount();
   }
   const car = parts['racing/cars'].items.find(function (c) { return c.car_item_id === enl.car_item_id; }) || null;
@@ -4199,7 +4203,7 @@ async function loadPanelData(deps, key, page, signal, stale) {
   return {
     ok: true,
     data: {
-      userId: basic.id, car: car, enlisted: enl, upgrades: upgrades, tracks: tracks, pageNewer: pageNewer,
+      userId: basic.id, car: car, enlisted: enl, upgrades: upgrades, tracks: tracks, pageNewer: pageNewer, racingCars: parts['racing/cars'].items,
       enlistedItems: en.items, partsClass: KSRL.partsClassFromEnlisted(en.items, upgrades).cls,
     },
   };
@@ -5058,13 +5062,23 @@ const DECIDE_KEEP_PCT = EQUAL_WITHIN_PCT;        // under this the difference ha
 const UNBUYABLE_CAR_ITEM_IDS = { 519: 'Stormatti Casteon' };
 const BEST_UNKNOWN_OFF_TEXT = 'unknown without KS data — switch on ' + VIEWS_TITLE + '.';
 
-// The tick: anything that does not look right is OFF (fail-closed: garbage never switches the chase on). Missing = OFF (migration from 0.7.0).
-function settingsReadChase(gm) {
+// The tick and the fold "Details & settings": anything that does not look right is OFF / closed (fail-closed: garbage never switches the chase on).
+// Missing = OFF / closed (migration from 0.7.0 and 0.7.1: they stored { schemaVersion: 1, chase } without detailsOpen). 0.7.2: detailsOpen, one for all panels.
+function settingsRead(gm) {
   let v = null;
   try { v = gm.get(SETTINGS_STORE, null); } catch (e) { v = null; }
-  return isPlainObject(v) && v.schemaVersion === 1 && v.chase === true;
+  const ok = isPlainObject(v) && v.schemaVersion === 1;
+  return { chase: ok && v.chase === true, detailsOpen: ok && v.detailsOpen === true };
 }
-function settingsSetChase(gm, on) { gm.set(SETTINGS_STORE, { schemaVersion: 1, chase: on === true }); }
+function settingsReadChase(gm) { return settingsRead(gm).chase; }
+function settingsReadDetails(gm) { return settingsRead(gm).detailsOpen; }
+function settingsSetChase(gm, on) { gm.set(SETTINGS_STORE, { schemaVersion: 1, chase: on === true, detailsOpen: settingsRead(gm).detailsOpen }); }
+function settingsSetDetails(gm, open) { gm.set(SETTINGS_STORE, { schemaVersion: 1, chase: settingsRead(gm).chase, detailsOpen: open === true }); }
+
+// 0.7.2: a code with no letter or digit in it (a car with no surface parts: "---") is never shown; the name stands alone.
+function hasCode(code) { return typeof code === 'string' && /[A-Za-z0-9]/.test(code); }
+function nameCode(name, code) { return hasCode(code) ? name + ' ' + code : name; }
+function dotCode(code) { return hasCode(code) ? code + ' · ' : ''; }
 
 // The classes a race of class `cls` lets in: that class and every lower one (A is the highest).
 function classesFrom(cls) { const i = KSRL.CLASSES.indexOf(cls); return i < 0 ? [] : KSRL.CLASSES.slice(i); }
@@ -5295,12 +5309,10 @@ function decideTrack(track, laps, allowedClasses, myCars, data, chase) {
   }
   if (best && yours) {
     if (isChase) {
-      if (out.have) out.rec = { kind: 'chase-ok', text: 'This is the fastest build here: ' + yours.name + ' ' + yours.code + '.' };
+      if (out.have) out.rec = { kind: 'chase-ok', text: 'This is the fastest build here: ' + nameCode(yours.name, yours.code) + '.' };
       else if (g === null) out.rec = { kind: 'chase', text: 'The exact fastest build here is ' + best.code + '.' };
-      else if (sameModel) {
-        out.rec = { kind: 'chase', text: 'Your ' + yours.name + ' ' + yours.code + ' is ' + decideSlower(g, true) + ' (' + src + ').' +
-          out.swaps.map(function (s) { return ' ' + (s.replaces ? 'Swap to ' : 'Buy ') + s.name + ': ' + s.points + ' RP.'; }).join('') };
-      } else out.rec = { kind: 'chase', text: 'Your ' + yours.name + ' ' + yours.code + ' is ' + decideSlower(g, true) + ' than the ' + best.name + ' ' + best.code + ' (' + src + ').' };
+      else if (!sameModel) out.rec = { kind: 'chase', text: 'Your ' + nameCode(yours.name, yours.code) + ' is ' + decideSlower(g, true) + ' than the ' + nameCode(best.name, best.code) + ' (' + src + ').' };
+      // 0.7.2: the same model with another build says all of it on row 2 of Change car ("You have the car, not this build ... To match it: ..."); no row of its own
     } else if (!out.have) {
       if (sameModel) {
         if (g !== null && g < DECIDE_KEEP_PCT) out.rec = { kind: 'keep', text: 'Keep it: your ' + yours.code + ' is as fast as ' + best.code + ' in races. A rebuild would be wasted points.' };
@@ -5308,7 +5320,7 @@ function decideTrack(track, laps, allowedClasses, myCars, data, chase) {
         else out.rec = { kind: 'build', text: 'The fastest build here is ' + best.code + '.' };
       } else if (g !== null && g < DECIDE_KEEP_PCT) out.rec = { kind: 'close', text: 'The ' + best.name + ' would be too little faster to show in races. Keep your car.' };
       else if (yours.surf !== 0 && (surface === 'dirt' || surface === 'tarmac')) out.rec = { kind: 'surface', text: 'Fit ' + surface + ' parts (' + (surface === 'dirt' ? 'D' : 'T') + ') on your ' + yours.name + ' to go faster here.' };
-      else if (g !== null) out.rec = { kind: 'other', text: 'A ' + best.name + ' ' + best.code + ' would be ' + decidePctText(g, false) + ' faster than your ' + yours.name + '.' };
+      else if (g !== null) out.rec = { kind: 'other', text: 'A ' + nameCode(best.name, best.code) + ' would be ' + decidePctText(g, false) + ' faster than your ' + yours.name + '.' };
     }
   }
 
@@ -5321,13 +5333,21 @@ function decideTrack(track, laps, allowedClasses, myCars, data, chase) {
   const yref = yours ? { carItemId: yours.carItemId, code: yours.code, p10: yours.p10, lap: yours.lap } : null;
   for (const r of rows) {
     const key = String(r.id);
-    if (yours && r.id === yours.id) { out.badges[key] = (isChase ? 'BEST FOR RECORDS' : 'BEST CAR HERE') + ' · ' + r.code; out.badgeKinds[key] = 'good'; }
-    else if (!r.inClass) { out.badges[key] = r.code + ' · class too high for this race'; out.badgeKinds[key] = 'plain'; }
-    else if (r.surf === 2) { out.badges[key] = r.code + ' · wrong parts for this track'; out.badgeKinds[key] = 'bad'; }
+    // 0.7.2: the green mark says "BEST ..." only when this car really is the best here: without the tick the same car model as BEST with the tick of the answer (the same surface, under 0.5 %),
+    // with the tick exactly BEST's model AND code; otherwise it says "YOUR BEST" (the best of yours, not the best car). A code with no letter is left out ("---").
+    const dc = dotCode(r.code);
+    if (yours && r.id === yours.id) {
+      const isBest = !!best && (isChase ? (yours.carItemId === best.carItemId && yours.code === best.code) : (sameModel && out.have));
+      out.badges[key] = (isBest ? (isChase ? 'BEST FOR RECORDS' : 'BEST CAR HERE') : 'YOUR BEST') + (hasCode(r.code) ? ' · ' + r.code : '');
+      out.badgeKinds[key] = 'good';
+    }
+    else if (!r.inClass) { out.badges[key] = dc + 'class too high for this race'; out.badgeKinds[key] = 'plain'; }
+    else if (r.surf === 2) { out.badges[key] = dc + 'wrong parts for this track'; out.badgeKinds[key] = 'bad'; }
     else {
       const gp = yref ? gapBetween(r, yref) : null;
-      out.badges[key] = r.code + ' · ' + (gp === null ? 'no estimate' : decideSlower(gp.pct, isChase));
-      out.badgeKinds[key] = 'plain';
+      const phrase = gp === null ? 'no estimate' : decideSlower(gp.pct, isChase);
+      out.badges[key] = dc + phrase;
+      out.badgeKinds[key] = / slower$/.test(phrase) ? 'bad' : 'plain';      // 0.7.2: a car that makes the time worse is red
     }
   }
   return out;
@@ -5335,12 +5355,36 @@ function decideTrack(track, laps, allowedClasses, myCars, data, chase) {
 
 // ---- what is shown. Lines of segments { t: text, g: true when green }; { cls, segs }. Pure.
 function ansT(s, green) { return green ? { t: s, g: true } : { t: s }; }
-function bestLabel(d) { return d.best ? d.best.name + ' ' + d.best.code : null; }
+function ansRed(s) { return { t: s, r: true }; }
+// "x.x % slower" in red (the time gets worse), "same speed ..." in plain text. -> segments for the text "<before><phrase><after>"
+function slowerSegs(before, phrase, after) {
+  const segs = [];
+  if (before) segs.push(ansT(before));
+  segs.push(/ slower$/.test(phrase) ? ansRed(phrase) : ansT(phrase));
+  if (after) segs.push(ansT(after));
+  return segs;
+}
+// 0.7.2: in any free text of a row "x.x % faster" is green and "x.x % slower" is red (the time gets better / worse); "same speed" and "as fast as" have no colour
+function pctSegs(text) {
+  const out = [];
+  const re = /\d+(?:\.\d+)? % (?:faster|slower)\b/g;
+  let last = 0;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) out.push(ansT(text.slice(last, m.index)));
+    out.push(/faster$/.test(m[0]) ? ansT(m[0], true) : ansRed(m[0]));
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) out.push(ansT(text.slice(last)));
+  return out;
+}
+function bestLabel(d) { return d.best ? nameCode(d.best.name, d.best.code) : null; }
 
-// Change car: the best car, whether you have it, why, and what would help
+// Change car: row 1 = the best car, row 2 = whether you have it. These two are all that is shown at first; why it is the answer and what would help
+// are rows with detail: true and sit under "Details & settings" (0.7.2).
 function changeAnswerRows(d, ctx) {
   const rows = [];
-  const add = function (cls, segs) { rows.push({ cls: 'ksrl-ans ' + cls, segs: segs }); };
+  const add = function (cls, segs, detail) { rows.push(detail ? { cls: 'ksrl-ans ' + cls, segs: segs, detail: true } : { cls: 'ksrl-ans ' + cls, segs: segs }); };
   if (!d.best) add('ksrl-ans-head', [ansT(d.ksOff ? 'Best car for ' + d.trackTitle + ': ' + BEST_UNKNOWN_OFF_TEXT : 'No best car known for ' + d.trackTitle + ' yet.')]);
   else add('ksrl-ans-head', [ansT('Best car for ' + d.trackTitle + ': ' + bestLabel(d) + (d.best.codeNote ? ' (' + d.best.codeNote + ')' : ''))]);
   if (d.best) {
@@ -5348,17 +5392,23 @@ function changeAnswerRows(d, ctx) {
     if (d.have) {
       const inRace = ctx && ctx.inRaceCarId === y.id;
       const within = d.haveWithin ? ' (as fast as ' + d.best.code + ' in races)' : '';
-      add('ksrl-ans-line', [ansT('✔ You have it: ' + y.name + ' ' + y.code + ' #' + y.id + within + '. ' + (inRace ? 'It is already entered in this race.' : 'Click Change car on the green car below.'), true)]);
+      add('ksrl-ans-line', [ansT('✔ You have it: ' + nameCode(y.name, y.code) + ' #' + y.id + within + '. ' + (inRace ? 'It is already entered in this race.' : 'Click Change car on the green car below.'), true)]);
+    } else if (y && d.best.carItemId === y.carItemId) {
+      // 0.7.2: the same car model, another build: you DO have the car
+      const tail = d.chase && d.swaps.length ? ' To match it: ' + d.swaps.map(function (s) { return s.name + ', ' + s.points + ' RP'; }).join('; ') + '.' : '';
+      if (d.gap) add('ksrl-ans-line', slowerSegs('You have the car, not this build: your ' + nameCode(y.name, y.code) + ' (green below) — ', decideSlower(d.gap.pct, d.chase), ' (' + (d.gap.source || 'model') + ').' + tail));
+      else add('ksrl-ans-line', [ansT('You have the car, not this build: your ' + nameCode(y.name, y.code) + ' (green below).' + tail)]);
     } else if (y) {
-      const phrase = d.gap ? ' — ' + decideSlower(d.gap.pct, d.chase) + ' (' + (d.gap.source || 'model') + ')' : '';
-      add('ksrl-ans-line', [ansT('You do not have it. Use your ' + y.name + ' ' + y.code + ' (green below)' + phrase + '.')]);
+      if (d.gap) add('ksrl-ans-line', slowerSegs('You do not have it. Use your ' + nameCode(y.name, y.code) + ' (green below) — ', decideSlower(d.gap.pct, d.chase), ' (' + (d.gap.source || 'model') + ').'));
+      else add('ksrl-ans-line', [ansT('You do not have it. Use your ' + nameCode(y.name, y.code) + ' (green below).')]);
     } else if (d.allWrong) add('ksrl-ans-line', [ansT('You do not have it. None of your cars has ' + d.surface + ' parts, which ' + d.trackTitle + ' needs.')]);
     else add('ksrl-ans-line', [ansT('You do not have it. None of your cars is in a class this race lets in.')]);
   }
-  add('ksrl-ans-why', [ansT('Why: ' + d.why)]);
+  // a Why that says STALE is a warning and stays in view (fail-closed); every other Why sits under "Details & settings"
+  add('ksrl-ans-why', [ansT('Why: ' + d.why)], !/STALE/.test(d.why));
   const fl = fasterLine(d);
-  if (fl) add('ksrl-ans-rec', [ansT(fl)]);
-  if (d.rec) add('ksrl-ans-rec', [ansT(d.rec.text)]);
+  if (fl) add('ksrl-ans-rec', pctSegs(fl), true);
+  if (d.rec) add('ksrl-ans-rec', pctSegs(d.rec.text), true);
   return rows;
 }
 
@@ -5376,8 +5426,8 @@ function listAnswerRows(decs) {
     const y = d.yours;
     const head = d.trackTitle + ' (' + d.surface + ') · Best: ' + (d.best ? bestLabel(d) : (d.ksOff ? BEST_UNKNOWN_OFF_TEXT : 'unknown')) + ' · ';
     let segs;
-    if (d.have) segs = [ansT(head), ansT('✔ Yours: ' + y.name + ' ' + y.code + (d.haveWithin ? ' (as fast as ' + d.best.code + ' in races)' : ''), true)];
-    else if (y) segs = [ansT(head + 'Yours: ' + y.name + ' ' + y.code + (d.gap ? ', ' + decideSlower(d.gap.pct, d.chase) : ''))];
+    if (d.have) segs = [ansT(head), ansT('✔ Yours: ' + nameCode(y.name, y.code) + (d.haveWithin ? ' (as fast as ' + d.best.code + ' in races)' : ''), true)];
+    else if (y) segs = d.gap ? slowerSegs(head + 'Yours: ' + nameCode(y.name, y.code) + ', ', decideSlower(d.gap.pct, d.chase), '') : [ansT(head + 'Yours: ' + nameCode(y.name, y.code))];
     else segs = [ansT(head + 'Yours: none')];
     return { cls: 'ksrl-ans ksrl-ans-track', segs: segs };
   });
@@ -5389,10 +5439,18 @@ function listSourceLines(decs) {
 }
 
 // Parts & Modifications: ONE sentence for the chosen car and track. view = computePartsView/computeDirtBuildView. ctx: { carName, fittedCode, trackTitle, chase, byId (partsById), fittedIds }
-// -> { kind, text } | null (null = no sentence: the view is UNKNOWN)
+// -> { kind, text, segs } | null (null = no sentence: the view is UNKNOWN). segs = the same text as segments ({ t, g: true } = green: the part makes the time better).
 function partsAnswer(view, ctx) {
+  const a = partsAnswerText(view, ctx);
+  if (a === null) return null;
+  if (!a.segs) a.segs = [ansT(a.text)];
+  return a;
+}
+// "Weight Reduction": the category of a part in racing/carupgrades (the same name as Torn's square), or null
+function partCategory(ctx, id) { const u = ctx.byId.get(id); return u && typeof u.category === 'string' && u.category !== '' ? u.category : null; }
+function partsAnswerText(view, ctx) {
   if (!view || view.state === 'UNKNOWN') return null;
-  const who = ctx.carName + ' ' + ctx.fittedCode;
+  const who = nameCode(ctx.carName, ctx.fittedCode);
   const dec = ctx.chase ? 2 : 1;
   if (view.dirt === true) {
     const left = view.leftToDirtBuild;
@@ -5403,7 +5461,8 @@ function partsAnswer(view, ctx) {
       if (u && (pick === null || u.cost.points < pick.cost.points || (u.cost.points === pick.cost.points && u.id < pick.id))) pick = u;
     }
     if (!pick) return { kind: 'none', text: 'Your ' + who + ' needs more parts for the dirt build of ' + ctx.trackTitle + '.' };
-    return { kind: 'buy', text: 'Buy next: ' + pick.name + ' (' + pick.cost.points + ' RP) — part of the dirt build for ' + ctx.trackTitle + '.' };
+    const dcat = partCategory(ctx, pick.id);
+    return { kind: 'buy', text: 'Buy next: ' + pick.name + ' (' + (dcat ? dcat + ', ' : '') + pick.cost.points + ' RP) — part of the dirt build for ' + ctx.trackTitle + '.' };
   }
   const fitted = new Set(ctx.fittedIds || []);
   const surfaceWord = view.surface === 'dirt' ? 'dirt' : 'tarmac';
@@ -5433,7 +5492,11 @@ function partsAnswer(view, ctx) {
     pick = pool.length ? pool[0] : null;
   }
   if (!pick) return { kind: 'none', text: 'Your ' + who + ' is as good as it gets for ' + ctx.trackTitle + '. Nothing to buy.' };
-  return { kind: 'buy', text: 'Buy next: ' + pick.name + ' (' + pick.points + ' RP) — ' + Math.max(0, pick.gain).toFixed(dec) + ' % faster on ' + ctx.trackTitle + '.' };
+  // 0.7.2: the category (as Torn's square names it) and what the percentage is: what THIS part does for YOUR car, not your car against other cars
+  const cat = partCategory(ctx, pick.id);
+  const head = 'Buy next: ' + pick.name + ' (' + (cat ? cat + ', ' : '') + pick.points + ' RP) — makes your ' + ctx.carName + ' ';
+  const faster = Math.max(0, pick.gain).toFixed(dec) + ' % faster on ' + ctx.trackTitle;
+  return { kind: 'buy', text: head + faster + '.', segs: [ansT(head), ansT(faster, true), ansT('.')] };
 }
 /* ksrl-decide END */
 
@@ -5509,19 +5572,25 @@ const CSS = [
   '.ksrl-data-toggle{display:block;margin:2px 0 4px;padding:6px 8px 6px 0;min-height:28px;border:0;background:none;font:12px Arial,Helvetica,sans-serif;color:#7ea6d6;text-decoration:underline;text-align:left;cursor:pointer}',
   '.ksrl-data[hidden]{display:none !important}',
   '.ksrl-chase[hidden]{display:none !important}',
+  '.ksrl-red{color:#ff7b7b}',
+  '.ksrl-details-toggle{display:block;margin:2px 0 2px;padding:6px 8px 6px 0;min-height:28px;border:0;background:none;font:12px Arial,Helvetica,sans-serif;color:#7ea6d6;text-decoration:underline;text-align:left;cursor:pointer}',
+  '.ksrl-details{margin-top:2px;padding-top:6px;border-top:1px solid #4a4a4a}',
+  '.ksrl-details[hidden]{display:none !important}',
+  '.ksrl-alerts:empty{display:none}',
 ].join('\n');
 
 const ABOUT_LINES = [
   'Purpose: shows the value of each racing part for the car and track you choose, on the Parts & Modifications page. On the page it only displays. It never clicks, buys or navigates.',
-  'Stored in this browser (Tampermonkey storage): your Torn API key, cached answers from the Torn API, the track you chose for each car, and the settings of the sharing switch (on or off, whether its details are folded away, how far your races were sent), the settings of the "' + VIEWS_TITLE + '" switch (on or off, whether its details are folded away), the answers read from the KS server for it (at most 15 minutes old when used), the tick "' + CHASE_TITLE + '" (on or off), a short login to the KS server, and whether you have read what changed in the sharing text. The key is never shown again after you save it.',
+  'Stored in this browser (Tampermonkey storage): your Torn API key, cached answers from the Torn API, the track you chose for each car, and the settings of the sharing switch (on or off, whether its details are folded away, how far your races were sent), the settings of the "' + VIEWS_TITLE + '" switch (on or off, whether its details are folded away), the answers read from the KS server for it (at most 15 minutes old when used), the tick "' + CHASE_TITLE + '" (on or off) and whether "Details & settings" is open (one choice for all panels), a short login to the KS server, and whether you have read what changed in the sharing text. The key is never shown again after you save it.',
   'Kept until you press Remove key, which deletes all of it. Cached answers are replaced when they expire: 5 minutes for your enlisted cars, 24 hours for the rest.',
   'Shared: nothing, unless you switch on "' + SHARE_TITLE + '" (off to begin with). The script talks to api.torn.com (your key goes there) and, only with a switch on, to racing.kingshadeprotocol.com. What the sharing switch sends is listed under that switch. "' + VIEWS_TITLE + '" (also off to begin with) only reads from the KS server and is listed in the Cars panel.',
   'Key level: Custom, with access to user → basic, enlistedcars, faction, races and racing → cars, carupgrades, records, tracks.',
   'Who can use it: members of faction ' + FACTION_ID + '. Kingshade and Cheese are let in directly. For everyone else the script asks the Torn API (user → faction, with your own key) which faction you are in, at most once a day, and keeps the answer in this browser. If you are not in the faction, or the check fails, the panels stay closed.',
   TUNE_LEGEND,
   'Race panel: reads only the race leaderboard on the page you are viewing. No requests, nothing stored.',
-  'Cars panel: names the best car and build for the track and the best of your own cars (on Your Cars for every track, on Change car for the track of the race), from the lap-time model and the Torn API answers of the Parts panel, and with "' + VIEWS_TITLE + '" on also from real races read from the KS server. The ranking and the numbers are under "Show the data". It never clicks Change car, Remove or Save.',
-  'Parts panel: one sentence for the car and track you chose (what to buy next, or that nothing is needed); the details are under "Show the data".',
+  'Cars panel: names the best car and build for the track and the best of your own cars (on Your Cars for every track, on Change car for the track of the race), from the lap-time model and the Torn API answers of the Parts panel, and with "' + VIEWS_TITLE + '" on also from real races read from the KS server. The ranking and the numbers are under "Details & settings" → "Show the data". It never clicks Change car, Remove or Save.',
+  'Parts panel: one sentence for the car and track you chose (what to buy next, or that nothing is needed). The track list holds only the tracks where the car you chose is the best car, or your best car (the same answer as Your Cars). The details are under "Details & settings" → "Show the data".',
+  'Details & settings: every panel shows only its answer and this one line; the rest (the data, notes, switches, the key buttons) sits under it. Errors, the missing-key box and the sharing notice are always shown outside it.',
   CHASE_TITLE + ': off to begin with. ' + CHASE_TEXT,
 ].concat(SHARE_DISCLOSURE.map(function (l, i) { return (i === 0 ? SHARE_TITLE + ': ' : '') + l; }), VIEWS_DISCLOSURE.map(function (l, i) { return (i === 0 ? VIEWS_TITLE + ': ' : '') + l; }));
 
@@ -5576,12 +5645,12 @@ function boot() {
   });
 
   const st = {
-    share: { timer: null, waitVisible: false, statusEl: null, cbEl: null, detailsEl: null, toggleEl: null, noticeEl: null, wasEnabled: share.isEnabled() },
+    share: { timer: null, waitVisible: false, statusEl: null, cbEl: null, detailsEl: null, toggleEl: null, noticeEl: null, homeEl: null, alertSlot: null, wasEnabled: share.isEnabled() },
     gen: 0, sig: null, timer: null, abort: null, observer: null, observed: null, parentObserved: null,
     panel: null, style: null, hidden: false, waitVisible: false, tick: 0, counterBoxes: new Set(),
     cars: { panel: null, gen: 0, sig: null, abort: null, state: null, paused: false, waitVisible: false, badgeEls: new Set(), last: null, viewsDetailsEl: null, viewsToggleEl: null, dataOpen: false },
-    race: { panel: null, boardEl: null, infoEl: null, boardObs: null, infoObs: null, timer: null, lastReadMs: 0, tracker: null, paused: false, waitVisible: false },
-    ui: { kind: 'loading', message: '', notice: '', aboutOpen: false, changingKey: false, keyError: '', data: null, view: null, trackId: null, points: 'UNKNOWN', fittedIds: [] },
+    race: { det: null, panel: null, boardEl: null, infoEl: null, boardObs: null, infoObs: null, timer: null, lastReadMs: 0, tracker: null, paused: false, waitVisible: false },
+    ui: { relevant: [], kind: 'loading', message: '', notice: '', aboutOpen: false, changingKey: false, keyError: '', data: null, view: null, trackId: null, points: 'UNKNOWN', fittedIds: [] },
   };
 
   // ---- small DOM helpers (only ever used on our own elements)
@@ -5650,6 +5719,42 @@ function boot() {
     st.ui.rendered = false;
   }
 
+  // ---- 0.7.2: "Details & settings": ONE fold for all panels. A panel shows its answer and this one line; everything else sits under it. The choice (open/closed) is kept in
+  // ksrl.v1.settings.detailsOpen (closed to begin with). Errors, the missing-key box and the sharing notice are never put under it (the caller leaves them outside).
+  const DETAILS_TITLE = 'Details & settings';
+  const detailsSets = new Set();
+  function applyDetailOne(d, open) {
+    d.box.hidden = !open;
+    d.toggle.textContent = (open ? '▾ ' : '▸ ') + DETAILS_TITLE;
+    d.toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  function applyDetailsAll() {
+    const open = settingsReadDetails(gm);
+    for (const d of Array.from(detailsSets)) {
+      if (!d.toggle.isConnected && !d.keep) { detailsSets.delete(d); continue; }
+      applyDetailOne(d, open);
+    }
+  }
+  function makeDetails() {
+    for (const o of Array.from(detailsSets)) if (!o.toggle.isConnected && !o.keep) detailsSets.delete(o);
+    const d = { toggle: h('button', 'ksrl-details-toggle'), box: h('div', 'ksrl-details'), keep: false };
+    d.toggle.type = 'button';
+    d.toggle.addEventListener('click', function () { settingsSetDetails(gm, !settingsReadDetails(gm)); applyDetailsAll(); });
+    detailsSets.add(d);
+    applyDetailOne(d, settingsReadDetails(gm));
+    return d;
+  }
+  function ansEl(segs, cls) {
+    const el = h('div', cls);
+    for (const sg of segs) {
+      if (sg.g) el.appendChild(h('span', 'ksrl-green', sg.t));
+      else if (sg.r) el.appendChild(h('span', 'ksrl-red', sg.t));
+      else if (sg.d) el.appendChild(h('span', 'ksrl-grey', sg.t));
+      else el.appendChild(document.createTextNode(sg.t));
+    }
+    return el;
+  }
+
   // ---- panel rendering
   function row(text, cls) { return h('div', 'ksrl-row' + (cls ? ' ' + cls : ''), text); }
   function button(label, onClick) {
@@ -5662,7 +5767,7 @@ function boot() {
   function keyForm(body, canCancel) {
     const ui = st.ui;
     if (ui.notice) body.appendChild(row(ui.notice, 'ksrl-warn'));
-    body.appendChild(row('Enter your Torn API key (Custom level: user → basic, enlistedcars, faction; racing → cars, carupgrades, records, tracks). See About for what is stored.'));
+    body.appendChild(row('Enter your Torn API key (Custom level: user → basic, enlistedcars, faction; racing → cars, carupgrades, records, tracks). See About (under Details & settings) for what is stored.'));
     const line = h('div', 'ksrl-row');
     line.appendChild(h('span', null, 'Torn API key:'));
     const input = h('input', 'ksrl-input');
@@ -5707,9 +5812,15 @@ function boot() {
       el.appendChild(a);
     }
   }
+  // 0.7.2: the status line is ONE element: under "Details & settings" while all is well (OK, OFF, WAITING), outside it (in the alert slot) when it says anything else
+  function placeShareStatus(el) {
+    const bad = share.status().kind;
+    const target = bad === 'OK' || bad === 'OFF' || bad === 'WAITING' ? st.share.homeEl : st.share.alertSlot;
+    if (target && el.parentNode !== target) target.appendChild(el);
+  }
   function refreshShareStatus() {
     const el = st.share.statusEl;
-    if (el && el.isConnected) fillShareStatus(el);
+    if (el && el.isConnected) { fillShareStatus(el); placeShareStatus(el); }
     const cb = st.share.cbEl;
     if (cb && cb.isConnected && cb.checked !== share.isEnabled()) cb.checked = share.isEnabled();   // the server can switch it off (403)
     syncShareDetails();
@@ -5754,14 +5865,18 @@ function boot() {
     }, function () { if (share.isEnabled()) armShare(SHARE_INTERVAL_MS); });
   }
 
-  function shareSection(foot) {
-    const box = h('div', 'ksrl-share');
+  // 0.7.2: the notice that the text of the sharing changed stays OUTSIDE "Details & settings" until OK is pressed
+  function shareNoticeEl() {
     const notice = h('div', 'ksrl-share-notice');
     notice.appendChild(document.createTextNode(SHARE_NOTICE_TEXT + ' '));
     notice.appendChild(button('OK', function () { shareNoticeAck(gm); syncShareNotice(); applyShareDetails(); }));
     notice.hidden = !shareNoticePending(gm, share.isEnabled());
     st.share.noticeEl = notice;
-    box.appendChild(notice);
+    return notice;
+  }
+
+  function shareSection(foot) {
+    const box = h('div', 'ksrl-share');
     const label = h('label', 'ksrl-share-switch');
     const cb = h('input');
     cb.type = 'checkbox';
@@ -5788,17 +5903,31 @@ function boot() {
     for (const l of SHARE_DISCLOSURE) details.appendChild(h('div', 'ksrl-share-line', l));
     st.share.detailsEl = details;
     box.appendChild(details);
+    const home = h('div', 'ksrl-share-home');
+    box.appendChild(home);
+    st.share.homeEl = home;
     const status = h('div', 'ksrl-share-status');
     fillShareStatus(status);
     st.share.statusEl = status;
-    box.appendChild(status);
+    placeShareStatus(status);
     applyShareDetails();
     foot.appendChild(box);
   }
 
-  function footer(body, hasKey) {
+  // 0.7.2: outside "Details & settings": the sharing notice (until OK) and a sharing status that is a problem; under it: the pre-made parts (the data), the model note, the legend,
+  // the sharing switch and the key buttons. extra: { pre: [elements for the top of the fold], notes: [rows after the model note] }
+  function footer(body, hasKey, extra) {
+    const alerts = h('div', 'ksrl-alerts');
+    st.share.alertSlot = alerts;
+    body.appendChild(shareNoticeEl());
+    body.appendChild(alerts);
+    const det = makeDetails();
+    body.appendChild(det.toggle);
+    body.appendChild(det.box);
+    for (const e of (extra && extra.pre) || []) det.box.appendChild(e);
     const foot = h('div', 'ksrl-foot');
     foot.appendChild(h('div', null, 'Estimates come from a fitted model, not from Torn. ' + GAP_NOTE));
+    for (const e of (extra && extra.notes) || []) foot.appendChild(e);
     shareSection(foot);
     const actions = h('div', 'ksrl-row');
     actions.appendChild(button('About', function () { st.ui.aboutOpen = !st.ui.aboutOpen; render(); }));
@@ -5812,7 +5941,7 @@ function boot() {
       for (const l of ABOUT_LINES) about.appendChild(h('p', null, l));
       foot.appendChild(about);
     }
-    body.appendChild(foot);
+    det.box.appendChild(foot);
   }
 
   function removeKey() {
@@ -5826,6 +5955,39 @@ function boot() {
     st.ui.notice = ''; st.ui.changingKey = false; st.ui.keyError = '';
     st.tick++;
     cycle();
+  }
+
+  // 0.7.2: the tracks worth building THIS car for: those where its car model is BEST (decideTrack: same call, same data, same switches as Your Cars) or where it IS your best car.
+  // Alphabetical. When the class or the decision cannot be had the whole list is kept (fail-open here: a list is no decision).
+  function partsRelevantTracks(d) {
+    const all = carTracksSorted(d.tracks);
+    try {
+      const mine = d.enlistedItems.filter(function (e) { return e.is_removed !== true; });
+      const allowed = classesFrom(readCarsPage(document).playerClass || highestClass(mine));
+      if (allowed.length === 0) return all;
+      const dd = decisionData(views.snapshot(), deps.now(), { racingCars: d.racingCars, upgrades: d.upgrades, partsClass: d.partsClass });
+      const chase = settingsReadChase(gm);
+      return all.filter(function (tr) {
+        const dec = decideTrack(tr, null, allowed, d.enlistedItems, dd, chase);
+        return !!((dec.best && dec.best.carItemId === d.enlisted.car_item_id) || (dec.yours && dec.yours.id === d.enlisted.id));
+      });
+    } catch (e) { return all; }
+  }
+  // The track of the panel: the one the player chose earlier when it is still in the list, else the first of the list; none when the list is empty. Nothing is stored here.
+  function partsPickTrack() {
+    const ui = st.ui;
+    const d = ui.data;
+    if (!d) return;
+    ui.relevant = partsRelevantTracks(d);
+    const stored = store.trackFor(d.enlisted.id);
+    const tid = ui.relevant.length === 0 ? null : (ui.relevant.some(function (t) { return t.id === stored; }) ? stored : ui.relevant[0].id);
+    if (tid !== ui.viewTrackId) {
+      ui.trackId = tid;
+      ui.viewTrackId = tid;
+      ui.view = tid === null ? null : computeViewForTrack({
+        car: d.car, enlisted: d.enlisted, allEnlisted: d.enlistedItems, fittedIds: ui.fittedIds, upgrades: d.upgrades, partsClass: d.partsClass, trackId: tid,
+      });
+    }
   }
 
   function render() {
@@ -5860,75 +6022,68 @@ function boot() {
       body.appendChild(row('Lap-time estimate (experimental): UNKNOWN — ' + ui.message));
       footer(body, hasKey);
     } else if (ui.kind === 'ready') {
+      partsPickTrack();
       const d = ui.data;
-      // 0.7.1: ONE sentence for the car and track (what to buy next, or that nothing is needed). The rows below it move under "Show the data" (closed to begin with);
-      // where no sentence can be made (no track chosen, the model has no estimate) the rows stay as they were.
+      // 0.7.2: visible = ONE sentence for the car and track, the track list (only tracks that matter for this car) and the one line "Details & settings". The rows, the legend, the model note
+      // and the switches are under it ("Show the data" holds the rows, closed to begin with). An UNKNOWN estimate is always shown (fail-closed): it is the text where the sentence would be.
       const tuneNow = tuneCode(ui.fittedIds);
       const chosen = ui.trackId === null ? null : d.tracks.find(function (x) { return x.id === ui.trackId; });
       const sentence = ui.trackId === null || !ui.view || !chosen ? null : partsAnswer(ui.view, { carName: d.car.car_item_name, fittedCode: tuneNow, trackTitle: chosen.title, chase: settingsReadChase(gm), byId: partsById(d.upgrades), fittedIds: ui.fittedIds });
       const dataRows = [];
       const dRow = function (text, cls) { const r = row(text, cls); dataRows.push(r); return r; };
-      const carRow = dRow('Car: ' + d.car.car_item_name + ' (' + (d.enlisted.car_name || '—') + ') · class ' + d.enlisted.class + ' · #' + d.enlisted.id);
-      const tuneRow = dRow(tuneRowText(ui.trackId === null ? null : ui.view, tuneNow));
+      dRow('Car: ' + d.car.car_item_name + ' (' + (d.enlisted.car_name || '—') + ') · class ' + d.enlisted.class + ' · #' + d.enlisted.id);
+      dRow(tuneRowText(ui.trackId === null ? null : ui.view, tuneNow));
       const built = ui.trackId === null ? null : alreadyBuiltText(ui.view);
-      const builtRow = built ? dRow(built, 'ksrl-warn') : null;
-      const legendRow = dRow(TUNE_LEGEND, 'ksrl-legend');
-      const trackLine = h('div', 'ksrl-row');
-      trackLine.appendChild(h('span', null, 'Track:'));
-      const sel = h('select', 'ksrl-select');
-      const none = h('option', null, 'Choose a track');
-      none.value = '';
-      sel.appendChild(none);
-      for (const t of d.tracks) {
-        const o = h('option', null, t.title + ' (' + trackSurfaceLabel(t.id) + ')');
-        o.value = String(t.id);
-        sel.appendChild(o);
-      }
-      sel.value = ui.trackId === null ? '' : String(ui.trackId);
-      sel.addEventListener('change', function () {
-        const v = sel.value === '' ? null : Number(sel.value);
-        store.setTrackFor(d.enlisted.id, v);
-        cycle();
-      });
-      trackLine.appendChild(sel);
-      const tail = [];       // the rows under the track line, in their old order
+      if (built) dRow(built, 'ksrl-warn');
+      let firstRow = null;       // the estimate row; shown outside only when there is no sentence (UNKNOWN)
       let newerRow = null;
-      if (ui.trackId === null) tail.push(row('Choose a track to see the value of each part.', 'ksrl-dim'));
-      else {
+      if (ui.trackId !== null) {
         const rows = describeView(ui.view, ui.view.dirt === true ? dirtContext(d, ui.view, ui.trackId, ui.points) : { racingPoints: ui.points });
         const first = rows.shift();
-        tail.push(dRow(first.text));
-        if (ui.view.state !== 'UNKNOWN' && d.pageNewer > 0) {
-          newerRow = row('The page is newer than the API for ' + d.pageNewer + ' part(s) — using the page.', 'ksrl-warn');
-          tail.push(newerRow);
-        }
-        for (const r of rows) tail.push(dRow(r.text));
+        if (sentence) dRow(first.text); else firstRow = row(first.text);
+        if (ui.view.state !== 'UNKNOWN' && d.pageNewer > 0) newerRow = row('The page is newer than the API for ' + d.pageNewer + ' part(s) — using the page.', 'ksrl-warn');
+        for (const r of rows) dRow(r.text);
         const av = activeView();
         const catText = av ? categoriesRowText(categoryList(av, readPartsPage(document))) : null;
-        if (catText) tail.push(dRow(catText));
+        if (catText) dRow(catText);
       }
-      if (sentence) {
-        // the sentence first, the track line to change it, then "Show the data" with everything else; the warning about the page stays in view
-        body.appendChild(h('div', 'ksrl-ans ksrl-ans-parts', sentence.text));
+      if (ui.trackId === null) body.appendChild(row('Your ' + d.car.car_item_name + ' is not the best car on any track — there is no track to build it for.'));
+      else {
+        if (sentence) body.appendChild(ansEl(sentence.segs, 'ksrl-ans ksrl-ans-parts'));
+        else body.appendChild(firstRow);
+        const trackLine = h('div', 'ksrl-row');
+        trackLine.appendChild(h('span', null, 'Track:'));
+        const sel = h('select', 'ksrl-select');
+        for (const t of ui.relevant) {
+          const o = h('option', null, t.title + ' (' + trackSurfaceLabel(t.id) + ')');
+          o.value = String(t.id);
+          sel.appendChild(o);
+        }
+        sel.value = String(ui.trackId);
+        sel.addEventListener('change', function () {
+          store.setTrackFor(d.enlisted.id, Number(sel.value));
+          cycle();
+        });
+        trackLine.appendChild(sel);
         body.appendChild(trackLine);
         if (newerRow) body.appendChild(newerRow);
+      }
+      const pre = [];
+      if (dataRows.length) {
         const toggle = h('button', 'ksrl-data-toggle');
         toggle.type = 'button';
+        const data = h('div', 'ksrl-data');
+        for (const r of dataRows) data.appendChild(r);
         const apply = function () {
-          for (const r of dataRows) r.hidden = !ui.dataOpen;
+          data.hidden = !ui.dataOpen;
           toggle.textContent = ui.dataOpen ? 'Hide the data ▾' : 'Show the data ▸';
           toggle.setAttribute('aria-expanded', ui.dataOpen ? 'true' : 'false');
         };
         toggle.addEventListener('click', function () { ui.dataOpen = !ui.dataOpen; apply(); });
-        body.appendChild(toggle);
-        for (const r of [carRow, tuneRow, builtRow, legendRow].concat(tail)) if (r && r !== newerRow) body.appendChild(r);
         apply();
-      } else {
-        for (const r of [carRow, tuneRow, builtRow, legendRow]) if (r) body.appendChild(r);
-        body.appendChild(trackLine);
-        for (const r of tail) body.appendChild(r);
+        pre.push(toggle, data);
       }
-      footer(body, true);
+      footer(body, true, { pre: pre, notes: [row(TUNE_LEGEND, 'ksrl-legend')] });
     }
     st.panel.replaceChildren(head, body);
     if (st.hidden) st.panel.style.display = 'none';
@@ -6031,43 +6186,30 @@ function boot() {
   // 0.7.0: opts.real = rows of "Real results on <track>" (Change car only, below the ranking, in own elements ksrl-rr), opts.withSwitch = the "Show KS faction race data" switch in the foot
   // 0.7.1: opts.answer = the ONE answer (lines of segments, own elements ksrl-ans) shown first; everything else (the rows, the real results, the grey lines) goes under
   // "Show the data" (closed to begin with). opts.withSwitch also puts the tick "Chase track records" above the switch.
-  function ansLine(r) {
-    const el = h('div', r.cls);
-    for (const sg of r.segs) { if (sg.g) el.appendChild(h('span', 'ksrl-green', sg.t)); else el.appendChild(document.createTextNode(sg.t)); }
-    return el;
-  }
+  function ansLine(r) { return ansEl(r.segs, r.cls); }
+  // 0.7.2: visible = the answer rows (opts.answer, the rows without detail: true) and anything that is a problem (rows of an error state, the status of the KS server read when it is not
+  // plainly OK/OFF/WAITING); then the one line "Details & settings". Under it, in this order: "Show the data" (the rows, the real results), the notes (footers), why and what would help
+  // (the answer rows with detail: true), the legend of the codes, the tick "Chase track records", the switch "Show KS faction race data".
   function carsRenderRows(rows, footers, opts) {
     const p = st.cars.panel;
     if (!p) return;
     const head = h('div', 'ksrl-head');
-    head.appendChild(h('span', null, 'KS Racing Lab \u00b7 Cars'));
+    head.appendChild(h('span', null, 'KS Racing Lab · Cars'));
     head.appendChild(h('span', 'ksrl-ver', 'v' + SCRIPT_VERSION));
     const body = h('div', 'ksrl-body');
     const answer = opts && opts.answer ? opts.answer : null;
-    let into = body;
-    let data = null;
+    const det = makeDetails();
+    let data = null;       // the rows of the data (with an answer); without one the rows ARE the answer or the problem and stay outside
+    const dataEls = [];
     if (answer) {
       const box = h('div', 'ksrl-answer');
-      for (const r of answer) box.appendChild(ansLine(r));
+      for (const r of answer) if (!r.detail) box.appendChild(ansLine(r));
       body.appendChild(box);
-      const toggle = h('button', 'ksrl-data-toggle');
-      toggle.type = 'button';
-      data = h('div', 'ksrl-data');
-      const apply = function () {
-        data.hidden = !st.cars.dataOpen;
-        toggle.textContent = st.cars.dataOpen ? 'Hide the data \u25be' : 'Show the data \u25b8';
-        toggle.setAttribute('aria-expanded', st.cars.dataOpen ? 'true' : 'false');
-      };
-      toggle.addEventListener('click', function () { st.cars.dataOpen = !st.cars.dataOpen; apply(); });
-      apply();
-      body.appendChild(toggle);
-      body.appendChild(data);
-      data.appendChild(h('div', 'ksrl-ans-note', CODE_LEGEND));
-      into = data;
     }
+    const rowEls = [];
     for (const r of rows) {
       const el = h('div', 'ksrl-row');
-      if (typeof r === 'string') el.textContent = r;
+      if (typeof r === 'string') { for (const sg of pctSegs(r)) { if (sg.g) el.appendChild(h('span', 'ksrl-green', sg.t)); else if (sg.r) el.appendChild(h('span', 'ksrl-red', sg.t)); else el.appendChild(document.createTextNode(sg.t)); } }
       else if (!Array.isArray(r)) {             // 0.6.0: text and a link (the key link)
         el.textContent = r.text;
         const a = h('a', 'ksrl-share-link', 'Make the key');
@@ -6076,19 +6218,42 @@ function boot() {
         a.rel = 'noopener noreferrer';
         el.appendChild(a);
       } else for (const s of r) { if (s.g) el.appendChild(h('span', 'ksrl-green', s.t)); else el.appendChild(document.createTextNode(s.t)); }
-      into.appendChild(el);
+      rowEls.push(el);
     }
-    if (opts && opts.real) for (const r of opts.real) {
-      const el = h('div', r.cls);
-      for (const sg of r.segs) {
-        if (sg.g) el.appendChild(h('span', 'ksrl-green', sg.t));
-        else if (sg.d) el.appendChild(h('span', 'ksrl-grey', sg.t));
-        else el.appendChild(document.createTextNode(sg.t));
+    if (answer) {
+      const toggle = h('button', 'ksrl-data-toggle');
+      toggle.type = 'button';
+      data = h('div', 'ksrl-data');
+      const apply = function () {
+        data.hidden = !st.cars.dataOpen;
+        toggle.textContent = st.cars.dataOpen ? 'Hide the data ▾' : 'Show the data ▸';
+        toggle.setAttribute('aria-expanded', st.cars.dataOpen ? 'true' : 'false');
+      };
+      toggle.addEventListener('click', function () { st.cars.dataOpen = !st.cars.dataOpen; apply(); });
+      apply();
+      for (const el of rowEls) data.appendChild(el);
+      if (opts && opts.real) for (const r of opts.real) data.appendChild(ansLine(r));
+      dataEls.push(toggle, data);
+    } else for (const el of rowEls) body.appendChild(el);
+    const alertSlot = h('div', 'ksrl-alerts');
+    body.appendChild(alertSlot);
+    for (const e of dataEls) det.box.appendChild(e);
+    for (const r of footers || []) det.box.appendChild(h('div', 'ksrl-row ksrl-legend', r));
+    if (answer) {
+      for (const r of answer) if (r.detail) det.box.appendChild(ansLine(r));
+      det.box.appendChild(h('div', 'ksrl-ans-note', CODE_LEGEND));
+    }
+    if (opts && opts.withSwitch) { det.box.appendChild(chaseSection()); det.box.appendChild(viewsSection(alertSlot)); }
+    // 0.7.2: a warning among the real results ("UNKNOWN: ...") is not put under the fold; one that only repeats the status line of the KS read (already outside) is not shown twice
+    if (data && opts && opts.real) {
+      const shown = Array.from(alertSlot.children).map(function (e) { return e.textContent; });
+      for (const el of Array.from(data.children)) {
+        if (!el.classList.contains('ksrl-rr-warn')) continue;
+        if (shown.indexOf(el.textContent) >= 0) { el.remove(); continue; }
+        alertSlot.appendChild(el);
       }
-      into.appendChild(el);
     }
-    for (const r of footers || []) into.appendChild(h('div', 'ksrl-row ksrl-legend', r));
-    if (opts && opts.withSwitch) { body.appendChild(chaseSection()); body.appendChild(viewsSection()); }
+    if (det.box.childNodes.length) { body.appendChild(det.toggle); body.appendChild(det.box); }
     p.replaceChildren(head, body);
   }
 
@@ -6121,7 +6286,7 @@ function boot() {
     if (sn.cache) return { kind: 'OK', text: 'On. Last read ' + shareAgoText(Math.max(0, deps.now() - sn.cache.fetchedAt)) + '.', link: null };
     return { kind: 'WAITING', text: 'On. Reads when Change car is open and visible.', link: null };
   }
-  function viewsSection() {
+  function viewsSection(alertSlot) {
     const box = h('div', 'ksrl-share ksrl-views');
     const label = h('label', 'ksrl-share-switch');
     const cb = h('input');
@@ -6156,7 +6321,8 @@ function boot() {
       a.rel = 'noopener noreferrer';
       status.appendChild(a);
     }
-    box.appendChild(status);
+    if (alertSlot && !(stt.kind === 'OK' || stt.kind === 'OFF' || stt.kind === 'WAITING')) alertSlot.appendChild(status);     // 0.7.2: ERROR, STALE, OFFLINE, WAIT, CHECKING ... stay in view
+    else box.appendChild(status);
     apply();
     return box;
   }
@@ -6334,6 +6500,7 @@ function boot() {
   function raceTeardown() {
     raceStopObservers();
     if (st.race.panel) { st.race.panel.remove(); st.race.panel = null; }
+    if (st.race.det) { detailsSets.delete(st.race.det); st.race.det = null; }
     st.race.tracker = null;
     st.race.paused = false;
     dropStyleIfUnused();
@@ -6355,7 +6522,18 @@ function boot() {
       }
       body.appendChild(el);
     }
-    if (legend) body.appendChild(h('div', 'ksrl-row ksrl-legend', RACE_LEGEND));
+    // 0.7.2: the explanation of the gaps and the trend is under "Details & settings". The fold of this panel is made once and moved into every new body, so a click on it is not lost
+    // when the leaderboard redraws the panel (it redraws many times a second).
+    if (legend) {
+      if (!st.race.det) {
+        st.race.det = makeDetails();
+        st.race.det.keep = true;
+        st.race.det.box.appendChild(h('div', 'ksrl-row ksrl-legend', RACE_LEGEND));
+        applyDetailOne(st.race.det, settingsReadDetails(gm));
+      }
+      body.appendChild(st.race.det.toggle);
+      body.appendChild(st.race.det.box);
+    }
     p.replaceChildren(head, body);
   }
 
@@ -6423,11 +6601,6 @@ function boot() {
   }
 
   // ---- the run: one per distinct (car, fitted parts, track, key) state
-  function trackOf(carId, data) {
-    const t = store.trackFor(carId);
-    return t !== null && data.tracks.some(function (x) { return x.id === t; }) ? t : null;
-  }
-
   async function run(sig, page) {
     st.sig = sig;
     const myGen = ++st.gen;
@@ -6467,10 +6640,7 @@ function boot() {
     ui.data = d;
     ui.notice = '';
     ui.kind = 'ready';
-    ui.trackId = trackOf(d.enlisted.id, d);
-    ui.view = ui.trackId === null ? null : computeViewForTrack({
-      car: d.car, enlisted: d.enlisted, allEnlisted: d.enlistedItems, fittedIds: page.fittedIds, upgrades: d.upgrades, partsClass: d.partsClass, trackId: ui.trackId,
-    });
+    ui.trackId = null; ui.view = null; ui.viewTrackId = undefined;      // the track and the view are chosen in render (partsPickTrack)
     render();
   }
 
@@ -6594,6 +6764,7 @@ if (typeof document === 'undefined') {
     decideTrack: decideTrack, decisionData: decisionData, classesFrom: classesFrom, highestClass: highestClass, settingsReadChase: settingsReadChase, settingsSetChase: settingsSetChase,
     changeAnswerRows: changeAnswerRows, listAnswerRows: listAnswerRows, listSourceLines: listSourceLines, partsAnswer: partsAnswer, SETTINGS_STORE: SETTINGS_STORE,
     CHASE_TITLE: CHASE_TITLE, CHASE_TEXT: CHASE_TEXT, CODE_LEGEND: CODE_LEGEND, decideSlower: decideSlower,
+    settingsRead: settingsRead, settingsReadDetails: settingsReadDetails, settingsSetDetails: settingsSetDetails, hasCode: hasCode, nameCode: nameCode, NOT_LISTED_TEXT: NOT_LISTED_TEXT, carTracksSorted: carTracksSorted, pctSegs: pctSegs,
   };
 } else {
   boot();
