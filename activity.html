@@ -1,0 +1,1317 @@
+<!doctype html>
+<!-- activity: KS Activity Tracker 1. One page, one script, no external scripts. Reads the view "activity"
+     that the KS server publishes to the War Room worker (POST /views/get, behind the War Room sign-in)
+     and draws who is online when, per 5-minute slot of the day (TCT), for our faction and the ranked
+     war opponent. Information only: it never changes who may take a DIBS. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KS Activity Tracker</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --ground: #0e141a; --surface: #171f27; --surface-2: #1d262f;
+    --ink: #e3e9ef; --muted: #93a3b2;
+    --line: #26313b; --line-strong: #35434f;
+    --accent: #d8804d; --accent-ink: #171f27; --accent-soft: #2e211a;
+    --now: #ff8c1a;
+    --good: #46a583; --warn: #cc9f3f; --bad: #dd6a61;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+    --display: 'Saira Condensed','Arial Narrow',Helvetica,sans-serif;
+    --body: 'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+    --mono: 'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--body); font-size: 15px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1320px; margin: 0 auto; padding: 24px 16px 72px; display: flex; flex-direction: column; gap: 20px; }
+
+  .backbar { display: flex; flex-wrap: wrap; gap: 8px; }
+  .backbar a {
+    font-family: var(--display); font-weight: 600; font-size: 13px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); text-decoration: none; border: 1px solid var(--line-strong); border-radius: 3px;
+    padding: 7px 12px; display: inline-block;
+  }
+  .backbar a:hover { color: var(--accent); border-color: var(--accent); }
+  a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .masthead {
+    display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between;
+    gap: 12px 24px; padding-bottom: 16px; border-bottom: 2px solid var(--line-strong);
+  }
+  h1 { font-family: var(--display); font-weight: 700; font-size: clamp(30px,5vw,42px); line-height: 1.02; margin: 0; }
+  .masthead p { margin: 6px 0 0; color: var(--muted); max-width: 62ch; }
+  .stamp {
+    font-family: var(--display); font-weight: 600; font-size: 13px; letter-spacing: .13em; text-transform: uppercase;
+    color: var(--accent); border: 1px solid var(--accent); border-radius: 2px; padding: 5px 10px; white-space: nowrap;
+  }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; box-shadow: var(--shadow); min-width: 0; }
+  .panel-head {
+    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+    gap: 8px 16px; padding: 12px 16px; border-bottom: 1px solid var(--line);
+  }
+  .panel-head h2 {
+    font-family: var(--display); font-weight: 600; font-size: 19px; letter-spacing: .04em; text-transform: uppercase; margin: 0;
+  }
+  .panel-body { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .note { color: var(--muted); font-size: 13px; margin: 0; max-width: 78ch; }
+  p { margin: 0; }
+
+  label.lbl {
+    font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: .11em; text-transform: uppercase;
+    color: var(--muted); display: block; margin-bottom: 6px;
+  }
+  input[type="password"], input[type="text"] {
+    font-family: var(--mono); font-size: 15px; color: var(--ink); background: var(--surface-2);
+    border: 1px solid var(--line-strong); border-radius: 3px; padding: 9px 11px; width: 100%; min-width: 0;
+  }
+  input::placeholder { color: var(--muted); opacity: 1; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .toolbar .grow { flex: 1 1 180px; min-width: 0; }
+
+  .btn {
+    font-family: var(--display); font-weight: 600; font-size: 13px; letter-spacing: .08em; text-transform: uppercase;
+    background: var(--surface-2); color: var(--ink); border: 1px solid var(--line-strong); border-radius: 3px;
+    padding: 9px 15px; cursor: pointer; white-space: nowrap; text-decoration: none; display: inline-block;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn.primary:hover { color: var(--accent-ink); filter: brightness(1.06); }
+  .btn[disabled] { opacity: .55; cursor: default; }
+  .btn.small { font-size: 12px; padding: 6px 10px; }
+  .btn.quiet { background: transparent; border-color: var(--line-strong); color: var(--muted); }
+  .btn.quiet:hover { color: var(--bad); border-color: var(--bad); }
+
+  .pill {
+    font-family: var(--display); font-weight: 600; font-size: 13px; letter-spacing: .1em; text-transform: uppercase;
+    border: 1px solid var(--line-strong); border-radius: 2px; padding: 3px 9px; color: var(--muted); white-space: nowrap;
+  }
+  .pill.good { color: var(--good); border-color: var(--good); }
+  .pill.bad { color: var(--bad); border-color: var(--bad); }
+  .pill.warn { color: var(--warn); border-color: var(--warn); }
+
+  .msg { border: 1px solid var(--line-strong); border-left-width: 4px; border-radius: 3px; padding: 8px 12px; background: var(--surface-2); }
+  .msg.err { border-color: var(--bad); }
+
+  .seg { display: inline-flex; flex-wrap: wrap; gap: 0; }
+  .seg .btn { border-radius: 0; margin-left: -1px; }
+  .seg .btn:first-child { border-radius: 3px 0 0 3px; margin-left: 0; }
+  .seg .btn:last-child { border-radius: 0 3px 3px 0; }
+  .seg .btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); position: relative; }
+
+  .status { font-family: var(--mono); font-size: 13px; color: var(--ink); overflow-wrap: anywhere; }
+  .status.bad { color: var(--bad); }
+  .status.warn { color: var(--warn); }
+
+  .block-title { font-family: var(--display); font-weight: 600; font-size: 14px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+  .strip-wrap { position: relative; max-width: 100%; }
+  canvas { display: block; max-width: 100%; box-sizing: content-box; }
+  canvas.strip { border: 1px solid var(--line-strong); background: var(--surface-2); cursor: crosshair; }
+  canvas.axis { background: transparent; }
+  .stale canvas.strip { filter: grayscale(1); opacity: .55; }
+  /* The "now" line lives INSIDE each strip's own box, so it can only ever cross squares, never text. */
+  .sbox { position: relative; display: block; width: max-content; max-width: 100%; }
+  .sbox .nl { position: absolute; top: 0; bottom: 0; left: 0; width: 2px; background: var(--now); pointer-events: none; z-index: 2; }
+  canvas.axis { border-left: 1px solid transparent; border-right: 1px solid transparent; }
+  .quiet-lines p { font-family: var(--mono); font-size: 13px; color: var(--ink); margin-top: 4px; overflow-wrap: anywhere; }
+  .quiet-lines b { font-weight: 600; color: var(--muted); }
+
+  .hover { min-height: 22px; font-family: var(--mono); font-size: 13px; color: var(--ink); overflow-wrap: anywhere; }
+
+  .tablewrap { position: relative; min-width: 0; }
+  table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+  th, td { padding: 4px 6px; text-align: left; vertical-align: middle; border-bottom: 1px solid var(--line); }
+  th { font-weight: 400; vertical-align: bottom; }
+  td.num, th.num { text-align: right; }
+  td.heat { padding: 4px 0 4px 8px; }
+  th.heathead { padding-left: 8px; }
+  .sortbtn {
+    font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--muted); background: transparent; border: 0; padding: 6px 0; cursor: pointer; text-align: inherit; width: 100%;
+  }
+  .sortbtn:hover { color: var(--accent); }
+  th[aria-sort="ascending"] .sortbtn::after { content: " \25B2"; color: var(--accent); }
+  th[aria-sort="descending"] .sortbtn::after { content: " \25BC"; color: var(--accent); }
+  .heatlabel { display: block; font-family: var(--display); font-weight: 600; font-size: 12px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); padding-bottom: 2px; }
+  td.name, td.name a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  td.name a { color: var(--ink); text-decoration: none; display: block; }
+  td.name a:hover { color: var(--accent); text-decoration: underline; }
+  td.num { font-family: var(--mono); font-size: 13px; }
+  .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: middle; border: 2px solid var(--muted); }
+  .dot.Online { background: var(--good); border-color: var(--good); }
+  .dot.Idle { background: var(--warn); border-color: var(--warn); }
+  .dot.Offline { background: #7b8a98; border-color: #7b8a98; }
+  .dot.unknown { background: transparent; border-style: dashed; }
+
+  #axisPhoneRow { display: none; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; color: var(--muted); font-size: 13px; }
+  .legend .scale { display: inline-flex; align-items: center; gap: 0; }
+  .legend .scale i { display: inline-block; width: 16px; height: 14px; }
+  .legend .nodata { display: inline-block; width: 24px; height: 14px; border: 1px solid var(--line-strong);
+    background: repeating-linear-gradient(135deg, #2a2f35 0 3px, #59616b 3px 4px); vertical-align: middle; }
+  details.panel summary { cursor: pointer; padding: 12px 16px; font-family: var(--display); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  details.panel .panel-body { border-top: 1px solid var(--line); }
+  .mono { font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; }
+
+  @media (min-width: 701px) {
+    table { min-width: 0; }
+    col.c-name { width: 130px; } col.c-now { width: 40px; } col.c-on { width: 64px; } col.c-idle { width: 64px; } col.c-seen { width: 56px; }
+  }
+  @media (max-width: 700px) {
+    .wrap { padding: 16px 16px 56px; }
+    #unitPick { display: none; }
+    #axisPhoneRow { display: block; margin-bottom: 4px; }
+    .panel-body { padding: 12px; }
+    table, tbody, tr, td { display: block; }
+    colgroup { display: none; }
+    thead { display: block; }
+    thead tr { display: flex; flex-wrap: wrap; gap: 4px 14px; border-bottom: 1px solid var(--line); padding: 2px 0 6px; }
+    thead th { display: block; border: 0; padding: 0; width: auto; }
+    thead th.heathead { display: none; }
+    .sortbtn { width: auto; padding: 4px 0; text-align: left; }
+    tbody tr { display: grid; grid-template-columns: minmax(0,1fr) 22px 54px 54px 44px; column-gap: 6px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
+    tbody td { border: 0; padding: 0; min-width: 0; }
+    tbody td.heat { grid-column: 1 / -1; margin-top: 5px; padding: 0; }
+    td.num, td.now { text-align: right; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <nav class="backbar" aria-label="Other tools">
+    <a href="https://hjunez.github.io/kingshade-leader-tools/warroom.html">War Room</a>
+    <a href="https://hjunez.github.io/kingshade-leader-tools/">Leader Tools</a>
+  </nav>
+
+  <header class="masthead">
+    <div>
+      <h1>KS Activity Tracker</h1>
+      <p>When each member of our faction and of the ranked war opponent is online, in 5-minute steps of the
+        day, over the last 7 days. It reads; it never attacks, opens or sends anything for you.</p>
+    </div>
+    <span class="stamp">Information only</span>
+  </header>
+
+  <section class="panel" aria-labelledby="signHead">
+    <div class="panel-head">
+      <h2 id="signHead">Sign in</h2>
+      <span class="pill" id="sessionWord">CHECKING</span>
+    </div>
+    <div class="panel-body">
+      <div id="keyForm" hidden>
+        <label class="lbl" for="apiKey">Your Torn Custom API Key</label>
+        <div class="toolbar">
+          <input type="password" id="apiKey" class="grow" autocomplete="off" spellcheck="false" placeholder="Paste your key">
+          <button type="button" class="btn" id="toggleKey" aria-pressed="false">Show</button>
+          <button type="button" class="btn primary" id="loadBtn">Load</button>
+          <a class="btn" id="createKey" target="_blank" rel="noopener noreferrer" href="https://www.torn.com/preferences.php#tab=api?step=addNewKey&amp;title=KS%20Torn%20War%20Dibs%20PC&amp;faction=members,wars&amp;user=basic,profile">Create custom API key</a>
+        </div>
+        <p class="note" style="margin-top:8px">The same key War Room and Leader Tools use. This page needs
+          <strong>faction &rarr; members</strong> (for the names). The key stays in this browser until you press
+          Forget key; it is sent once to the KS server to sign you in (the server does not keep it) and to
+          Torn to read the names of the faction you are looking at. Nothing else is done with it.</p>
+      </div>
+      <p class="msg err" id="sessionSaid" role="alert" hidden></p>
+      <div class="toolbar">
+        <button type="button" class="btn quiet" id="forgetKey">Forget key</button>
+        <p class="note" style="flex:1 1 220px">Removes the key from this browser and empties this page. It is the
+          same key War Room and Leader Tools use, so they will ask for it again.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="mapHead">
+    <div class="panel-head">
+      <h2 id="mapHead">Activity</h2>
+      <div class="seg" id="factionPick" role="group" aria-label="Faction" hidden>
+        <button type="button" class="btn small" id="pickOpponent" data-pick="opponent" aria-pressed="false">Opponent</button>
+        <button type="button" class="btn small" id="pickOwn" data-pick="own" aria-pressed="false">Our faction</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <p class="note" id="noOpponent" hidden>No ranked war opponent is tracked right now.</p>
+      <p class="status" id="statusLine" role="status">Sign in with your Torn key to load the activity map.</p>
+
+      <div id="mapBody" hidden>
+        <div class="toolbar" id="unitPick-wrap">
+          <div class="seg" id="unitPick" role="group" aria-label="Resolution">
+            <button type="button" class="btn small" id="unitSlot" data-unit="slot" aria-pressed="true">5 min</button>
+            <button type="button" class="btn small" id="unitHour" data-unit="hour" aria-pressed="false">1 h</button>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="block-title" id="facTitle">Members online (share of members)</h3>
+          <div class="strip-wrap" id="facWrap">
+            <canvas class="axis" id="facAxis" aria-hidden="true"></canvas>
+            <div class="sbox"><canvas class="strip" id="facStrip" aria-label="Share of the faction's members online per time of day"></canvas><i class="nl" id="facNow" aria-hidden="true"></i></div>
+          </div>
+          <div class="quiet-lines">
+            <p id="quietLine"></p>
+            <p id="busyLine"></p>
+          </div>
+        </div>
+
+        <div class="tablewrap" id="tableWrap">
+          <div id="axisPhoneRow"><canvas class="axis" id="axisPhone" aria-hidden="true"></canvas></div>
+          <table id="players" aria-label="Members">
+            <colgroup><col class="c-name"><col class="c-now"><col class="c-on"><col class="c-idle"><col class="c-seen"><col></colgroup>
+            <thead>
+              <tr>
+                <th scope="col" aria-sort="none" data-col="name"><button type="button" class="sortbtn" data-sort="name">Name</button></th>
+                <th scope="col" aria-sort="none" data-col="now"><button type="button" class="sortbtn" data-sort="now">Now</button></th>
+                <th scope="col" class="num" aria-sort="descending" data-col="online"><button type="button" class="sortbtn" data-sort="online">Online %</button></th>
+                <th scope="col" class="num" aria-sort="none" data-col="idle"><button type="button" class="sortbtn" data-sort="idle">Idle %</button></th>
+                <th scope="col" class="num" aria-sort="none" data-col="seen"><button type="button" class="sortbtn" data-sort="seen">Seen (h)</button></th>
+                <th scope="col" class="heathead"><span class="heatlabel">Online by time of day (TCT)</span><canvas class="axis" id="axisPc" aria-hidden="true"></canvas></th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+
+        <p class="hover" id="hoverLine" aria-live="polite">Point at or tap a square to read it.</p>
+
+        <div class="legend" id="legend" aria-label="Legend">
+          <span>Colour of a square (member rows: share of the time online; faction strip: share of the members online):</span>
+          <span class="scale" id="scale" aria-hidden="true"></span>
+          <span>0% &rarr; 100%</span>
+          <span><i class="nodata" aria-hidden="true"></i> no data</span>
+          <span id="nowText"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="aboutHead">
+    <div class="panel-head"><h2 id="aboutHead">About</h2></div>
+    <div class="panel-body">
+      <p class="note">The data comes from the KS server, which reads Torn's public faction list every 30 seconds.
+        Only time when the server actually saw the faction is counted, so a gap in its readings is never shown
+        as activity or as quiet. All times are TCT (UTC). A square is the share of that time of day, across the
+        days covered, that the member was Online; the colour goes from dark (never) to light green (almost
+        always). The strip above the members shows, for each square, the share of the faction's members that were
+        online (its hover line gives the average number online). This page is information; it never changes who may take a DIBS. Its only call to Torn is the
+        list of names, made with your key, at most once every 10 minutes per faction. Nothing is saved in this
+        browser except the same key War Room uses.</p>
+    </div>
+  </section>
+
+  <details class="panel" id="details">
+    <summary>Details</summary>
+    <div class="panel-body">
+      <p class="mono" id="detIgnored">0 rows ignored</p>
+      <p class="mono" id="detView">No view read yet.</p>
+      <p class="mono" id="detDraw">Last draw: &mdash;</p>
+      <p class="mono" id="detNames">Names: &mdash;</p>
+    </div>
+  </details>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ------------------------------------------------------------------ constants
+  // The KS War Room server: the one address the sign-in and the views are read at. Same as War Room.
+  var CLAIM_SERVER = 'https://warroom.kingshadeprotocol.com';
+  // The key is the one War Room and Leader Tools use. It is the ONLY thing this page keeps in the browser.
+  var KEY_STORE = 'ks-leader-board-key';
+  var TORN_API = 'https://api.torn.com/v2';
+  var TORN_API_KEY_PATTERN = /^[A-Za-z0-9]{8,64}$/;
+
+  var VIEW_NAME = 'activity';
+  var VIEW_SCHEMA = 1;
+  var MODEL = 'A1';
+  var SLOT_SECONDS = 300;
+  var SLOTS = 288;
+  var HOURS = 24;
+  var SLOTS_PER_HOUR = 12;
+
+  var TICK_MS = 1000;                // the one timer of the page
+  var READ_EVERY_MS = 60000;         // one reading of the view a minute
+  var READ_TOLERANCE_MS = 500;       // the tick is a second wide; a reading 59.7 s after the last is on time
+  var READ_STUCK_MS = 30000;         // a reading that has not answered in this long is given up
+  var RETRY_DEFAULT_S = 60;
+  var STALE_AGE_S = 600;             // data older than this is greyed and called STALE
+  var NAMES_EVERY_MS = 600000;       // names from Torn: once per faction, then at most every 10 minutes
+  var SESSION_RENEW_MARGIN_MS = 60000;
+  var PHONE_MAX_WIDTH = 700;
+  var FIXED_COLUMNS_PX = 354 + 16;   // the table columns that are not the strip (see the CSS) and the strip's padding
+  var SCROLLBAR_ROOM_PX = 20;        // a page scrollbar that appears after the squares are sized must not push them out
+
+  var PLAYER_ID_PATTERN = /^[1-9][0-9]{0,11}$/;
+  var FACTION_ID_PATTERN = /^[0-9]{1,12}$/;
+  var HEAT_PATTERN = /^[0-9.]{288}$/;
+
+  // Dark to light green, 0..9 (the share of the slot the member was Online, in tenths).
+  var PALETTE = ['#1b2630', '#1f3a3d', '#234f48', '#276453', '#2b7a5c', '#339064', '#43a76e', '#5bbd78', '#7ad185', '#a3e69a'];
+  var NODATA_BASE = '#2a2f35';
+  var NODATA_STRIPE = '#59616b';
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  // ------------------------------------------------------------------ helpers
+  function $(id) { return document.getElementById(id); }
+  function isObject(v) { return !!v && typeof v === 'object' && !Array.isArray(v); }
+  function safeInt(v) { return typeof v === 'number' && Number.isSafeInteger(v); }
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  function stopwatch() { return performance.now(); }
+  function setText(node, text) { if (node.textContent !== text) node.textContent = text; }
+
+  function read(store) { try { return localStorage.getItem(store) || ''; } catch (e) { return ''; } }
+  function write(store, value) {
+    try { if (value) localStorage.setItem(store, value); else localStorage.removeItem(store); }
+    catch (e) { /* storage blocked: the page still works, just not across reloads */ }
+  }
+
+  var el = {};
+  ['keyForm', 'apiKey', 'toggleKey', 'loadBtn', 'forgetKey', 'sessionWord', 'sessionSaid',
+   'factionPick', 'pickOpponent', 'pickOwn', 'noOpponent', 'statusLine', 'mapBody', 'unitPick', 'unitSlot', 'unitHour',
+   'facTitle', 'facWrap', 'facAxis', 'facStrip', 'facNow', 'quietLine', 'busyLine',
+   'tableWrap', 'axisPhoneRow', 'axisPhone', 'players', 'rows', 'axisPc', 'hoverLine', 'scale', 'nowText',
+   'detIgnored', 'detView', 'detDraw', 'detNames'].forEach(function (id) { el[id] = $(id); });
+
+  // ------------------------------------------------------------------ time (TCT = UTC)
+  function hm(seconds) {
+    var s = Math.max(0, Math.floor(seconds));
+    return Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm';
+  }
+  function dayMonthTime(unixS) {
+    var d = new Date(unixS * 1000);
+    return pad2(d.getUTCDate()) + ' ' + MONTHS[d.getUTCMonth()] + ' ' + pad2(d.getUTCHours()) + ':' + pad2(d.getUTCMinutes());
+  }
+  function clockOfSecond(secondOfDay) {
+    var s = ((secondOfDay % 86400) + 86400) % 86400;
+    return pad2(Math.floor(s / 3600)) + ':' + pad2(Math.floor((s % 3600) / 60));
+  }
+  function ageText(ageS) {
+    return ageS < 120 ? ageS + ' s' : Math.floor(ageS / 60) + ' min';
+  }
+
+  // ------------------------------------------------------------------ what the server may say
+  // Written by this page, in English, chosen on the code in the answer; the server's own text is never shown.
+  var Says = (function () {
+    function minutes(seconds) { var m = Math.ceil((Number(seconds) || 0) / 60); return m > 0 ? m : 1; }
+    var UNKNOWN = 'The server refused that, and did not say why in a way this page can explain.';
+    function of(http, body) {
+      var error = (body && typeof body.error === 'string') ? body.error : '';
+      var reason = (body && typeof body.reason === 'string') ? body.reason : '';
+      if (reason === 'key_malformed' || error === 'invalid_key') {
+        return 'That does not look like a Torn API key. Copy the whole key from Torn, with no spaces around it.';
+      }
+      if (error === 'key_rejected') {
+        if (reason === 'invalid_key') return 'Torn did not accept that key. Check that you copied all of it, or make a new one in Torn.';
+        if (reason === 'key_owner_in_federal_jail') return 'That key cannot be used while its owner is in federal jail.';
+        if (reason === 'key_owner_inactive') return 'Torn has switched that key off after seven days without a login. Log in to Torn and make a new key.';
+        if (reason === 'key_access_too_low') return 'That key does not have enough access. A key at level Public is enough - make a new one in Torn.';
+        if (reason === 'key_paused') return 'That key is paused. Turn it back on in Torn, or make a new one.';
+        return 'Torn could not check that key just now. Try again in a minute.';
+      }
+      if (error === 'not_a_member') return 'Torn says that key does not belong to this faction. Only members can use this page.';
+      if (error === 'login_blocked') return 'Too many failed sign-ins from here. Wait about ' + minutes(body && body.retryAfterSeconds) + ' minute(s) and try again.';
+      if (error === 'login_paused') return 'Sign-ins are paused for a moment, so that Torn does not shut the whole faction out. Wait about ' + minutes(body && body.retryAfterSeconds) + ' minute(s) and try again.';
+      if (error === 'server_not_configured') return 'The server is not set up yet. Tell Kingshade - nobody can sign in until that is done.';
+      if (error === 'torn_unreadable') return 'Torn answered something the server could not read. Try again in a minute.';
+      if (error === 'torn_unreachable') return 'The server could not reach Torn. Try again in a minute.';
+      if (error === 'unauthorized') return 'You are not signed in. Paste your Torn key and press Load.';
+      if (error === 'method_not_allowed' || error === 'not_found' || error === 'bad_request') return 'The page asked the server something it did not understand. Reload the page and try again.';
+      if (error === 'internal_error') return 'Something went wrong at the server’s end. Try again in a moment.';
+      if (http === 0) return 'The server could not be reached. Try again in a moment.';
+      return UNKNOWN;
+    }
+    return { of: of };
+  })();
+
+  // ------------------------------------------------------------------ sign-in
+  // The member's own Torn key is sent to the KS server once; the server asks Torn whose key it is, checks the
+  // faction and hands back a slip it has signed itself. The slip lives in memory only and travels in the BODY
+  // of a POST, never in a header or an address. The key itself lives here in memory and in the one storage
+  // entry War Room also uses.
+  var Session = (function () {
+    var key = '';
+    var token = '';
+    var expiresAt = 0;
+    var state = 'idle';   // idle | checking | signed_in | not_a_member | key_rejected | offline
+    var said = '';
+    var inFlight = null;
+    var WORDS = {
+      idle: 'CHECKING', checking: 'CHECKING', signed_in: 'SIGNED IN',
+      not_a_member: 'NOT A MEMBER', key_rejected: 'KEY REJECTED', offline: 'SERVER OFFLINE'
+    };
+
+    function word() { return WORDS[state] || 'SERVER OFFLINE'; }
+    function fresh() { return token !== '' && Date.now() < expiresAt - SESSION_RENEW_MARGIN_MS; }
+    function dropToken() { token = ''; expiresAt = 0; }
+    function forget() { key = ''; token = ''; expiresAt = 0; state = 'idle'; said = ''; }
+    function setKey(value) { key = value; }
+
+    async function signIn() {
+      // Two presses, or a press on top of the renewal, must not send the key twice.
+      if (inFlight) return inFlight;
+      inFlight = (async function () {
+        if (!key) { dropToken(); state = 'idle'; said = 'Paste your Torn key first.'; return false; }
+        if (!TORN_API_KEY_PATTERN.test(key)) {
+          // Stopped here: not sent to the KS server and above all not to Torn, where it would count as a try with a bad key.
+          dropToken();
+          state = 'key_rejected';
+          said = 'That does not look like a Torn API key. Copy the whole key from Torn, with no spaces around it.';
+          return false;
+        }
+        state = 'checking'; said = '';
+        var response;
+        try {
+          response = await fetch(CLAIM_SERVER + '/session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ apiKey: key })
+          });
+        } catch (networkFailure) {
+          dropToken();
+          state = 'offline';
+          said = 'The server could not be reached.';
+          return false;
+        }
+        var body = null;
+        try { body = await response.json(); } catch (e) { body = null; }
+        if (response.status === 200 && isObject(body) && body.ok === true && typeof body.session === 'string') {
+          token = body.session;
+          expiresAt = Number(body.expiresAt) || 0;
+          state = 'signed_in'; said = '';
+          return true;
+        }
+        dropToken();
+        said = Says.of(response.status, body);
+        if (response.status === 403) state = 'not_a_member';
+        else if (response.status === 401 || response.status === 400) state = 'key_rejected';
+        else state = 'offline';
+        return false;
+      })();
+      try { return await inFlight; } finally { inFlight = null; }
+    }
+
+    return {
+      key: function () { return key; },
+      setKey: setKey,
+      hasKey: function () { return key !== ''; },
+      state: function () { return state; },
+      word: word,
+      said: function () { return said; },
+      // May the page try to read? A key that was refused is not tried again until a new one is pressed with Load.
+      usable: function () { return key !== '' && (state === 'signed_in' || state === 'offline'); },
+      signedIn: function () { return state === 'signed_in'; },
+      dropToken: dropToken,
+      forget: forget,
+      signIn: signIn,
+      ensure: async function () {
+        if (fresh()) return token;
+        await signIn();
+        return token;
+      }
+    };
+  })();
+
+  // ------------------------------------------------------------------ the view, checked
+  // Everything from the server is untrusted: it is checked before it is used and no text from it is ever put
+  // into the page as HTML.
+  var View = (function () {
+    var epoch = 0;              // bumped by empty(): an answer asked for before is thrown away
+    var model = null;           // { serverTime, readPerf, generatedAt, factions: { id: faction } }
+    var last = { kind: 'none', reason: '', version: 0 };   // none | ok | unknown | offline | update
+    var lastAttempt = null;     // stopwatch time the last reading started
+    var retryUntil = 0;         // stopwatch time before which nothing is asked (429)
+    var reading = false;
+    var readingSince = 0;
+    var ignoredTotal = 0;
+    var reads = { ok: 0, failed: 0 };
+
+    function empty() {
+      epoch += 1;
+      model = null;
+      last = { kind: 'none', reason: '', version: 0 };
+      lastAttempt = null;
+      retryUntil = 0;
+      reading = false;
+      ignoredTotal = 0;
+      reads = { ok: 0, failed: 0 };
+    }
+
+    function parsePlayer(raw) {
+      if (!isObject(raw)) return null;
+      if (typeof raw.heat !== 'string' || !HEAT_PATTERN.test(raw.heat)) return null;
+      if (!safeInt(raw.online) || raw.online < 0 || raw.online > 1000) return null;
+      if (!safeInt(raw.idle) || raw.idle < 0 || raw.idle > 1000) return null;
+      if (!safeInt(raw.seen) || raw.seen < 0) return null;
+      var now = (raw.now === 'Online' || raw.now === 'Idle' || raw.now === 'Offline') ? raw.now : null;
+      return { heat: raw.heat, online: raw.online, idle: raw.idle, seen: raw.seen, now: now, hours: null };
+    }
+
+    function intArray(arr, allowNull) {
+      if (!Array.isArray(arr) || arr.length !== SLOTS) return null;
+      var out = new Array(SLOTS);
+      for (var i = 0; i < SLOTS; i++) {
+        var v = arr[i];
+        if (v === null && allowNull) { out[i] = null; continue; }
+        if (!safeInt(v) || v < 0) return null;
+        out[i] = v;
+      }
+      return out;
+    }
+
+    // One faction, or null (then it counts as one ignored row).
+    function parseFaction(id, raw, counter) {
+      if (!FACTION_ID_PATTERN.test(id) || !isObject(raw)) { counter.n += 1; return null; }
+      if (raw.role !== 'own' && raw.role !== 'opponent') { counter.n += 1; return null; }
+      if (!safeInt(raw.polledAt) || raw.polledAt < 0 || !safeInt(raw.from) || raw.from < 0 ||
+          !safeInt(raw.to) || raw.to < 0 || !safeInt(raw.coveredSeconds) || raw.coveredSeconds < 0) {
+        counter.n += 1; return null;
+      }
+      var cover = intArray(raw.cover, false);
+      var online = intArray(raw.online, true);
+      var idle = intArray(raw.idle, true);
+      if (!cover || !online || !idle || !isObject(raw.players)) { counter.n += 1; return null; }
+      var players = [];
+      Object.keys(raw.players).forEach(function (pid) {
+        if (!PLAYER_ID_PATTERN.test(pid)) { counter.n += 1; return; }
+        var p = parsePlayer(raw.players[pid]);
+        if (!p) { counter.n += 1; return; }
+        p.id = pid;
+        players.push(p);
+      });
+      return {
+        id: id, role: raw.role, polledAt: raw.polledAt, from: raw.from, to: raw.to, coveredSeconds: raw.coveredSeconds,
+        cover: cover, online: online, idle: idle, players: players, hours: null
+      };
+    }
+
+    // The answer of /views/get for 'activity', checked. Sets `last` and `model`.
+    function take(body) {
+      var views = isObject(body.views) ? body.views : null;
+      var view = views ? views[VIEW_NAME] : undefined;
+      if (view === null) {
+        var why = isObject(body.missing) ? body.missing[VIEW_NAME] : '';
+        model = null;
+        last = { kind: 'unknown', reason: why === 'dropped' ? 'dropped' : 'not published', version: 0 };
+        return;
+      }
+      if (!isObject(view) || !safeInt(view.schemaVersion) || !safeInt(body.serverTime) || body.serverTime <= 0) {
+        model = null; last = { kind: 'unknown', reason: 'server error', version: 0 };
+        return;
+      }
+      if (view.schemaVersion !== VIEW_SCHEMA) {
+        model = null; last = { kind: 'update', reason: '', version: view.schemaVersion };
+        return;
+      }
+      var payload = view.payload;
+      if (!isObject(payload) || !isObject(payload.factions)) {
+        model = null; last = { kind: 'unknown', reason: 'server error', version: 0 };
+        return;
+      }
+      if (payload.model !== MODEL || payload.slotSeconds !== SLOT_SECONDS) {
+        model = null; last = { kind: 'unknown', reason: 'unknown model', version: 0 };
+        return;
+      }
+      var counter = { n: 0 };
+      var factions = Object.create(null);
+      Object.keys(payload.factions).forEach(function (id) {
+        var f = parseFaction(id, payload.factions[id], counter);
+        if (f) factions[id] = f;
+      });
+      model = {
+        serverTime: body.serverTime, readPerf: stopwatch(),
+        generatedAt: safeInt(view.generatedAt) ? view.generatedAt : 0,
+        factions: factions
+      };
+      ignoredTotal = counter.n;
+      last = { kind: 'ok', reason: '', version: 0 };
+    }
+
+    async function readOnce(retrying) {
+      var asked = epoch;
+      var slip = await Session.ensure();
+      if (asked !== epoch) return;
+      if (!slip) {
+        model = null;
+        last = Session.state() === 'offline' ? { kind: 'offline', reason: '', version: 0 } : { kind: 'unknown', reason: 'not signed in', version: 0 };
+        return;
+      }
+      var response;
+      try {
+        response = await fetch(CLAIM_SERVER + '/views/get', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session: slip, names: [VIEW_NAME] })
+        });
+      } catch (networkFailure) {
+        if (asked === epoch) { model = null; last = { kind: 'offline', reason: '', version: 0 }; }
+        return;
+      }
+      var body = null;
+      try { body = await response.json(); } catch (e) { body = null; }
+      if (asked !== epoch) return;   // emptied while the answer was on its way
+      if (response.status === 200 && isObject(body) && body.ok === true) { take(body); return; }
+      model = null;
+      if (response.status === 401) {
+        if (!retrying && isObject(body) && body.reason === 'expired') {
+          // It ran out while we were asking. One fresh slip, one more try.
+          Session.dropToken();
+          if (await Session.signIn()) return readOnce(true);
+        } else {
+          Session.dropToken();
+        }
+        last = { kind: 'unknown', reason: 'not signed in', version: 0 };
+        return;
+      }
+      if (response.status === 429) {
+        var wait = isObject(body) ? body.retryAfterSeconds : NaN;
+        if (!safeInt(wait) || wait < 1 || wait > 300) wait = RETRY_DEFAULT_S;
+        retryUntil = stopwatch() + wait * 1000;
+        last = { kind: 'unknown', reason: 'rate limited', version: 0 };
+        return;
+      }
+      last = { kind: 'unknown', reason: 'server error', version: 0 };
+    }
+
+    // Called from the tick and when the page comes back into view. Reads when it is due; never waits.
+    function kick(done) {
+      if (document.hidden || !Session.usable()) return;
+      var now = stopwatch();
+      if (reading && now - readingSince < READ_STUCK_MS) return;
+      if (now < retryUntil) return;
+      if (lastAttempt !== null && now - lastAttempt + READ_TOLERANCE_MS < READ_EVERY_MS) return;
+      if (reading) epoch += 1;   // the old one never answered: whatever it brings later is not for this page
+      reading = true;
+      readingSince = now;
+      lastAttempt = now;
+      var started = epoch;
+      readOnce(false).catch(function () {
+        if (started === epoch) { model = null; last = { kind: 'unknown', reason: 'server error', version: 0 }; }
+      }).then(function () {
+        if (started !== epoch) return;
+        reading = false;
+        if (last.kind === 'ok') reads.ok += 1; else reads.failed += 1;
+        done();
+      });
+    }
+
+    return {
+      empty: empty, kick: kick,
+      model: function () { return model; },
+      last: function () { return last; },
+      ignored: function () { return ignoredTotal; },
+      reads: function () { return reads; },
+      lastAttemptAt: function () { return lastAttempt; }
+    };
+  })();
+
+  // ------------------------------------------------------------------ names from Torn
+  // The page's only call to Torn: the member list of the faction being looked at, with the member's own key.
+  // One reading when a faction is first shown, then at most one every 10 minutes. A failure leaves the Torn ID.
+  var Names = (function () {
+    var byFaction = Object.create(null);   // faction id -> { player id -> name }
+    var attemptAt = Object.create(null);   // faction id -> stopwatch time of the last attempt
+    var busy = Object.create(null);
+    var epoch = 0;
+    var blocked = false;                   // Torn said the key is dead; no more tries with it
+    var status = {};                       // faction id -> 'names' | 'failed'
+
+    function empty() { epoch += 1; byFaction = Object.create(null); attemptAt = Object.create(null); busy = Object.create(null); blocked = false; status = {}; }
+
+    function tornId(value) {
+      if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) return String(value);
+      if (typeof value === 'string' && /^[0-9]{1,12}$/.test(value.trim()) && Number(value.trim()) > 0) return String(Number(value.trim()));
+      return '';
+    }
+    function rowsOf(source) {
+      if (Array.isArray(source)) return source;
+      if (isObject(source)) return Object.keys(source).map(function (k) { return source[k]; });
+      return null;
+    }
+
+    // Torn codes after which the key is not tried again: 2 (wrong), 10 (federal jail), 13 (inactive), 18 (paused).
+    function deadCode(code) { return code === 2 || code === 10 || code === 13 || code === 18; }
+
+    async function load(factionId, role, done) {
+      var asked = epoch;
+      var path = (role === 'own' ? '/faction/members' : '/faction/' + factionId + '/members') + '?striptags=true&comment=KSActivity';
+      var map = null;
+      try {
+        var response = await fetch(TORN_API + path, { headers: { Authorization: 'ApiKey ' + Session.key() } });
+        var payload = await response.json();
+        if (isObject(payload) && payload.error) {
+          if (deadCode(payload.error.code)) blocked = true;
+        } else {
+          var rows = rowsOf(isObject(payload) ? payload.members : null);
+          if (rows) {
+            map = Object.create(null);
+            rows.forEach(function (row) {
+              if (!isObject(row)) return;
+              var id = tornId(row.id !== undefined ? row.id : row.player_id);
+              if (id && typeof row.name === 'string' && row.name.trim() !== '') map[id] = row.name.trim().slice(0, 60);
+            });
+          }
+        }
+      } catch (e) { map = null; }
+      if (asked !== epoch) return;
+      busy[factionId] = false;
+      if (map) { byFaction[factionId] = map; status[factionId] = 'names'; } else status[factionId] = 'failed';
+      done();
+    }
+
+    // Asks for the names of the faction on screen when they are due. Never throws, never waits.
+    function want(factionId, role, done) {
+      if (blocked || !Session.hasKey() || !Session.signedIn() || document.hidden) return;
+      if (busy[factionId]) return;
+      var now = stopwatch();
+      if (attemptAt[factionId] !== undefined && now - attemptAt[factionId] < NAMES_EVERY_MS) return;
+      attemptAt[factionId] = now;
+      busy[factionId] = true;
+      load(factionId, role, done);
+    }
+
+    return {
+      empty: empty, want: want, unblock: function () { blocked = false; },
+      of: function (factionId, playerId) { var m = byFaction[factionId]; return (m && m[playerId]) || ''; },
+      status: function (factionId) { return status[factionId] || '-'; }
+    };
+  })();
+
+  // ------------------------------------------------------------------ numbers behind the pictures
+  // Hour value of one player: the mean of the known digits of the hour's 12 slots, rounded; '.' if none is known.
+  function hourHeat(heat) {
+    var out = '';
+    for (var h = 0; h < HOURS; h++) {
+      var sum = 0, known = 0;
+      for (var k = 0; k < SLOTS_PER_HOUR; k++) {
+        var c = heat.charCodeAt(h * SLOTS_PER_HOUR + k);
+        if (c !== 46) { sum += c - 48; known += 1; }
+      }
+      out += known > 0 ? String(Math.floor(sum / known + 0.5)) : '.';
+    }
+    return out;
+  }
+  function playerHours(p) { if (p.hours === null) p.hours = hourHeat(p.heat); return p.hours; }
+
+  // Per hour, the faction's weighted mean number of members online and the seconds covered.
+  // value = sum(online[i] * cover[i]) / sum(cover[i]) over the hour's 12 slots, in members (online[] is members x 10).
+  function factionHours(f) {
+    if (f.hours !== null) return f.hours;
+    var out = [];
+    for (var h = 0; h < HOURS; h++) {
+      var weighted = 0, coverKnown = 0, coverAll = 0;
+      for (var k = 0; k < SLOTS_PER_HOUR; k++) {
+        var i = h * SLOTS_PER_HOUR + k;
+        coverAll += f.cover[i];
+        if (f.online[i] !== null) { weighted += f.online[i] * f.cover[i]; coverKnown += f.cover[i]; }
+      }
+      out.push({ hour: h, value: coverKnown > 0 ? weighted / coverKnown / 10 : null, cover: coverAll, coverKnown: coverKnown });
+    }
+    f.hours = out;
+    return out;
+  }
+
+  function oneDecimal(v) { return (Math.floor(v * 10 + 0.5) / 10).toFixed(1); }
+
+  // The three quietest or busiest hours: only hours with at least an hour of covered time behind them.
+  function extremeHours(f, busiest) {
+    var list = factionHours(f).filter(function (x) { return x.cover >= 3600 && x.value !== null; });
+    list.sort(function (a, b) { return (busiest ? b.value - a.value : a.value - b.value) || a.hour - b.hour; });
+    return list.slice(0, 3);
+  }
+  function extremeLine(label, list) {
+    if (list.length === 0) return label + ' not enough data yet';
+    return label + ' ' + list.map(function (x, i) {
+      return pad2(x.hour) + ':00 ' + oneDecimal(x.value) + (i === 0 ? ' online' : '');
+    }).join(' · ');
+  }
+
+  // The faction strip as a string of digits over `cells` squares, and the values behind it.
+  function factionSeries(f, cells) {
+    var vals = [];
+    if (cells === SLOTS) {
+      for (var i = 0; i < SLOTS; i++) vals.push(f.online[i] === null ? null : f.online[i] / 10);
+    } else {
+      factionHours(f).forEach(function (x) { vals.push(x.coverKnown >= 60 ? x.value : null); });
+    }
+    // The colour is the SHARE of the faction's members (those in the view) that were online in the square, in the same
+    // ten steps as the member rows; the hover line still gives the average number online.
+    var n = f.players.length;
+    var heat = vals.map(function (v) {
+      if (v === null || n === 0) return '.';
+      return String(shareStep(v * 10, n));
+    }).join('');
+    return { vals: vals, heat: heat, members: n };
+  }
+  // online x 10 = members online times ten; the step is floor(share x 10) = floor(online x 10 / n), 0..9.
+  function shareStep(onlineX10, members) {
+    return Math.max(0, Math.min(9, Math.floor(onlineX10 / members + 1e-9)));
+  }
+
+  // ------------------------------------------------------------------ drawing
+  var dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+  var unknownTile = null;
+  function tile() {
+    if (unknownTile) return unknownTile;
+    var t = document.createElement('canvas');
+    t.width = 4; t.height = 4;
+    var c = t.getContext('2d');
+    c.fillStyle = NODATA_BASE; c.fillRect(0, 0, 4, 4);
+    c.fillStyle = NODATA_STRIPE;
+    for (var i = 0; i < 4; i++) c.fillRect(i, i, 1, 1);
+    unknownTile = t;
+    return t;
+  }
+
+  function sizeCanvas(canvas, cssW, cssH) {
+    canvas.width = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+    canvas.style.width = cssW + 'px';
+    canvas.style.height = cssH + 'px';
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return ctx;
+  }
+
+  // `heat` is a string of digits and '.', one character per square. Runs of the same character are one rectangle.
+  function drawHeat(canvas, heat, cells, cw, ch) {
+    var ctx = sizeCanvas(canvas, cells * cw, ch);
+    var pattern = null;
+    var i = 0;
+    while (i < cells) {
+      var c = heat.charAt(i);
+      var j = i + 1;
+      while (j < cells && heat.charAt(j) === c) j++;
+      if (c === '.') {
+        if (!pattern) pattern = ctx.createPattern(tile(), 'repeat');
+        ctx.fillStyle = pattern;
+      } else {
+        ctx.fillStyle = PALETTE[c.charCodeAt(0) - 48];
+      }
+      ctx.fillRect(i * cw, 0, (j - i) * cw, ch);
+      i = j;
+    }
+    canvas.dataset.cells = String(cells);
+    canvas.dataset.cw = String(cw);
+  }
+
+  function drawAxis(canvas, cells, cw, labelEvery) {
+    var width = cells * cw;
+    var ctx = sizeCanvas(canvas, width, 16);
+    ctx.fillStyle = '#93a3b2';
+    ctx.font = '10px sans-serif';
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    for (var h = 0; h < HOURS; h++) {
+      var x = Math.round(h * width / HOURS);
+      ctx.fillRect(x, 11, 1, 5);
+      if (h % labelEvery === 0) ctx.fillText(pad2(h), x + 2, 0);
+    }
+  }
+
+  // ------------------------------------------------------------------ the page's state
+  var ui = {
+    pick: 'opponent',         // which faction the member chose; used when it is in the view
+    unit: 'slot',             // 'slot' (5 min) or 'hour' on a PC; a phone is always hours
+    sort: 'online', dir: 'desc'
+  };
+  var layoutNow = null;       // { phone, unit, cells, cw, height }
+  var drawnKey = '';          // what the table was last built from
+  var rowIndex = new Map();   // player id -> { tr, nameLink, nowDot, ... }
+  var shown = null;           // the faction on screen
+  var lastDrawMs = null;
+
+  function isPhone() {
+    try { return window.matchMedia('(max-width: ' + PHONE_MAX_WIDTH + 'px)').matches; } catch (e) { return window.innerWidth <= PHONE_MAX_WIDTH; }
+  }
+
+  // The squares are sized from the width the table really has (the map must be on screen to measure it).
+  function computeLayout() {
+    var phone = isPhone();
+    var unit = phone ? 'hour' : ui.unit;
+    var cells = unit === 'hour' ? HOURS : SLOTS;
+    var measured = el.tableWrap.clientWidth;
+    if (!measured) measured = Math.min(1320, document.documentElement.clientWidth) - 66;
+    var cw;
+    if (phone) cw = Math.max(6, Math.min(36, Math.floor((measured - 2) / cells)));
+    else if (unit === 'hour') cw = Math.max(8, Math.min(36, Math.floor((measured - FIXED_COLUMNS_PX - SCROLLBAR_ROOM_PX) / cells)));
+    else cw = Math.max(1, Math.min(3, Math.floor((measured - FIXED_COLUMNS_PX - SCROLLBAR_ROOM_PX) / cells)));
+    return { phone: phone, unit: unit, cells: cells, cw: cw, height: phone ? 14 : 16 };
+  }
+
+  function chosenFaction(model) {
+    var byRole = { opponent: null, own: null };
+    Object.keys(model.factions).forEach(function (id) {
+      var f = model.factions[id];
+      if (byRole[f.role] === null || f.polledAt > byRole[f.role].polledAt) byRole[f.role] = f;
+    });
+    var f = ui.pick === 'own' ? (byRole.own || byRole.opponent) : (byRole.opponent || byRole.own);
+    return { faction: f, hasOpponent: byRole.opponent !== null, hasOwn: byRole.own !== null };
+  }
+
+  function nameOf(f, p) { return Names.of(f.id, p.id) || p.id; }
+
+  function ageSeconds(model, f) {
+    return Math.max(0, Math.floor(model.serverTime - f.polledAt + (stopwatch() - model.readPerf) / 1000));
+  }
+
+  function statusFor(model, f, last) {
+    if (!Session.hasKey()) return { text: 'Sign in with your Torn key to load the activity map.', cls: '' };
+    if (last.kind === 'none') return { text: Session.signedIn() || Session.state() === 'offline' ? 'CHECKING' : '', cls: '' };
+    if (last.kind === 'offline') return { text: 'OFFLINE', cls: 'bad' };
+    if (last.kind === 'update') return { text: 'UPDATE NEEDED · view version ' + last.version, cls: 'bad' };
+    if (last.kind === 'unknown') return { text: 'UNKNOWN · ' + last.reason, cls: 'bad' };
+    if (!f) return { text: 'UNKNOWN · no faction in the view', cls: 'bad' };
+    var age = ageSeconds(model, f);
+    var text = 'Covered ' + hm(f.coveredSeconds) + ' of the last 7 days · since ' + dayMonthTime(f.from) + ' TCT · ';
+    var stale = age > STALE_AGE_S;
+    text += stale ? 'STALE · data ' + Math.floor(age / 60) + ' min old' : 'data ' + ageText(age) + ' old';
+    if (f.coveredSeconds < 86400) text += ' · under 24 h: a pattern, not an average';
+    return { text: text, cls: stale ? 'warn' : '', stale: stale };
+  }
+
+  // ------------------------------------------------------------------ the table
+  var SORTS = {
+    name: function (a, b, f) { return nameOf(f, a).toLowerCase() < nameOf(f, b).toLowerCase() ? -1 : (nameOf(f, a).toLowerCase() > nameOf(f, b).toLowerCase() ? 1 : 0); },
+    now: function (a, b) { return rank(a.now) - rank(b.now); },
+    online: function (a, b) { return a.online - b.online; },
+    idle: function (a, b) { return a.idle - b.idle; },
+    seen: function (a, b) { return a.seen - b.seen; }
+  };
+  function rank(now) { return now === 'Online' ? 3 : (now === 'Idle' ? 2 : (now === 'Offline' ? 1 : 0)); }
+
+  function sortedPlayers(f) {
+    var list = f.players.slice();
+    var cmp = SORTS[ui.sort] || SORTS.online;
+    var sign = ui.dir === 'asc' ? 1 : -1;
+    list.sort(function (a, b) {
+      return sign * cmp(a, b, f) || (Number(a.id) - Number(b.id));
+    });
+    return list;
+  }
+
+  function buildRow(f, p) {
+    var tr = document.createElement('tr');
+    tr.dataset.id = p.id;
+    var tdName = document.createElement('td'); tdName.className = 'name';
+    var link = document.createElement('a');
+    link.href = 'https://www.torn.com/profiles.php?XID=' + p.id;
+    link.target = '_blank'; link.rel = 'noopener noreferrer';
+    link.textContent = nameOf(f, p);
+    tdName.appendChild(link);
+    var tdNow = document.createElement('td'); tdNow.className = 'now';
+    var dot = document.createElement('span');
+    dot.className = 'dot ' + (p.now || 'unknown');
+    dot.setAttribute('role', 'img');
+    dot.setAttribute('aria-label', p.now || 'unknown');
+    dot.title = p.now || 'unknown';
+    tdNow.appendChild(dot);
+    var tdOn = document.createElement('td'); tdOn.className = 'num'; tdOn.textContent = (p.online / 10).toFixed(1);
+    var tdIdle = document.createElement('td'); tdIdle.className = 'num'; tdIdle.textContent = (p.idle / 10).toFixed(1);
+    var tdSeen = document.createElement('td'); tdSeen.className = 'num'; tdSeen.textContent = (p.seen / 3600).toFixed(1);
+    var tdHeat = document.createElement('td'); tdHeat.className = 'heat';
+    var canvas = document.createElement('canvas');
+    canvas.className = 'strip';
+    canvas.dataset.pid = p.id;
+    canvas.setAttribute('aria-label', 'Online by time of day');
+    var box = document.createElement('div'); box.className = 'sbox';
+    var line = document.createElement('i'); line.className = 'nl'; line.setAttribute('aria-hidden', 'true');
+    box.appendChild(canvas); box.appendChild(line);
+    tdHeat.appendChild(box);
+    [tdName, tdNow, tdOn, tdIdle, tdSeen, tdHeat].forEach(function (td) { tr.appendChild(td); });
+    return { tr: tr, link: link, canvas: canvas, line: line, player: p };
+  }
+
+  function renderTable(f, lay) {
+    var started = stopwatch();
+    var key = [f.id, View.model().generatedAt, View.model().serverTime, lay.unit, lay.cells, lay.cw, lay.height, dpr].join('|');
+    if (key !== drawnKey) {
+      el.rows.textContent = '';
+      rowIndex = new Map();
+      var frag = document.createDocumentFragment();
+      f.players.forEach(function (p) {
+        var r = buildRow(f, p);
+        rowIndex.set(p.id, r);
+        var heat = lay.unit === 'hour' ? playerHours(p) : p.heat;
+        drawHeat(r.canvas, heat, lay.cells, lay.cw, lay.height);
+        r.line._w = lay.cells * lay.cw;
+        r.line._x = -1;
+      });
+      drawnKey = key;
+      lastDrawMs = Math.round((stopwatch() - started) * 10) / 10;
+    }
+    // Order (and names) only: no redraw.
+    var order = document.createDocumentFragment();
+    sortedPlayers(f).forEach(function (p) {
+      var r = rowIndex.get(p.id);
+      setText(r.link, nameOf(f, p));
+      order.appendChild(r.tr);
+    });
+    el.rows.appendChild(order);
+    var cols = document.querySelectorAll('#players thead th[data-col]');
+    for (var i = 0; i < cols.length; i++) {
+      var col = cols[i].getAttribute('data-col');
+      cols[i].setAttribute('aria-sort', col === ui.sort ? (ui.dir === 'asc' ? 'ascending' : 'descending') : 'none');
+    }
+  }
+
+  function renderAxes(lay) {
+    var hourPx = lay.cells * lay.cw / HOURS;
+    var every = hourPx >= 22 ? 1 : (hourPx >= 14 ? 2 : 3);
+    if (lay.phone) {
+      drawAxis(el.axisPhone, lay.cells, lay.cw, every);
+      el.axisPhoneRow.style.display = 'block';
+    } else {
+      el.axisPhoneRow.style.display = 'none';
+      drawAxis(el.axisPc, lay.cells, lay.cw, every);
+    }
+    drawAxis(el.facAxis, lay.cells, lay.cw, every);
+  }
+
+  function renderFaction(f, lay) {
+    var series = factionSeries(f, lay.cells);
+    drawHeat(el.facStrip, series.heat, lay.cells, lay.cw, lay.phone ? 22 : 26);
+    el.facStrip._series = series;
+    el.facStrip._faction = f;
+    setText(el.quietLine, extremeLine('Quietest (TCT):', extremeHours(f, false)));
+    setText(el.busyLine, extremeLine('Busiest (TCT):', extremeHours(f, true)));
+    setText(el.facTitle, 'Members online (share of members)');
+    el.facNow._w = lay.cells * lay.cw;
+    el.facNow._x = -1;
+    // The faction strip starts and ends exactly where the member strips do: on a PC it is moved right by the
+    // distance from its own left edge to the table's strip column (measured from the table's own axis).
+    var offset = 0;
+    if (!lay.phone) offset = Math.max(0, Math.round(el.axisPc.getBoundingClientRect().left - el.facWrap.getBoundingClientRect().left));
+    el.facWrap.style.paddingLeft = offset + 'px';
+  }
+
+  function drawScale() {
+    if (el.scale.firstChild) return;
+    PALETTE.forEach(function (c) { var i = document.createElement('i'); i.style.background = c; el.scale.appendChild(i); });
+  }
+
+  // The marker for the TCT time of day: a thin line INSIDE each strip's own box, at the share of the day that has
+  // passed. It can only cross squares, never the text beside them.
+  function placeMarkers() {
+    var model = View.model();
+    var on = !!model && shown !== null;
+    el.facNow.hidden = !on;
+    if (!on) return;
+    var nowS = model.serverTime + (stopwatch() - model.readPerf) / 1000;
+    var frac = (((nowS % 86400) + 86400) % 86400) / 86400;
+    function move(line) {
+      var x = Math.round(frac * line._w * 2) / 2;
+      if (line._x !== x) { line._x = x; line.style.left = x + 'px'; }
+    }
+    move(el.facNow);
+    rowIndex.forEach(function (r) { move(r.line); });
+    setText(el.nowText, 'Now: ' + clockOfSecond(nowS) + ' TCT (the orange line)');
+  }
+
+  // ------------------------------------------------------------------ the whole page
+  function renderSession() {
+    var word = Session.word();
+    setText(el.sessionWord, word);
+    el.sessionWord.className = 'pill' + (word === 'SIGNED IN' ? ' good' : (word === 'CHECKING' ? '' : ' bad'));
+    var said = Session.said();
+    if (said) { setText(el.sessionSaid, said); el.sessionSaid.hidden = false; } else { el.sessionSaid.hidden = true; }
+    // The key box is there until a key has got us in.
+    el.keyForm.hidden = Session.signedIn();
+  }
+
+  function renderStatusOnly() {
+    var model = View.model();
+    var last = View.last();
+    var chosen = model ? chosenFaction(model) : { faction: null };
+    var s = statusFor(model, chosen.faction, last);
+    setText(el.statusLine, s.text);
+    el.statusLine.className = 'status' + (s.cls ? ' ' + s.cls : '');
+    el.mapBody.classList.toggle('stale', !!s.stale);
+    return s;
+  }
+
+  function renderDetails(chosen) {
+    var model = View.model();
+    setText(el.detIgnored, View.ignored() + ' rows ignored');
+    var reads = View.reads();
+    var f = chosen && chosen.faction;
+    setText(el.detView, model
+      ? 'View "activity" generated ' + dayMonthTime(model.generatedAt) + ' TCT · schema ' + VIEW_SCHEMA + (f ? ' · faction ' + f.id + ' polled ' + dayMonthTime(f.polledAt) + ' TCT' : '') + ' · reads ' + reads.ok + ' ok, ' + reads.failed + ' failed'
+      : 'No view in memory · reads ' + reads.ok + ' ok, ' + reads.failed + ' failed');
+    setText(el.detDraw, 'Last draw: ' + (lastDrawMs === null ? '—' : lastDrawMs + ' ms'));
+    setText(el.detNames, f ? 'Names of faction ' + f.id + ': ' + Names.status(f.id) : 'Names: —');
+  }
+
+  function render() {
+    renderSession();
+    var model = View.model();
+    var last = View.last();
+    var chosen = model ? chosenFaction(model) : { faction: null, hasOpponent: false, hasOwn: false };
+    var f = last.kind === 'ok' ? chosen.faction : null;
+    renderStatusOnly();
+    el.mapBody.hidden = !f;   // on screen first: the squares are sized from the width the table has
+    var lay = computeLayout();
+    layoutNow = lay;
+
+    el.factionPick.hidden = !(last.kind === 'ok' && (chosen.hasOpponent || chosen.hasOwn));
+    el.pickOpponent.hidden = !chosen.hasOpponent;
+    el.pickOwn.hidden = !chosen.hasOwn;
+    el.noOpponent.hidden = !(last.kind === 'ok' && !chosen.hasOpponent);
+    if (f) {
+      el.pickOpponent.setAttribute('aria-pressed', f.role === 'opponent' ? 'true' : 'false');
+      el.pickOwn.setAttribute('aria-pressed', f.role === 'own' ? 'true' : 'false');
+    }
+    el.unitSlot.setAttribute('aria-pressed', lay.unit === 'slot' ? 'true' : 'false');
+    el.unitHour.setAttribute('aria-pressed', lay.unit === 'hour' ? 'true' : 'false');
+
+    if (!f) {
+      shown = null; drawnKey = ''; rowIndex = new Map(); el.rows.textContent = '';
+      placeMarkers();
+      renderDetails(chosen);
+      return;
+    }
+    drawScale();
+    if (shown !== f.id) { drawnKey = ''; setText(el.hoverLine, 'Point at or tap a square to read it.'); }
+    shown = f.id;
+    renderAxes(lay);
+    renderFaction(f, lay);
+    renderTable(f, lay);
+    placeMarkers();
+    renderDetails(chosen);
+    Names.want(f.id, f.role, namesArrived);
+  }
+
+  function namesArrived() { render(); }
+
+  // ------------------------------------------------------------------ reading a square
+  function squareText(canvas, offsetX) {
+    var cells = Number(canvas.dataset.cells), cw = Number(canvas.dataset.cw);
+    if (!cells || !cw) return '';
+    var i = Math.floor(offsetX / cw);
+    if (i < 0 || i >= cells) return '';
+    var unit = cells === SLOTS ? 300 : 3600;
+    var from = i * unit;
+    var range = clockOfSecond(from) + '–' + clockOfSecond(from + unit) + ' TCT';
+    var model = View.model();
+    if (!model) return '';
+    if (canvas === el.facStrip) {
+      var f = canvas._faction, series = canvas._series;
+      if (!f || !series) return '';
+      var label = f.role === 'opponent' ? 'Opponent' : 'Our faction';
+      var v = series.vals[i];
+      return label + ' · ' + range + ' · ' + (v === null ? '—' : 'avg ' + oneDecimal(v) + ' online');
+    }
+    var chosen = chosenFaction(model).faction;
+    var row = rowIndex.get(canvas.dataset.pid);
+    if (!chosen || !row) return '';
+    var p = row.player;
+    var heat = cells === SLOTS ? p.heat : playerHours(p);
+    var d = heat.charAt(i);
+    if (d === '.') return nameOf(chosen, p) + ' · ' + range + ' · no data';
+    var n = d.charCodeAt(0) - 48;
+    return nameOf(chosen, p) + ' · ' + range + ' · online ' + (n * 10) + '–' + (n === 9 ? 100 : n * 10 + 9) + ' %';
+  }
+
+  function onSquare(e) {
+    var t = e.target;
+    if (!t || t.tagName !== 'CANVAS' || t.className.indexOf('strip') === -1) return;
+    var text = squareText(t, e.offsetX);
+    if (text) setText(el.hoverLine, text);
+  }
+  el.mapBody.addEventListener('pointermove', onSquare);
+  el.mapBody.addEventListener('click', onSquare);
+
+  // ------------------------------------------------------------------ the one timer
+  function tick() {
+    View.kick(render);
+    var model = View.model();
+    if (model && layoutNow) {
+      renderStatusOnly();
+      placeMarkers();
+    }
+  }
+  setInterval(tick, TICK_MS);
+
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) tick(); });
+
+  window.addEventListener('resize', function () {
+    if (!View.model()) return;
+    var lay = computeLayout();
+    var old = layoutNow;
+    if (old && old.phone === lay.phone && old.unit === lay.unit && old.cw === lay.cw) { placeMarkers(); return; }
+    render();
+  });
+
+  // ------------------------------------------------------------------ the controls
+  async function loadPressed() {
+    var typed = el.apiKey.value.trim();
+    Session.setKey(typed);
+    Names.unblock();
+    var ok = await Session.signIn();
+    if (ok) write(KEY_STORE, typed);
+    render();
+    if (ok) { View.kick(render); }
+  }
+
+  el.loadBtn.addEventListener('click', loadPressed);
+  el.apiKey.addEventListener('keydown', function (e) { if (e.key === 'Enter') loadPressed(); });
+  el.toggleKey.addEventListener('click', function () {
+    var showing = el.apiKey.type === 'text';
+    el.apiKey.type = showing ? 'password' : 'text';
+    el.toggleKey.textContent = showing ? 'Show' : 'Hide';
+    el.toggleKey.setAttribute('aria-pressed', showing ? 'false' : 'true');
+  });
+
+  el.forgetKey.addEventListener('click', function () {
+    write(KEY_STORE, '');
+    el.apiKey.value = '';
+    Session.forget();
+    View.empty();
+    Names.empty();
+    drawnKey = ''; rowIndex = new Map(); shown = null; lastDrawMs = null;
+    el.rows.textContent = '';
+    setText(el.hoverLine, 'Point at or tap a square to read it.');
+    render();
+  });
+
+  [el.pickOpponent, el.pickOwn].forEach(function (button) {
+    button.addEventListener('click', function () { ui.pick = button.getAttribute('data-pick'); drawnKey = ''; render(); });
+  });
+  [el.unitSlot, el.unitHour].forEach(function (button) {
+    button.addEventListener('click', function () { ui.unit = button.getAttribute('data-unit'); render(); });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('#players .sortbtn'), function (button) {
+    button.addEventListener('click', function () {
+      var col = button.getAttribute('data-sort');
+      if (ui.sort === col) ui.dir = ui.dir === 'asc' ? 'desc' : 'asc';
+      else { ui.sort = col; ui.dir = col === 'name' ? 'asc' : 'desc'; }
+      render();
+    });
+  });
+
+  // ------------------------------------------------------------------ start
+  (async function start() {
+    var stored = read(KEY_STORE);
+    if (stored) {
+      el.apiKey.value = stored;
+      Session.setKey(stored);
+      render();
+      var ok = await Session.signIn();
+      render();
+      if (ok) View.kick(render);
+    } else {
+      render();
+    }
+  })();
+})();
+</script>
+</body>
+</html>
