@@ -250,10 +250,10 @@
         </div>
 
         <div>
-          <h3 class="block-title" id="facTitle">Members online (share of members)</h3>
+          <h3 class="block-title" id="facTitle">Members online (relative to the busiest time)</h3>
           <div class="strip-wrap" id="facWrap">
             <canvas class="axis" id="facAxis" aria-hidden="true"></canvas>
-            <div class="sbox"><canvas class="strip" id="facStrip" aria-label="Share of the faction's members online per time of day"></canvas><i class="nl" id="facNow" aria-hidden="true"></i></div>
+            <div class="sbox"><canvas class="strip" id="facStrip" aria-label="Members online per time of day, compared with the faction's busiest time"></canvas><i class="nl" id="facNow" aria-hidden="true"></i></div>
           </div>
           <div class="quiet-lines">
             <p id="quietLine"></p>
@@ -282,7 +282,7 @@
         <p class="hover" id="hoverLine" aria-live="polite">Point at or tap a square to read it.</p>
 
         <div class="legend" id="legend" aria-label="Legend">
-          <span>Colour of a square (member rows: share of the time online; faction strip: share of the members online):</span>
+          <span>Colour of a square (member rows: share of the time online; faction strip: members online compared with the faction's busiest time):</span>
           <span class="scale" id="scale" aria-hidden="true"></span>
           <span>0% &rarr; 100%</span>
           <span><i class="nodata" aria-hidden="true"></i> no data</span>
@@ -299,8 +299,8 @@
         Only time when the server actually saw the faction is counted, so a gap in its readings is never shown
         as activity or as quiet. All times are TCT (UTC). A square is the share of that time of day, across the
         days covered, that the member was Online; the colour goes from dark (never) to light green (almost
-        always). The strip above the members shows, for each square, the share of the faction's members that were
-        online (its hover line gives the average number online). This page is information; it never changes who may take a DIBS. Its only call to Torn is the
+        always). The strip above the members shows when the faction is most active, compared with its own busiest
+        time in the window; Quietest/Busiest and its hover line give the number of members online. This page is information; it never changes who may take a DIBS. Its only call to Torn is the
         list of names, made with your key, at most once every 10 minutes per faction. Nothing is saved in this
         browser except the same key War Room uses.</p>
     </div>
@@ -842,18 +842,20 @@
     } else {
       factionHours(f).forEach(function (x) { vals.push(x.coverKnown >= 60 ? x.value : null); });
     }
-    // The colour is the SHARE of the faction's members (those in the view) that were online in the square, in the same
-    // ten steps as the member rows; the hover line still gives the average number online.
-    var n = f.players.length;
+    // The colour is each square's value against the largest value in the same series (the faction's own busiest time in
+    // the window), in the same ten steps as the member rows; the hover line gives the average number online.
+    var top = 0;
+    vals.forEach(function (v) { if (v !== null && v > top) top = v; });
     var heat = vals.map(function (v) {
-      if (v === null || n === 0) return '.';
-      return String(shareStep(v * 10, n));
+      if (v === null) return '.';
+      return String(topStep(v, top));
     }).join('');
-    return { vals: vals, heat: heat, members: n };
+    return { vals: vals, heat: heat, top: top };
   }
-  // online x 10 = members online times ten; the step is floor(share x 10) = floor(online x 10 / n), 0..9.
-  function shareStep(onlineX10, members) {
-    return Math.max(0, Math.min(9, Math.floor(onlineX10 / members + 1e-9)));
+  // The step is floor(v / top x 10), 0..9; nobody online in the whole window (top <= 0) is step 0.
+  function topStep(v, top) {
+    if (top <= 0) return 0;
+    return Math.max(0, Math.min(9, Math.floor(v * 10 / top + 1e-9)));
   }
 
   // ------------------------------------------------------------------ drawing
@@ -1083,7 +1085,7 @@
     el.facStrip._faction = f;
     setText(el.quietLine, extremeLine('Quietest (TCT):', extremeHours(f, false)));
     setText(el.busyLine, extremeLine('Busiest (TCT):', extremeHours(f, true)));
-    setText(el.facTitle, 'Members online (share of members)');
+    setText(el.facTitle, 'Members online (relative to the busiest time)');
     el.facNow._w = lay.cells * lay.cw;
     el.facNow._x = -1;
     // The faction strip starts and ends exactly where the member strips do: on a PC it is moved right by the
@@ -1207,7 +1209,7 @@
       if (!f || !series) return '';
       var label = f.role === 'opponent' ? 'Opponent' : 'Our faction';
       var v = series.vals[i];
-      return label + ' · ' + range + ' · ' + (v === null ? '—' : 'avg ' + oneDecimal(v) + ' online');
+      return label + ' · ' + range + ' · ' + (v === null ? '—' : 'avg ' + oneDecimal(v) + ' online · busiest ' + oneDecimal(series.top) + ' online');
     }
     var chosen = chosenFaction(model).faction;
     var row = rowIndex.get(canvas.dataset.pid);
