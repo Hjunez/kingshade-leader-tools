@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PDA
 // @namespace    kingshade.torn
-// @version      2.0.0
+// @version      2.1.1
 // @description  Roster-local PDA presentation with v1.5.145 authority and shared-claim safety.
 // @author       Kingshade
 // @match        https://www.torn.com/factions.php*
@@ -15,6 +15,105 @@
 // ==/UserScript==
 
 /*
+ * 2.1.1 (2026-11-10): a target in a hospital ABROAD is not DIBS-able. ONE MAIN
+ * CHANGE. Name, namespace, update address and every storage name are those of
+ * 2.1.0. Same change as War Dibs PC 1.1.19.
+ * FIXED
+ *   - In the war on 2026-11-08 several members took DIBS on targets lying in a
+ *     hospital abroad (for example "In a South African hospital for 51 seconds").
+ *     Nobody at home in Torn can attack such a target, so the DIBS locked the
+ *     target and the member's only DIBS slot for nothing. 2.1.0 judged "in
+ *     hospital" with /hospital/i on state, description or details and never
+ *     asked where the hospital is.
+ * CHANGED
+ *   - New hospitalPlaceFromStatus(status), from Torn's API status only (never
+ *     from the page): HOME when the description starts with "In hospital";
+ *     ABROAD when it matches "In a/an <nationality> hospital" (for example
+ *     "In a South African hospital", "In an Emirati hospital"); UNKNOWN when the
+ *     description is missing or not recognised. Only HOME is DIBS-able; ABROAD
+ *     and UNKNOWN never are (fail-closed).
+ *   - verifyFreshTargetBasicForClaim (the /basic read just before a claim)
+ *     accepts only HOME. For ABROAD or UNKNOWN it answers { refusedPlace } instead
+ *     of null, so the claim flow can say why. No POST /claim is ever sent; the
+ *     panel shows "claim refused" with the reason.
+ *   - The decision engine takes the place from the fresh API status. ABROAD
+ *     draws the DIBS cell as not DIBS-able: "ABROAD", "HOSP" underneath, the
+ *     colour of the other not-DIBS-able cells, the button disabled, no time. UNKNOWN
+ *     is drawn as the existing unknown state (the countdown or "?", and "UNKNOWN"
+ *     underneath). With no fresh API status (page evidence only) the cell is drawn
+ *     as before; the /basic gate still stops the claim. VIEW and PREWAR show what
+ *     they showed before.
+ *   - The low-life queue never reads a target that is ABROAD or UNKNOWN.
+ *   - The 48 hour display (longHospitalSeconds) applies to HOME only.
+ *   - Status sorting puts an ABROAD target in the Traveling/Abroad group, and the
+ *     Filters panel counts it as Abroad (never as Hospital or Out soon).
+ * NOT CHANGED
+ *   - The DIBS rules (2:00 gate, FF 2.00-3.40, low life 4.50 for 20 % or less,
+ *     online is free), the rest of the claim path, the release of your own claim,
+ *     the report to the KS server, the landing windows, every request and
+ *     interval, storage, Share with KS, type=2, maxHospitalSeconds (48 h), the
+ *     address warroom.kingshadeprotocol.com.
+ * KNOWN ISSUES
+ *   - None new. A description Torn has not shown before is UNKNOWN until its text
+ *     is known; the target then cannot be DIBSed (fail-closed).
+ * VERIFICATION
+ *   - Synthetic only (Chromium with touch against stand-in Torn and KS servers).
+ *     The text forms are from Torn's own answers: 25 432 "In hospital for ..." and
+ *     1 350 "In a/an <nationality> hospital for ..." rows, 2026-10-20 to
+ *     2026-11-06. Not tried in Torn PDA.
+ * Everything else is unchanged from 2.1.0.
+ *
+ */
+
+/*
+ * 2.1.0 (2026-11-08): landing windows from the KS server. ONE MAIN CHANGE,
+ * information in the Status cell only. Name, namespace, update address and
+ * every storage name are those of 1.5.195.
+ * Built on 2.0.0 (own domain). Same change as 1.5.196, which was never published.
+ * ADDED
+ *   - The KS server works out a landing window for every opponent who is
+ *     travelling and publishes it to the KS War Room server every 30 seconds
+ *     (the view "landing"). On your own war page this script reads that view
+ *     with the sign-in it already has (POST /views/get, no Torn key in the
+ *     request, nothing asked of Torn) and, for a travelling target, shows the
+ *     window in the Status cell: for example 48-52m with an arrow and the country
+ *     (an arrow out = on the way out, an arrow back = on the way home). A "?"
+ *     means a later window follows. The server's data must be under 5 minutes
+ *     old; otherwise, and for every target the server has no flight for,
+ *     Torn's own Status text is shown as before.
+ *   - The DIBS button always comes first: the window is shown only on a row
+ *     where the DIBS button has nothing to say, and it never changes who can
+ *     take DIBS. A travelling target is ordered by when its window opens
+ *     (Torn's Status header and Filters > Status); targets without a window
+ *     come after them.
+ *   - Panel (Settings): a new line "Landing: ..." after the Life line (KS server
+ *     and the age of its data, STALE, UNKNOWN with the reason, OFFLINE, UPDATE
+ *     NEEDED, CHECKING, not used in VIEW, no war loaded). About: a paragraph on
+ *     the landing windows and the new call in the KS War Room paragraph.
+ *   - One new call, one new path on the KS War Room server: POST /views/get (the
+ *     same host, the same sign-in, the same allow-list rule). Read at most once
+ *     every 30 s, from the existing 10 s status tick; never while a DIBS write
+ *     or a hospital report is running, never in VIEW, never while the page is
+ *     hidden, never without a Torn key. No new timer. Nothing is stored in the
+ *     browser: the windows live in memory and are dropped when the key, the
+ *     war or the opponent changes.
+ * KNOWN ISSUES
+ *   - The script has no estimate of its own for a flight: with no window from
+ *     the server the row shows Torn's own text, not a "~" estimate.
+ *   - A window is shown only while the server's data for the opponent is under
+ *     5 minutes old and the Torn clock is known.
+ *   - The box needs a Status cell about 28 px high (two text lines); on a lower
+ *     cell the small second line (arrow and country) would be cut off. The text
+ *     is made smaller only in width, never in height. Not measured on the phone.
+ * VERIFICATION
+ *   - Synthetic only (Chromium against stand-in Torn and KS servers). On the
+ *     phone, on your own war page with a travelling opponent: open Settings and
+ *     see "Landing: KS server . data N s old", and see the window in the Status
+ *     cell of the travelling target.
+ * Everything else is unchanged from 1.5.195: DIBS, its rules and limits, type=2,
+ * the 48 hour display, Share with KS, Filters, the FF circle and stats mark, the
+ * requests for the war, the clock and the panel.
+ *
  * 2.0.0 (2026-11-10): the KS server has its own address.
  * ONE MAIN CHANGE: the KS server address is now https://warroom.kingshadeprotocol.com.
  * Nothing else changed. Name, namespace, update address and every storage name
@@ -633,8 +732,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs",
-    version: "2.0.0",
-    instanceKey: "__ksTornWarDibsPdaV200Test",
+    version: "2.1.1",
+    instanceKey: "__ksTornWarDibsPdaV211Test",
     layerId: "ks-twd-pda-layer",
     rowHostPrefix: "ks-twd-pda-row-",
     panelId: "ks-twd-pda-panel",
@@ -2200,8 +2299,10 @@
 
   // ---------------------------------------------------------------------------
   // KS War Room server transport (contract: 3C rapport avsnitt 10).
-  // Allowlist: exactly POST /session and POST /war/<wire id>/(claims|claim|
-  // unclaim|report). Nothing else, and no wipe. Always gmXhr
+  // Allowlist: exactly POST /session, POST /war/<wire id>/(claims|claim|
+  // unclaim|report), POST /intel/submit (Share with KS, 1.5.192) and POST
+  // /views/get (the landing windows, 1.5.196: no war id, one view name in the
+  // body, read only). Nothing else, and no wipe. Always gmXhr
   // (GM_xmlhttpRequest), always POST, always a JSON body. The sign-in token
   // goes in the body field "session": never in a header, never in the URL.
   // ---------------------------------------------------------------------------
@@ -2245,6 +2346,8 @@
     if (op === "session") return KS_SERVER.sessionPath;
     // 1.5.192: Share with KS, the one intel route a member may call.
     if (op === "intel-submit") return "/intel/submit";
+    // 1.5.196: the landing windows, read only. No war id: the view belongs to the faction.
+    if (op === "views-get") return "/views/get";
     if (!KS_SERVER.warOps.includes(op)) throw new Error("Blocked non-allowlisted KS server endpoint");
     const id = String(wireId ?? "");
     const allowed = KS_SERVER_TEST_BUILD ? /^sim-[1-9]\d{0,9}$/ : /^[1-9]\d{0,9}$/;
@@ -2428,6 +2531,408 @@
     if (reason !== "expired" || !isCurrent()) return result;
     result = await ksServerPost(op, wireId, { ...(extraBody || {}), session: ksSessionToken });
     return result;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 1.5.196 Landing windows from the KS server (KS Las-vag stage 4).
+  //
+  // The KS server works out a landing WINDOW for every player who is travelling
+  // in the factions it follows and publishes it to the KS War Room server every
+  // 30 seconds as the view "landing". On your own war page this script reads that
+  // view with the sign-in it already has (POST /views/get; no Torn key is in the
+  // request and Torn is asked for nothing) and, where the server has the flight,
+  // the Status cell of the travelling target shows the window, for example
+  // 48-52m. The window is information only: nothing in the DIBS rules reads it.
+  //
+  // Everything the server says is untrusted. It is checked before it is used,
+  // text from it is never put into the page as HTML, and nothing is stored in
+  // the browser: the data lives in memory until the Torn key, the war or the
+  // opponent changes or the runtime is suspended. The server's serverTime goes
+  // nowhere near the Torn clock (it is in seconds; the clock's reserve is
+  // measured on the claim board's answers).
+  //
+  // It is a translation of War Room's LandingView, with these differences: the
+  // reading goes through ksWarRoomRequest, it starts from the 10 s status tick
+  // (no timer of its own), it never starts while a DIBS write or a hospital
+  // report is running, and the trip is read off the opponent member data this
+  // script already holds. War Room's rule e (an observed take-off) does not
+  // exist here: rules c and d (direction and country, data at most 300 s old)
+  // cover the same case.
+  // ---------------------------------------------------------------------------
+  const LANDING_VIEW_NAME = "landing";
+  const LANDING_SCHEMA = 1;
+  const LANDING_POLL_MS = 30000;          // one reading every 30 seconds
+  // The reading is started from the 10 s status tick, so it is due when it would
+  // be overdue before the next tick is half way (the same rule as War Room's kick).
+  const LANDING_DUE_MARGIN_MS = 5000;
+  const LANDING_READ_STALE_MS = 60000;    // 2 x the poll: an older reading is not used
+  const LANDING_DATA_MAX_AGE_S = 300;     // the server's last answer from Torn for the opponent, in Torn's seconds
+  const LANDING_FUTURE_SLACK_S = 120;     // a "last answer" further ahead of Torn's clock than this is nonsense
+  const LANDING_MAX_WINDOWS = 4;
+  const LANDING_MAX_FLIGHT_S = 21600;     // no window is wider than 6 hours
+  const LANDING_METHODS = Object.freeze(["Standard", "Airstrip", "WLT", "Business"]);
+  const LANDING_RETRY_DEFAULT_S = 60;
+
+  // Torn's country names as the trip sentence spells them, and the three-letter
+  // code shown beside the arrow. Fixed list: no outside text goes in the page.
+  const TRAVEL_COUNTRY_CODES = Object.freeze({
+    "Mexico": "MEX",
+    "Cayman Islands": "CAY",
+    "Canada": "CAN",
+    "Hawaii": "HAW",
+    "United Kingdom": "UK",
+    "Argentina": "ARG",
+    "Switzerland": "SUI",
+    "Japan": "JPN",
+    "China": "CHN",
+    "UAE": "UAE",
+    "South Africa": "RSA"
+  });
+  const TRAVEL_ALIASES = Object.freeze({ "United Arab Emirates": "UAE" });
+
+  // Travel, read off Torn's own status sentence (a copy of War Room's travelOf):
+  // "Traveling from Torn to Japan" on the way out, "Traveling from Japan to Torn"
+  // on the way home, "In South Africa" when there. "Traveling to X" and
+  // "Returning to Torn from X" are kept as reserves. Case does not matter.
+  // target = { state, description }.
+  function travelOf(target) {
+    const state = target.state || "";
+    if (state !== "Traveling" && state !== "Abroad") return null;
+    const said = String(target.description || "").trim();
+    let m;
+    let dir = "";
+    let where = "";
+    if ((m = /^Traveling from (.+?) to (.+)$/i.exec(said))) {
+      // Torn is one end of every trip: to Torn is the way home, from the country.
+      if (m[2].trim().toLowerCase() === "torn") { dir = "from"; where = m[1]; }
+      else { dir = "to"; where = m[2]; }
+    } else if ((m = /^Traveling to (.+)$/i.exec(said))) { dir = "to"; where = m[1]; }
+    else if ((m = /^Returning to Torn from (.+)$/i.exec(said))) { dir = "from"; where = m[1]; }
+    else if ((m = /^In (.+)$/i.exec(said))) { dir = "in"; where = m[1]; }
+    return { dir, where: travelCountryOf(where), said: said || state, state };
+  }
+
+  // The country's name as TRAVEL_COUNTRY_CODES spells it, whatever case Torn used, or "".
+  function travelCountryOf(name) {
+    let wanted = String(name || "").trim().toLowerCase();
+    if (!wanted) return "";
+    let found = "";
+    Object.keys(TRAVEL_ALIASES).forEach(alias => {
+      if (alias.toLowerCase() === wanted) wanted = TRAVEL_ALIASES[alias].toLowerCase();
+    });
+    Object.keys(TRAVEL_COUNTRY_CODES).forEach(country => {
+      if (country.toLowerCase() === wanted) found = country;
+    });
+    return found;
+  }
+
+  // The opponent member as the landing rules read it, or null (no fresh Torn
+  // status for the target: nothing is shown).
+  function landingTargetFor(targetId) {
+    const status = tornStatusForTarget(targetId);
+    return status ? { id: String(targetId), state: status.state, description: status.description } : null;
+  }
+
+  // The Torn clock is known: the bound-clock intersection, or Torn PDA's own clock.
+  function landingClockReady() {
+    if (Number.isFinite(tornClockLowMs)) return true;
+    if (typeof window.getCurrentTimestamp === "function") {
+      try { return Number.isFinite(window.getCurrentTimestamp()); } catch { return false; }
+    }
+    return false;
+  }
+
+  // The faction's war id on this page, from what the script already holds (no
+  // page read: the sort asks for it on every row). "" when there is none or when
+  // the Torn API has confirmed a different id (the same rule as ksScreenTornWarId).
+  function landingWarId() {
+    const surfaceId = String(currentWarSurface?.warId ?? "");
+    const confirmedId = String(ownWarsState.warId || "");
+    if (confirmedId && confirmedId !== surfaceId) return "";
+    return /^[1-9]\d{0,9}$/.test(surfaceId) ? surfaceId : "";
+  }
+
+  const LandingView = (() => {
+    let heldContext = "";     // who read for which war and opponent; anything else empties everything
+    let epoch = 0;            // bumped when emptied: an answer that was asked before is thrown away
+    let data = null;          // { polledAt, readAt (stopwatch), players: id -> record }
+    let last = { kind: "none", reason: "", version: 0 };   // none | ok | unknown | offline | update
+    let lastAttempt = null;   // stopwatch time the last reading started, or null
+    let retryUntil = 0;       // stopwatch time before which nothing is asked (429)
+    let readSerial = 0;
+    let reading = false;
+
+    // A monotonic stopwatch, so a jump of the device clock never ages or freshens a reading.
+    function stopwatch() {
+      return typeof performance !== "undefined" && performance && typeof performance.now === "function" ? performance.now() : nowMs();
+    }
+
+    // Who the reading is for. Empty when there is nothing to read for: VIEW, no
+    // war, no opponent, no identity, or a suspended runtime.
+    function contextOf() {
+      if (viewOnlyMode() || !runtimeActive) return "";
+      const warId = landingWarId();
+      if (!warId || !validTargetId(selfPlayerId) || !validTargetId(opponentFactionId)) return "";
+      return `${selfPlayerId}|${warId}|${opponentFactionId}`;
+    }
+
+    function empty() {
+      epoch += 1;
+      data = null;
+      last = { kind: "none", reason: "", version: 0 };
+      lastAttempt = null;
+      retryUntil = 0;
+      reading = false;
+    }
+
+    function sync() {
+      const now = contextOf();
+      if (now !== heldContext) { heldContext = now; empty(); }
+    }
+
+    const safeInt = value => typeof value === "number" && Number.isSafeInteger(value);
+
+    // One player's record as it is kept, or null: anything that breaks a rule is
+    // ignored and the row keeps Torn's own text. The windows are put in time order
+    // here: the server lists an airliner's windows by plane method (Standard
+    // first), which is the later one.
+    function recordOf(raw) {
+      if (!isPlainRecord(raw)) return null;
+      if (raw.direction !== "OUT" && raw.direction !== "HOME") return null;
+      if (typeof raw.country !== "string") return null;
+      const country = travelCountryOf(raw.country);
+      if (!country) return null;
+      if (!safeInt(raw.departedTo) || raw.departedTo <= 0) return null;
+      if (!Array.isArray(raw.windows) || raw.windows.length < 1 || raw.windows.length > LANDING_MAX_WINDOWS) return null;
+      const windows = [];
+      for (const w of raw.windows) {
+        if (!isPlainRecord(w) || !safeInt(w.from) || !safeInt(w.to) || w.from <= 0 || w.from >= w.to) return null;
+        if (w.to - w.from > LANDING_MAX_FLIGHT_S) return null;
+        if (!LANDING_METHODS.includes(w.method)) return null;
+        windows.push({ from: w.from, to: w.to });
+      }
+      windows.sort((x, y) => x.to - y.to || x.from - y.from);
+      return { direction: raw.direction, country, windows };
+    }
+
+    // The answer of /views/get for "landing", checked. Sets `last` and `data`.
+    function take(body) {
+      const view = isPlainRecord(body.views) ? body.views[LANDING_VIEW_NAME] : undefined;
+      if (view === null) {
+        const why = isPlainRecord(body.missing) ? body.missing[LANDING_VIEW_NAME] : "";
+        data = null;
+        last = { kind: "unknown", reason: why === "dropped" ? "dropped" : "not published", version: 0 };
+        return;
+      }
+      if (!isPlainRecord(view) || !safeInt(view.schemaVersion)) {
+        data = null; last = { kind: "unknown", reason: "server error", version: 0 };
+        return;
+      }
+      if (view.schemaVersion !== LANDING_SCHEMA) {
+        data = null; last = { kind: "update", reason: "", version: view.schemaVersion };
+        return;
+      }
+      const payload = view.payload;
+      if (!isPlainRecord(payload) || !isPlainRecord(payload.factions)) {
+        data = null; last = { kind: "unknown", reason: "server error", version: 0 };
+        return;
+      }
+      if (payload.model !== "M1") {
+        data = null; last = { kind: "unknown", reason: "unknown model", version: 0 };
+        return;
+      }
+      const opponent = Object.prototype.hasOwnProperty.call(payload.factions, opponentFactionId) ? payload.factions[opponentFactionId] : undefined;
+      if (opponent === undefined) {
+        data = null; last = { kind: "unknown", reason: "opponent not tracked", version: 0 };
+        return;
+      }
+      if (!isPlainRecord(opponent) || !safeInt(opponent.polledAt) || opponent.polledAt <= 0 || !isPlainRecord(opponent.players)) {
+        data = null; last = { kind: "unknown", reason: "server error", version: 0 };
+        return;
+      }
+      const players = Object.create(null);
+      Object.keys(opponent.players).forEach(id => {
+        if (!/^[1-9][0-9]{0,11}$/.test(id)) return;
+        const record = recordOf(opponent.players[id]);
+        if (record) players[id] = record;
+      });
+      data = { polledAt: opponent.polledAt, readAt: stopwatch(), players };
+      last = { kind: "ok", reason: "", version: 0 };
+    }
+
+    async function readOnce() {
+      const asked = epoch;
+      const current = () => { sync(); return asked === epoch; };
+      let result = null;
+      try {
+        // 401 "expired" = one new sign-in and one new try, with a new session in
+        // the body (so never an identical request inside Torn PDA's 2 s window).
+        result = await ksWarRoomRequest("views-get", "", { names: [LANDING_VIEW_NAME] }, { isCurrent: current });
+      } catch { result = null; }
+      if (!current()) return;   // emptied while the answer was on its way: it is not for this page any more
+      if (!result) { last = { kind: "unknown", reason: "server error", version: 0 }; return; }
+      if (result.signIn) { last = { kind: "unknown", reason: "not signed in", version: 0 }; return; }
+      const status = Number(result.status) || 0;
+      const body = result.body;
+      if (status === 200 && isPlainRecord(body) && body.ok === true) { take(body); return; }
+      if (status === 401) { last = { kind: "unknown", reason: "not signed in", version: 0 }; return; }
+      if (status === 429) {
+        let waitSeconds = isPlainRecord(body) ? body.retryAfterSeconds : NaN;
+        if (!safeInt(waitSeconds) || waitSeconds < 1 || waitSeconds > 300) waitSeconds = LANDING_RETRY_DEFAULT_S;
+        retryUntil = stopwatch() + waitSeconds * 1000;
+        last = { kind: "unknown", reason: "rate limited", version: 0 };
+        return;
+      }
+      if (status === 0) { last = { kind: "offline", reason: "", version: 0 }; return; }
+      last = { kind: "unknown", reason: "server error", version: 0 };
+    }
+
+    // Called from the 10 s status tick. Reads when it is due; never waits for anything.
+    function kick() {
+      sync();
+      if (heldContext === "" || reading) return;
+      if (!runtimeActive || !isRuntimeEligible() || !effectiveTornApiKey() || !isPageVisible()) return;
+      // Never next to a DIBS write or a hospital report (the same reason as Share with KS).
+      if (sharedWriteBusy || ksReportBusy) return;
+      const now = stopwatch();
+      if (now < retryUntil) return;
+      if (lastAttempt !== null && now - lastAttempt + LANDING_DUE_MARGIN_MS < LANDING_POLL_MS) return;
+      reading = true;
+      lastAttempt = now;
+      readSerial += 1;
+      const mine = readSerial;
+      const started = epoch;
+      readOnce().catch(() => {
+        if (started === epoch) last = { kind: "unknown", reason: "server error", version: 0 };
+      }).then(() => {
+        if (mine === readSerial) reading = false;
+        if (destroyed) return;
+        // The rows and the line are drawn again at once; the second hand only writes text.
+        updatePanel();
+        schedulePresentationFrame({ render: true, renderAll: true });
+      });
+    }
+
+    // Is the held answer young enough to be used? Then the Torn second it is judged on, else null.
+    function usableNow() {
+      if (!data || !landingClockReady()) return null;
+      if (stopwatch() - data.readAt > LANDING_READ_STALE_MS) return null;
+      const now = getTornNowMs() / 1000;
+      const age = now - data.polledAt;
+      if (age > LANDING_DATA_MAX_AGE_S || age < -LANDING_FUTURE_SLACK_S) return null;
+      return now;
+    }
+
+    // The window the row shows, or null (then Torn's own text is shown).
+    // target = { id, state, description }.
+    function pick(target) {
+      sync();
+      const trip = travelOf(target);                                          // a
+      if (!trip || trip.state !== "Traveling" || !trip.where) return null;
+      const now = usableNow();                                                // d
+      if (now === null) return null;
+      const record = data.players[target.id];                                 // b: only the opponent's own faction was kept
+      if (!record) return null;
+      if (trip.dir !== (record.direction === "OUT" ? "to" : "from")) return null;   // c
+      if (trip.where !== record.country) return null;
+      for (let i = 0; i < record.windows.length; i += 1) {                    // f
+        if (record.windows[i].to >= now) {
+          return { now, from: record.windows[i].from, to: record.windows[i].to, later: i < record.windows.length - 1, record };
+        }
+      }
+      return null;
+    }
+
+    function hm(minutes) {
+      if (minutes < 60) return `${minutes}m`;
+      const rest = minutes % 60;
+      return `${Math.floor(minutes / 60)}h${rest < 10 ? "0" : ""}${rest}`;
+    }
+
+    // "48-52m", "58m-1h04", "1h05-1h12", "now-4m" (with an en dash); a "?" when a
+    // later window follows.
+    function textOf(shown) {
+      const upper = Math.ceil((shown.to - shown.now) / 60);
+      const lower = shown.from <= shown.now ? 0 : Math.max(0, Math.floor((shown.from - shown.now) / 60));
+      let text;
+      if (shown.from <= shown.now) text = `now–${hm(upper)}`;
+      else if (lower < 60 && upper < 60) text = `${lower}–${upper}m`;
+      else text = `${hm(lower)}–${hm(upper)}`;
+      return text + (shown.later ? "?" : "");
+    }
+
+    // What the Status cell shows for a target: { text, sub } or null.
+    function show(target) {
+      const shown = pick(target);
+      if (!shown) return null;
+      return {
+        text: textOf(shown),
+        sub: `${shown.record.direction === "OUT" ? "→" : "←"} ${TRAVEL_COUNTRY_CODES[shown.record.country]}`
+      };
+    }
+
+    function etaText(target) {
+      const shown = show(target);
+      return shown ? shown.text : "";
+    }
+
+    // For the sort: when the shown window opens, in Torn's seconds, or null.
+    function opensAt(target) {
+      const shown = pick(target);
+      return shown ? shown.from : null;
+    }
+
+    function ageText(seconds) {
+      const s = Math.max(0, Math.floor(seconds));
+      return s >= 120 ? `${Math.floor(s / 60)}m` : `${s} s`;
+    }
+
+    // The panel line.
+    function line() {
+      if (viewOnlyMode()) return "Landing: not used in VIEW";
+      sync();
+      if (heldContext === "") return "Landing: no war loaded";
+      if (last.kind === "none") return "Landing: CHECKING · not read yet";
+      if (last.kind === "offline") return "Landing: OFFLINE · server not reached";
+      if (last.kind === "update") return `Landing: UPDATE NEEDED · view version ${last.version}`;
+      if (last.kind === "unknown") {
+        let reason = last.reason;
+        if (reason === "rate limited") reason = `rate limited, retry in ${Math.max(0, Math.ceil((retryUntil - stopwatch()) / 1000))} s`;
+        return `Landing: UNKNOWN · ${reason}`;
+      }
+      if (usableNow() !== null) {
+        return `Landing: KS server · data ${Math.max(0, Math.floor(getTornNowMs() / 1000 - data.polledAt))} s old`;
+      }
+      let age = "unknown";
+      if (data && landingClockReady()) {
+        const polledAge = getTornNowMs() / 1000 - data.polledAt;
+        if (polledAge > LANDING_DATA_MAX_AGE_S) age = ageText(polledAge);
+        else if (polledAge >= -LANDING_FUTURE_SLACK_S) age = ageText((stopwatch() - data.readAt) / 1000);
+      }
+      return `Landing: STALE · data ${age} old`;
+    }
+
+    // The dot on the panel line.
+    function dotState() {
+      if (viewOnlyMode()) return "idle";
+      sync();
+      if (heldContext === "" || last.kind === "none") return "syncing";
+      if (last.kind === "ok") return usableNow() !== null ? "online" : "degraded";
+      return "error";
+    }
+
+    function forget() { heldContext = ""; empty(); }
+
+    return { kick, show, etaText, opensAt, line, dotState, forget };
+  })();
+
+  // The landing window of an opponent row, for the sort: when the window that is
+  // shown opens, in Torn's seconds (an absolute moment, so the order does not
+  // move as the minutes count down). No window at all is last.
+  function landingSortSeconds(targetId) {
+    const target = landingTargetFor(targetId);
+    const opens = target ? LandingView.opensAt(target) : null;
+    return opens === null ? Number.MAX_SAFE_INTEGER : opens;
   }
 
   // ---------------------------------------------------------------------------
@@ -2909,6 +3414,7 @@
   // names all belong to somebody else now.
   function ksResetForTornKeyChange() {
     ksResetSignInGuard();
+    LandingView.forget();   // 1.5.196: the old key's landing windows
     ksMemberNames = new Map();
     ksMemberNamesAttemptAt = 0;
     ksReportedHospitalUntil.clear();
@@ -4624,6 +5130,8 @@
     const status = tornStatusForTarget(targetId);
     if (!status || status.activity === "online") return null;
     if (!isHospitalStatusValue(status.state) && !isHospitalStatusValue(status.description) && !isHospitalStatusValue(status.details)) return null;
+    // 2.1.1: a target abroad (or of unknown place) is never a candidate.
+    if (hospitalPlaceFromStatus(status) !== HOSPITAL_PLACE.HOME) return null;
     if (hospitalUntilExpired(status.until)) return null;
     const seconds = hospitalRemainingSeconds(status.until);
     return Number.isFinite(seconds) && seconds >= 0 && seconds <= CONFIG.gateSeconds ? seconds : null;
@@ -4820,6 +5328,21 @@
 
   function isHospitalStatusValue(value) { return /hospital/i.test(normalizeText(value)); }
 
+  // 2.1.1: where a hospital is, from Torn's API status only. Torn writes
+  // "In hospital for ..." at home and "In a <nationality> hospital for ..." (or
+  // "In an <nationality> ...") abroad. Nobody at home can attack a target abroad.
+  // Only HOME is DIBS-able; a missing or unrecognised description is UNKNOWN and
+  // is not DIBS-able either (fail-closed). Call it for a status that is a
+  // hospital status; it never reads the page.
+  const HOSPITAL_PLACE = Object.freeze({ HOME: "home", ABROAD: "abroad", UNKNOWN: "unknown" });
+  function hospitalPlaceFromStatus(status) {
+    if (!status || typeof status !== "object") return HOSPITAL_PLACE.UNKNOWN;
+    const description = normalizeText(status.description);
+    if (/^in hospital(?![a-z])/i.test(description)) return HOSPITAL_PLACE.HOME;
+    if (/^in an? [a-z][a-z'.-]*(?: [a-z][a-z'.-]*){0,2} hospital(?![a-z])/i.test(description)) return HOSPITAL_PLACE.ABROAD;
+    return HOSPITAL_PLACE.UNKNOWN;
+  }
+
   // A release time that has passed means the target is out, whatever a cached or
   // lagging status record still says. Returns false when there is no usable
   // timestamp, so a genuinely unknown release time is left alone.
@@ -4874,6 +5397,8 @@
       isHospitalStatusValue(apiStatus.description) ||
       isHospitalStatusValue(apiStatus.details);
     if (!hospital) return null;
+    // 2.1.1: the 48 hour display is for a hospital at home only.
+    if (hospitalPlaceFromStatus(apiStatus) !== HOSPITAL_PLACE.HOME) return null;
     const until = Number(apiStatus.until);
     if (!Number.isFinite(until) || until <= 0) return null;
     const remaining = Math.ceil(until - getTornNowMs() / 1000);
@@ -4912,15 +5437,18 @@
         isHospitalStatusValue(apiStatus.description) ||
         isHospitalStatusValue(apiStatus.details);
       if (!hospital) return { isHospital: false, seconds: null, source: "torn-api" };
+      // 2.1.1: where the hospital is, from the same fresh API status. Page
+      // evidence (below, when there is no fresh API status) carries no place.
+      const place = hospitalPlaceFromStatus(apiStatus);
       const remaining = hospitalRemainingSeconds(apiStatus.until);
-      if (Number.isFinite(remaining)) return { isHospital: true, seconds: remaining, source: "torn-api" };
+      if (Number.isFinite(remaining)) return { isHospital: true, seconds: remaining, source: "torn-api", place };
       // The release time has passed: out, regardless of a stale state field.
       if (hospitalUntilExpired(apiStatus.until)) {
         return { isHospital: false, seconds: null, source: "torn-api-expired" };
       }
       const fallback = visibleHospitalEvidence(row);
-      if (fallback.isHospital && Number.isFinite(fallback.seconds)) return fallback;
-      return { isHospital: true, seconds: null, source: "torn-api" };
+      if (fallback.isHospital && Number.isFinite(fallback.seconds)) return { ...fallback, place };
+      return { isHospital: true, seconds: null, source: "torn-api", place };
     }
     return visibleHospitalEvidence(row);
   }
@@ -5072,7 +5600,7 @@
   // Pure target decision engine
   // ---------------------------------------------------------------------------
 
-  function classifyLiveTargetState({ playerId, ownTargetId, isHospital, seconds, fairFight, rwPhase, activity = null, lowHp = false }) {
+  function classifyLiveTargetState({ playerId, ownTargetId, isHospital, seconds, fairFight, rwPhase, activity = null, lowHp = false, hospitalPlace = HOSPITAL_PLACE.HOME }) {
     const ff = Number.isFinite(fairFight) ? Number(fairFight) : null;
     if (ownTargetId) {
       if (ownTargetId === playerId) return { state: TARGET_STATE.CLAIMED, seconds, fairFight: ff, reason: "active-own-dibs", mode: "live" };
@@ -5090,6 +5618,9 @@
       };
     }
     if (!isHospital) return { state: TARGET_STATE.UNAVAILABLE, seconds: null, fairFight: ff, reason: "not-hospital", mode: "live" };
+    // 2.1.1: only a hospital at home is DIBS-able (see hospitalPlaceFromStatus).
+    if (hospitalPlace === HOSPITAL_PLACE.ABROAD) return { state: TARGET_STATE.UNAVAILABLE, seconds: null, fairFight: ff, reason: "hospital-abroad", mode: "live" };
+    if (hospitalPlace !== HOSPITAL_PLACE.HOME) return { state: TARGET_STATE.UNKNOWN, seconds: null, fairFight: ff, reason: "hospital-place-unverifiable", mode: "live" };
     if (seconds === null) return { state: TARGET_STATE.UNKNOWN, seconds: null, fairFight: ff, reason: "hospital-timer-unverifiable", mode: "live" };
     if (seconds > CONFIG.gateSeconds) return { state: TARGET_STATE.LOCKED, seconds, fairFight: ff, reason: "hospital-too-early", mode: "live" };
     if (ff === null) return { state: TARGET_STATE.UNKNOWN, seconds, fairFight: null, reason: "fair-fight-unverifiable", mode: "live" };
@@ -5099,7 +5630,7 @@
     return { state: TARGET_STATE.READY, seconds, fairFight: ff, reason: lowHp === true ? "hospital-window-low-life-fair-fight-open" : "hospital-window-and-fair-fight-open", mode: "live", ...(lowHp === true ? { lowHp: true } : {}) };
   }
 
-  function classifyTargetState({ playerId, ownClaim, isHospital, seconds, fairFight, rwPhase, activity = null, lowHp = false, ownershipUnresolved = false }) {
+  function classifyTargetState({ playerId, ownClaim, isHospital, seconds, fairFight, rwPhase, activity = null, lowHp = false, ownershipUnresolved = false, hospitalPlace = HOSPITAL_PLACE.HOME }) {
     if (ownClaim) {
       if (ownClaim.targetId === playerId) {
         return { state: TARGET_STATE.CLAIMED, seconds, fairFight, reason: "active-own-dibs", mode: "live" };
@@ -5117,7 +5648,8 @@
       fairFight,
       rwPhase,
       activity,
-      lowHp
+      lowHp,
+      hospitalPlace
     });
   }
 
@@ -5137,6 +5669,7 @@
       activity: freshOpponentActivityForTarget(row.id),
       lowHp: lowHpForTarget(row.id),
       rwPhase,
+      hospitalPlace: hospital.place || HOSPITAL_PLACE.HOME,
       ownershipUnresolved: Boolean(
         !newClaimStorageAuthorityReady() ||
         (effectiveTornApiKey() && sharedClaimsVerifiedAt <= 0) ||
@@ -5170,8 +5703,14 @@
       isHospitalStatusValue(status.state) ||
       isHospitalStatusValue(status.description) ||
       isHospitalStatusValue(status.details);
+    if (!hospital) return null;
+    // 2.1.1: the deciding gate. Only a hospital at home is accepted; abroad and
+    // unrecognised text are refused with { refusedPlace } (not null, so the
+    // caller can say why), and no claim is sent to the server.
+    const place = hospitalPlaceFromStatus(status);
+    if (place !== HOSPITAL_PLACE.HOME) return { refusedPlace: place };
     const seconds = hospitalRemainingSeconds(status.until);
-    if (!hospital || !Number.isFinite(seconds) || seconds > CONFIG.gateSeconds) return null;
+    if (!Number.isFinite(seconds) || seconds > CONFIG.gateSeconds) return null;
     return { targetId: String(targetId), status, seconds, fetchedAt };
   }
 
@@ -5267,6 +5806,15 @@
         throw new Error("fresh own faction wars did not confirm LIVE");
       }
       const targetProof = await verifyFreshTargetBasicForClaim(targetId, claimCreationCurrent);
+      // 2.1.1: say why when Torn says the hospital is not at home.
+      if (targetProof?.refusedPlace === HOSPITAL_PLACE.ABROAD) {
+        if (claimCreationCurrent()) holdSharedWriteFailure("War Room: claim refused · target is in a hospital abroad");
+        return;
+      }
+      if (targetProof?.refusedPlace === HOSPITAL_PLACE.UNKNOWN) {
+        if (claimCreationCurrent()) holdSharedWriteFailure("War Room: claim refused · hospital place not confirmed");
+        return;
+      }
       if (!targetProof) throw new Error("fresh target basic verification failed");
       if (!claimCreationCurrent()) return;
       const finalSurface = captureCurrentWarSurface();
@@ -6191,6 +6739,12 @@
         button:hover,a:hover { color:#fff; text-decoration:underline; }
         button:disabled { opacity:.4; cursor:default; text-decoration:none; }
         button[data-role='dibs']:hover { text-decoration:none; }
+        /* 1.5.196: the landing window in the Status cell, shown only where the DIBS button
+           has nothing to say. Own colours (text #e2e8f0 on #1a202c, far above 4.5:1), a
+           dashed edge so it never looks like a button, and no pointer events at all. */
+        .landing { padding:0 2px; border:1px dashed #718096; border-radius:6px; background:#1a202c; color:#e2e8f0; font-family:Arial,sans-serif; pointer-events:none; text-overflow:clip; }
+        .landing .label { display:block; font:900 12px/1.15 Arial,sans-serif; white-space:nowrap; text-overflow:clip; }
+        .landing .sub { display:block; margin-top:1px; font:700 8px/1.1 Arial,sans-serif; opacity:.85; white-space:nowrap; text-overflow:clip; }
         /* A phone finger is about 8mm wide. Eight 9.8px text links on one line
            is not a control row, it is a row nobody can hit. 44px minimum per
            target, wrapped, with a pressed state so a tap that lands is
@@ -6330,6 +6884,7 @@
             <div class="status-item" data-role="rw-item"><span class="dot"></span><span class="status" data-role="rw-status">DIBS: checking RW…</span></div>
             <div class="status-item" data-role="clock-item"><span class="dot"></span><span class="status" data-role="clock-status">Clock: loading…</span></div>
             <div class="status-item" data-role="life-item"><span class="dot"></span><span class="status" data-role="life-status">Life: 0 targets read · newest unknown</span></div>
+            <div class="status-item" data-role="landing-item"><span class="dot"></span><span class="status" data-role="landing-status">Landing: CHECKING · not read yet</span></div>
           </div>
           <div class="controls" data-role="controls-primary">
             <button type="button" data-role="key">FFScouter key</button>
@@ -6353,9 +6908,11 @@
               <strong>FFScouter key/integration:</strong> key stored only locally, encrypted in this browser; sent only to FFScouter. Visible target IDs from the actively viewed war page are sent to FFScouter for FF/Est lookup only.
               <a data-role="ff-terms" target="_blank" rel="noopener noreferrer">FFScouter terms/data policy</a> · <a data-role="ff-privacy" target="_blank" rel="noopener noreferrer">Privacy</a>.
               <br>
-              <strong>KS War Room (shared DIBS):</strong> claim/release data is shared with faction members through the KS War Room server (warroom.kingshadeprotocol.com). Signing in returns a temporary sign-in token that is kept only in this page's memory and is never stored. Sent to the server: that token, the war ID, the target's Torn ID and the target's hospital end time. Calls: sign in, read the claim board (every 2.5 s on your own war page), claim, release, and a report when a claimed target is back in hospital. Kept on the server: target ID, the claimer's Torn ID, claim time and hospital end time, removed once the war has been untouched for 12 hours.
+              <strong>KS War Room (shared DIBS):</strong> claim/release data is shared with faction members through the KS War Room server (warroom.kingshadeprotocol.com). Signing in returns a temporary sign-in token that is kept only in this page's memory and is never stored. Sent to the server: that token, the war ID, the target's Torn ID and the target's hospital end time. Calls: sign in, read the claim board (every 2.5 s on your own war page), read the landing windows (every 30 s on your own war page), claim, release, and a report when a claimed target is back in hospital. Kept on the server: target ID, the claimer's Torn ID, claim time and hospital end time, removed once the war has been untouched for 12 hours. Reading the landing windows sends the sign-in token and the name of the view, nothing else, and nothing of the answer is stored in this browser.
               <br>
               <strong>Share with KS (opt-in, off by default):</strong> when on, your own battle stats (strength, defense, speed, dexterity, total) and your Torn ID go to the KS War Room server every 6 hours. The server holds them until the KS server has fetched them (at most 7 days); the KS server keeps them to compute stat estimates for the faction. They are never shown to anyone, inside or outside the faction. Nothing is sent or stored on any server while it is off.
+              <br>
+              <strong>Landing windows:</strong> when the KS server has the flight, the Status cell of a travelling target shows the landing window it worked out, for example 48–52m with an arrow and the country (→ out, ← home); a "?" means a later window follows. The server's data must be under 5 minutes old, otherwise Torn's own text is shown. The DIBS button always comes first, and the window is information only: it never changes who can take DIBS. Travelling targets are ordered by when their window opens. The windows are held in this page's memory only and are dropped when you forget the key or the war changes.
               <br>
               <strong>Filters:</strong> the Filters section sorts and hides rows of the war list on this page only. A filter only hides rows: nothing is sent, nothing is asked of Torn or FFScouter for it, and your own DIBS is never hidden. Out soon means 10 minutes or less in hospital. FF and Stats limits are paused while FF is not available, so the list is never emptied because FFScouter is away. Default order follows Torn's own column headers; a tap on one of Torn's headers takes you back to Default order. Only your choices (the sort and the filter values) are kept in this browser, under ks_torn_war_dibs_pda_sort_v1 and ks_torn_war_dibs_pda_filters_v1; Reset filters removes the filters.
               <br>
@@ -6715,6 +7272,7 @@
       <span class="presenter ff" data-role="ff"></span>
       <span class="presenter est" data-role="est"></span>
       <span class="presenter hospital" data-role="hospital" hidden></span>
+      <span class="presenter landing" data-role="landing" hidden><span class="label"></span><span class="sub"></span></span>
       <button type="button" data-role="dibs" disabled data-state="loading" data-ready="false"><span class="label">DIBS</span><span class="sub">LOADING</span></button>
     `;
     surface.appendChild(host);
@@ -6927,6 +7485,10 @@
     setOwnGeometry(hospital, null, rowRect);
     const dibsPlaced = setOwnGeometry(dibs, measurement.statusRect, rowRect, { inset: 1 });
     if (!dibsPlaced && dibs instanceof HTMLButtonElement) { dibs.disabled = true; dibs.dataset.ready = "false"; }
+    // 1.5.196: the landing box takes the same place as the DIBS button (it is hidden
+    // whenever the button is showing, see renderLandingBox).
+    const landing = binding.host.querySelector(`[data-role='landing']`);
+    if (landing instanceof HTMLElement && setOwnGeometry(landing, measurement.statusRect, rowRect, { inset: 1 })) fitLandingText(landing);
   }
 
   function layoutRowBindings() {
@@ -6940,6 +7502,8 @@
     return Boolean(
       countdown ||
       (decision?.state === TARGET_STATE.FREE && Number.isFinite(decision.seconds)) ||
+      // 2.1.1: a hospital abroad is always said, also when there is no time to show.
+      (decision?.state === TARGET_STATE.UNAVAILABLE && decision.reason === "hospital-abroad") ||
       sharedClaim ||
       sharedClaimUnknown(playerId) ||
       pendingTargetId === playerId ||
@@ -7075,6 +7639,12 @@
     // The number is what the caller reads, so it leads. The word underneath
     // says why the number is not actionable yet.
     label.textContent = countdown || "DIBS";
+    // 2.1.1: a hospital abroad is not DIBS-able; the cell says so (no time, no tooltip).
+    if (decision.state === TARGET_STATE.UNAVAILABLE && decision.reason === "hospital-abroad") {
+      button.disabled = true;
+      label.textContent = "ABROAD"; sub.textContent = "HOSP";
+      return;
+    }
     if (decision.state === TARGET_STATE.READY) {
       button.disabled = !effectiveTornApiKey() || sharedWriteBusy;
       button.dataset.ready = button.disabled ? "false" : "true";
@@ -7178,6 +7748,7 @@
       activity: freshOpponentActivityForTarget(resolved.id),
       lowHp: lowHpForTarget(resolved.id),
       rwPhase,
+      hospitalPlace: hospitalState.place || HOSPITAL_PLACE.HOME,
       ownershipUnresolved: Boolean(
         !newClaimStorageAuthorityReady() ||
         (effectiveTornApiKey() && sharedClaimsVerifiedAt <= 0) ||
@@ -7195,7 +7766,69 @@
       longHospital: Number.isFinite(longSeconds)
     });
     const dibs = host.querySelector(`[data-role='dibs']`);
-    setNativeStatusHidden(binding, dibs instanceof HTMLElement && dibs.style.visibility !== "hidden");
+    const dibsVisible = dibs instanceof HTMLElement && dibs.style.visibility !== "hidden";
+    // 1.5.196: the landing window, only where the DIBS button has nothing to say. Torn's
+    // own Status text is hidden for as long as either of the two covers the cell.
+    const landingShown = renderLandingBox(binding, resolved.id, dibsVisible);
+    setNativeStatusHidden(binding, dibsVisible || landingShown);
+  }
+
+  // 1.5.196: draws (or empties and hides) the landing box of a row. The DIBS button
+  // always wins: while it is showing the box is hidden and empty, and nothing here
+  // reads or changes what the button says. Server text is written as text only.
+  // Returns true while the box is showing.
+  function renderLandingBox(binding, targetId, dibsVisible) {
+    const box = binding.host.querySelector(`[data-role='landing']`);
+    if (!(box instanceof HTMLElement)) return false;
+    const label = box.querySelector(".label");
+    const sub = box.querySelector(".sub");
+    const target = dibsVisible ? null : landingTargetFor(targetId);
+    const shown = target ? LandingView.show(target) : null;
+    if (!shown || !label || !sub) {
+      if (!box.hidden) box.hidden = true;
+      if (label && label.textContent !== "") label.textContent = "";
+      if (sub && sub.textContent !== "") sub.textContent = "";
+      return false;
+    }
+    let textChanged = false;
+    if (label.textContent !== shown.text) { label.textContent = shown.text; textChanged = true; }
+    if (sub.textContent !== shown.sub) { sub.textContent = shown.sub; textChanged = true; }
+    if (box.hidden) {
+      box.hidden = false;
+      // Same place as the DIBS button, from the last measurement of this row; the
+      // next layout pass puts it exactly where it belongs.
+      if (binding.lastLayout?.statusRect && binding.lastLayout?.rowRect) {
+        setOwnGeometry(box, binding.lastLayout.statusRect, binding.lastLayout.rowRect, { inset: 1 });
+      } else {
+        schedulePresentationFrame({ layout: true });
+      }
+      textChanged = true;
+    }
+    if (textChanged) fitLandingText(box);
+    return true;
+  }
+
+  // The window text is written at the same size as the DIBS button's (12 px and 8 px).
+  // On a narrow Status cell a text like 1h05-1h12? can be a pixel or two too wide; then,
+  // and only then, it is made smaller in half-pixel steps until it fits (never below
+  // 6 px). Called when the text changes and after the box has been placed.
+  function fitLandingText(box) {
+    if (!(box instanceof HTMLElement) || box.hidden) return;
+    // Only when the text or the width changed: the check reads the layout, and the layout
+    // pass visits every shown box (one forced reflow per box otherwise).
+    const key = `${box.querySelector(".label")?.textContent}|${box.querySelector(".sub")?.textContent}|${box.style.width}`;
+    if (box.dataset.fit === key) return;
+    box.dataset.fit = key;
+    for (const [selector, base] of [[".label", 12], [".sub", 8]]) {
+      const el = box.querySelector(selector);
+      if (!(el instanceof HTMLElement)) continue;
+      if (el.style.fontSize !== "") el.style.fontSize = "";
+      let size = base;
+      while (el.clientWidth > 0 && el.scrollWidth > el.clientWidth && size > 6) {
+        size -= 0.5;
+        el.style.fontSize = size + "px";
+      }
+    }
   }
 
   function auditRowRegistry() {
@@ -7283,6 +7916,8 @@
     const rowView = resolved || { row: entry.row, li: entry.row, statusDiv, id: entry.targetId };
     const hospital = computeHospitalSeconds(rowView);
     if (hospital?.isHospital === true) {
+      // 2.1.1: a hospital abroad (from Torn's API status) sorts with Traveling/Abroad.
+      if (hospital.place === HOSPITAL_PLACE.ABROAD) return { group: ROSTER_GROUP.TRAVEL, seconds: landingSortSeconds(entry.targetId) };
       if (Number.isFinite(hospital.seconds)) return { group: ROSTER_GROUP.HOSPITAL, seconds: hospital.seconds };
       // 1.5.194: a release time of 48 h or more sorts by its real time, after
       // every shorter hospital time. No release time at all stays unknown.
@@ -7295,7 +7930,10 @@
     const apiState = normalizeText(tornStatusForTarget(entry.targetId)?.state);
     const text = (apiState || normalizeText(statusDiv?.textContent)).toLowerCase();
     if (text.startsWith("okay")) return { group: ROSTER_GROUP.OKAY, seconds: 0 };
-    if (text.includes("travel") || text.includes("abroad")) return { group: ROSTER_GROUP.TRAVEL, seconds: 0 };
+    // 1.5.196: a traveller with a landing window from the KS server is ordered by when
+    // that window opens; one without a window comes after them (equal values keep
+    // their first-seen order, as before).
+    if (text.includes("travel") || text.includes("abroad")) return { group: ROSTER_GROUP.TRAVEL, seconds: landingSortSeconds(entry.targetId) };
     return { group: ROSTER_GROUP.OTHER, seconds: 0 };
   }
 
@@ -7490,6 +8128,9 @@
     const rowView = resolved || { row: entry.row, li: entry.row, statusDiv, id: entry.targetId };
     const hospital = computeHospitalSeconds(rowView);
     if (hospital?.isHospital === true) {
+      // 2.1.1: a hospital abroad is "abroad" here too, as in the sort and on the
+      // button, and is never "Out soon".
+      if (hospital.place === HOSPITAL_PLACE.ABROAD) return { key: "abroad", outSoon: false };
       return { key: "hospital", outSoon: Number.isFinite(hospital.seconds) && hospital.seconds <= FILTER_OUT_SOON_SECONDS };
     }
     if (hospital?.source === "torn-api-expired") return { key: "okay", outSoon: false };
@@ -8158,6 +8799,14 @@
       const lifeText = lifeStatusMessage();
       $("life-status").textContent = lifeText;
       $("life-status").title = lifeText;
+    }
+    // 1.5.196: the landing windows line, straight after the Life line.
+    if ($("landing-status")) {
+      const landingText = LandingView.line();
+      $("landing-status").textContent = landingText;
+      $("landing-status").title = landingText;
+      const landingItem = $("landing-item");
+      if (landingItem) landingItem.dataset.state = LandingView.dotState();
     }
     const ffLockVerdict = evaluateFfCredentialExternalLock();
     const ffExternalLock = ffLockVerdict.active;
@@ -9040,6 +9689,9 @@
     tornStatusTimer = window.setInterval(() => {
       if (!effectiveTornApiKey() || !runtimeActive || !isRuntimeEligible()) return;
       void fetchTornStatuses();
+      // 1.5.196: the landing windows are read from this tick (no timer of their own).
+      // The reading decides by itself whether it is due and allowed.
+      LandingView.kick();
       if (selfPlayerId) {
         }
     }, CONFIG.tornStatusPollMs);
@@ -9070,6 +9722,8 @@
     currentWarSurface = null;
     prewarObservation = null;
     opponentFactionId = "";
+    // 1.5.196: the landing windows belong to a running own war page.
+    LandingView.forget();
     clearTimers();
     stopRouteObserver();
     unmountBridge();
