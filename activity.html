@@ -123,7 +123,12 @@
   .quiet-lines p { font-family: var(--mono); font-size: 13px; color: var(--ink); margin-top: 4px; overflow-wrap: anywhere; }
   .quiet-lines b { font-weight: 600; color: var(--muted); }
 
-  .hover { min-height: 22px; font-family: var(--mono); font-size: 13px; color: var(--ink); overflow-wrap: anywhere; }
+  /* Kept at the bottom of the window while the activity panel is in view, so the reading is never off-screen. */
+  .hover {
+    min-height: 22px; font-family: var(--mono); font-size: 13px; color: var(--ink); overflow-wrap: anywhere;
+    position: sticky; bottom: 0; z-index: 5; background: var(--surface);
+    border-top: 1px solid var(--line-strong); padding: 4px 8px;
+  }
 
   .tablewrap { position: relative; min-width: 0; }
   table { border-collapse: collapse; width: 100%; table-layout: fixed; }
