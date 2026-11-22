@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Black Market PDA
 // @namespace    kingshade.ks-black-market
-// @version      0.4.5
+// @version      0.4.6
 // @description  Travel advisor: the best runs abroad for every item sold abroad, and when to leave Torn to land right after a restock, for members of Politically Incorrect. Reads from the KS Black Market server and, for your cash, travel method and item slots, from the Torn page you have open. Never clicks, navigates or contacts Torn.
 // @author       Kingshade
 // @match        https://www.torn.com/*
@@ -15,7 +15,7 @@
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Black_Market_PDA.user.js
 // ==/UserScript==
 /*
- * KS Black Market 0.4.5 (PDA) — disclosure
+ * KS Black Market 0.4.6 (PDA) — disclosure
  * What it does : your travel advisor. It lists the best runs abroad for every item sold abroad, not only drugs (best
  *                trips, sell abroad, bring home) for the travel method and the number of item slots you pick, strictly
  *                ordered by the profit you can expect per hour of flying. For goods you bring home it also says WHEN to
@@ -26,6 +26,8 @@
  *                landing, leaving soonest, or most per trip. Tap a row for the details, including the cash you need (and, when your cash is known, what is
  *                missing); there you can also star a row (it goes first) or hide it. Goods you bring home that you would buy
  *                in larger numbers than are listed near the price at home are shown apart, as "Thin market".
+ *                It also shows the KS server's own track record: how often the stock was really there when we said it
+ *                would be (a line under Best trips and the section "How accurate are we?" in Settings).
  *                The numbers (also the restock times) are calculated by the KS server from public price and stock data
  *                and sent to this script. For members of Politically Incorrect only. Measurement, not advice; there
  *                are no buy or travel buttons, and no sound or notification.
@@ -59,6 +61,10 @@
  * API key      : your own Torn key at access level Public is enough (no selections needed). It is used only for the
  *                faction membership check. If Torn rejects the key, or it does not belong to the faction, the saved
  *                key is removed and not tried again.
+ *
+ * CHANGELOG 0.4.6
+ * ADDED        : Shows the KS server's own track record: how often the stock was really there when we said it would be.
+ *                Nothing changes in what the script requests, stores or shares.
  *
  * CHANGELOG 0.4.5
  * FIXED (Torn PDA): the Black Market row keeps a space between the destination and the amount.
@@ -132,7 +138,7 @@
  */
 (function () {
 'use strict';
-var KSBM_VERSION = '0.4.5';
+var KSBM_VERSION = '0.4.6';
 var KSBM_PLATFORM = 'PDA';
 
 /* ================= KS Black Market — core (shared by PC and PDA) =================
@@ -319,6 +325,63 @@ var KSBM_CORE = (function () {
     return out;
   }
 
+  /* The KS server's own track record (server 0.4.5, userscript 0.4.6): how often the stock was really there when the server said it would be. Whole numbers only.
+   *   {v:1, facit_slots, since (epoch seconds of the first published advice, or null), windows: {"7": {<method>: W}, "30": {<method>: W}}}
+   *   W = {advised: S, timed: S, in_stock: S, buckets: [S, S, S, S], no_facit}      S = {n, said, real}  (said / real in promille, null when n = 0)
+   * Checked strictly; anything that does not pass is null and nothing about it is shown (fail-closed). A server before 0.4.5 sends none: null. */
+  var TRACK_V = 1;
+  var TRACK_WINDOW_KEYS = ['7', '30'];
+  var TRACK_N_MAX = 10000000;
+  var TRACK_MIN_CHECKS = 100;        // fewer checks than this in 7 days: the row says that we are still collecting
+  function sameKeys(o, keys) {
+    var have = Object.keys(o);
+    if (have.length !== keys.length) return false;
+    for (var i = 0; i < keys.length; i++) if (!Object.prototype.hasOwnProperty.call(o, keys[i])) return false;
+    return true;
+  }
+  function sanitizeTrackStat(s) {
+    if (!isPlainObject(s) || !sameKeys(s, ['n', 'said', 'real'])) return null;
+    if (!isInt(s.n) || s.n < 0 || s.n > TRACK_N_MAX) return null;
+    if (s.n === 0) return s.said === null && s.real === null ? { n: 0, said: null, real: null } : null;
+    if (!isInt(s.said) || s.said < 0 || s.said > 1000 || !isInt(s.real) || s.real < 0 || s.real > 1000) return null;
+    return { n: s.n, said: s.said, real: s.real };
+  }
+  function sanitizeTrackWindow(w) {
+    if (!isPlainObject(w) || !sameKeys(w, ['advised', 'timed', 'in_stock', 'buckets', 'no_facit'])) return null;
+    var out = { advised: sanitizeTrackStat(w.advised), timed: sanitizeTrackStat(w.timed), in_stock: sanitizeTrackStat(w.in_stock), buckets: [], no_facit: w.no_facit };
+    if (out.advised === null || out.timed === null || out.in_stock === null) return null;
+    if (!Array.isArray(w.buckets) || w.buckets.length !== 4) return null;
+    for (var b = 0; b < 4; b++) {
+      var sb = sanitizeTrackStat(w.buckets[b]);
+      if (sb === null) return null;
+      out.buckets.push(sb);
+    }
+    if (!isInt(w.no_facit) || w.no_facit < 0 || w.no_facit > TRACK_N_MAX) return null;
+    return out;
+  }
+  function sanitizeTrackRecord(t) {
+    if (!isPlainObject(t) || !sameKeys(t, ['v', 'facit_slots', 'since', 'windows'])) return null;
+    if (t.v !== TRACK_V || !isInt(t.facit_slots) || t.facit_slots < 1 || t.facit_slots > MAX_SEATS) return null;
+    if (t.since !== null && !(isInt(t.since) && t.since > 0)) return null;
+    if (!isPlainObject(t.windows) || !sameKeys(t.windows, TRACK_WINDOW_KEYS)) return null;
+    var windows = {};
+    for (var i = 0; i < TRACK_WINDOW_KEYS.length; i++) {
+      var key = TRACK_WINDOW_KEYS[i];
+      var per = t.windows[key];
+      if (!isPlainObject(per)) return null;
+      var clean = {};
+      var methods = Object.keys(per);
+      for (var j = 0; j < methods.length; j++) {
+        if (!has(METHODS, methods[j])) return null;                         // only known travel methods
+        var w = sanitizeTrackWindow(per[methods[j]]);
+        if (w === null) return null;
+        clean[methods[j]] = w;
+      }
+      windows[key] = clean;
+    }
+    return { v: TRACK_V, facit_slots: t.facit_slots, since: t.since, windows: windows };
+  }
+
   // ---- one row. schema 2: a drug, always Black Market (the old server knew nothing else). schema 3: any item.
   function sanitizeRow(r, schema) {
     if (!isPlainObject(r)) return null;
@@ -406,8 +469,10 @@ var KSBM_CORE = (function () {
       else rows.push(row);
     }
     dropped += d.rows.length - limit;
+    // The track record (server 0.4.5): a server before that has none; one that does not pass the check gives none either - the rest is read as before.
+    var track = d.track_record === undefined ? null : sanitizeTrackRecord(d.track_record);
     return { ok: true, env: { receivedAt: raw.receivedAt, serverAge: raw.serverAge,
-      latest: { schema: schema, status: d.status, generated_at: d.generated_at, drugs: drugs, rows: rows }, dropped: dropped } };
+      latest: { schema: schema, status: d.status, generated_at: d.generated_at, drugs: drugs, rows: rows, track_record: track }, dropped: dropped } };
   }
 
   /* ---------- age ---------- */
@@ -895,6 +960,47 @@ var KSBM_CORE = (function () {
     return out;
   }
 
+  /* ---------- the KS server's track record as text (0.4.6) ----------
+   * The row under the lists of Best trips and the section "How accurate are we?" in Settings. Only the figures the server counted, never how they are made.
+   * Both are for the travel method the panel calculates with. */
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function fmtDay(epochS) { var d = new Date(epochS * 1000); return d.getUTCDate() + ' ' + MONTHS[d.getUTCMonth()]; }
+  // Promille as a whole percent, a half rounded up: 825 -> "83%", 824 -> "82%".
+  function fmtPct(promille) { return Math.floor((promille + 5) / 10) + '%'; }
+  function checksText(n) { return groupDigits(n) + (n === 1 ? ' check' : ' checks'); }
+  // The line in Best trips: 7 days, the advice the panel does not mark "Sells out first". Fewer than 100 checks: we are still collecting. No record: no line.
+  function trackLine(tr, method) {
+    if (!tr) return null;
+    var w = tr.windows['7'][method];
+    if (!w) return null;
+    var a = w.advised;
+    if (a.n >= TRACK_MIN_CHECKS) return 'Our track record, last 7 days: we said ' + fmtPct(a.said) + ' · stock was there ' + fmtPct(a.real) + ' (' + groupDigits(a.n) + ' checks)';
+    return 'Our track record: collecting' + (tr.since !== null ? ' since ' + fmtDay(tr.since) : '') + ' (' + a.n + (a.n === 1 ? ' check' : ' checks') + ' so far)';
+  }
+  function trackStatText(s) { return s.n === 0 ? 'no checks yet' : 'we said ' + fmtPct(s.said) + ' · stock was there ' + fmtPct(s.real) + ' (' + checksText(s.n) + ')'; }
+  function trackBucketText(s) { return s.n === 0 ? 'no checks yet' : 'stock was there ' + fmtPct(s.real) + ' (' + groupDigits(s.n) + ')'; }
+  // The section in Settings: { title, blocks: [{ title, lines: [text] }], footer } or null when there is nothing to show for this method.
+  function trackSections(tr, method) {
+    if (!tr) return null;
+    var blocks = [];
+    var days = [['7', 'Last 7 days'], ['30', 'Last 30 days']];
+    for (var i = 0; i < days.length; i++) {
+      var w = tr.windows[days[i][0]][method];
+      if (!w) continue;
+      blocks.push({ title: days[i][1] + ' · ' + METHOD_LABEL[method], lines: [
+        'Sold out now — timed to the restock: ' + trackStatText(w.timed),
+        'In stock now: ' + trackStatText(w.in_stock),
+        'When we said 90%+: ' + trackBucketText(w.buckets[3]),
+        'When we said 70–89%: ' + trackBucketText(w.buckets[2]),
+        'When we said 50–69%: ' + trackBucketText(w.buckets[1]),
+        'When we said under 50% (we show these as Sells out first): ' + trackBucketText(w.buckets[0])
+      ] });
+    }
+    if (!blocks.length) return null;
+    return { title: 'How accurate are we?', blocks: blocks,
+      footer: 'Every piece of advice is saved when it is published and checked against the real stock at the landing time (at least ' + tr.facit_slots + ' items).' };
+  }
+
   /* ---------- the view model ---------- */
 
   function clampSeats(v) {
@@ -1037,8 +1143,9 @@ var KSBM_CORE = (function () {
     method = rt.method;
     seats = rt.seats;
     var view = { method: method, seats: seats, group: group, tab: tab, sort: sort, cash: cash, source: rt.source, travel: rt, state: 'NO_DATA',
-      headline: HEADLINE.NO_DATA, detail: '', ageS: null, status: null, lists: null, nowS: null, dropped: 0 };
+      headline: HEADLINE.NO_DATA, detail: '', ageS: null, status: null, lists: null, nowS: null, dropped: 0, track: null };
     if (!env) return view;
+    view.track = { line: trackLine(env.latest.track_record, method), sections: trackSections(env.latest.track_record, method) };
     var age = dataAgeS(env, elapsed);
     view.ageS = age;
     view.status = env.latest.status;
@@ -1139,6 +1246,7 @@ var KSBM_CORE = (function () {
     FIXED_LOSS: FIXED_LOSS,
     clampSeats: clampSeats, validMethod: validMethod, buildView: buildView,
     canTakeAbroad: canTakeAbroad, EMPTY_TEXT: EMPTY_TEXT, sideBox: sideBox, sideName: sideName, fmtCompact3: fmtCompact3, fmtPerHour3: fmtPerHour3, makeCache: makeCache, readCache: readCache, CACHE_V: CACHE_V, SIDE_ROWS: SIDE_ROWS, SIDE_SIGN_IN: SIDE_SIGN_IN, SIDE_CHECKING: SIDE_CHECKING, SIDE_OFFLINE: SIDE_OFFLINE, SIDE_STALE: SIDE_STALE,
+    sanitizeTrackRecord: sanitizeTrackRecord, trackLine: trackLine, trackSections: trackSections, fmtDay: fmtDay, fmtPct: fmtPct, TRACK_MIN_CHECKS: TRACK_MIN_CHECKS,
     NO_DATA_TEXT: NO_DATA_TEXT, fmtSigned: fmtSigned, fmtSignedCompact: fmtSignedCompact,
     fmtMoney: fmtMoney, fmtCompact: fmtCompact, fmtHM: fmtHM, fmtAge: fmtAge, countryName: countryName
   };
@@ -2365,7 +2473,8 @@ var KSBM_UI = (function () {
     '.details .d{color:var(--detail);font-size:12px;margin:2px 0}',
     '.empty{color:var(--faint);padding:6px 0}',
     '.foot{margin-top:8px;color:var(--muted);font-size:11.5px;border-top:1px solid var(--line);padding-top:6px}',
-    '.legend{margin-top:8px}',
+    '.legend{margin-top:8px}.track{margin-top:4px}',
+    '.trackbox{margin:8px 0 0}.trackbox h3{margin:6px 0 2px}.trackbox .tt{font-weight:700;color:var(--muted);font-size:12px;margin:8px 0 0}.trackbox .tl{color:var(--detail);font-size:12px;margin:2px 0}',
     '.pda .bm{width:44px;height:44px}.pda button.btn{padding:8px 12px}.pda .min{font-size:13px;padding:7px 12px}',
     '.pda .filters button{padding:10px 14px}.pda .tabs button{padding:11px 2px}.pda .row{padding:10px 2px}',
     '.pda .sorts select{height:44px;font-size:15px}.pda .acts button{padding:8px 12px}'
@@ -2446,6 +2555,8 @@ var KSBM_UI = (function () {
     var f2 = add(h('div', 'field'), h('label', null, 'Travel method'), methodSel);
     var f3 = add(h('div', 'field'), h('label', null, 'Item slots'), seatsIn);
     var f3b = h('div', 'note', SLOTS_HELP);
+    var trackBox = h('div', 'trackbox');                              // "How accurate are we?" (0.4.6): the figures of the KS server's track record
+    trackBox.style.display = 'none';
     var discl = h('div', 'note', PRIVACY);
     var versionNote = h('div', 'note', 'Version ' + KSBM_VERSION);
     var travelNote = h('div', 'note');
@@ -2456,7 +2567,7 @@ var KSBM_UI = (function () {
     var showAll = h('button', 'btn sec', 'Show all');
     showAll.type = 'button';
     var hiddenField = add(h('div', 'field'), hiddenNote, showAll);
-    add(settings, summary, versionNote, f1, f1b, travelField, f2, f3, f3b, hiddenField, discl);
+    add(settings, summary, versionNote, f1, f1b, travelField, f2, f3, f3b, hiddenField, trackBox, discl);
 
     // ---- the filter above the tabs: All / Drugs / Black Market / Shop items
     var filters = h('div', 'filters');
@@ -2500,8 +2611,10 @@ var KSBM_UI = (function () {
 
     var lists = h('div', 'lists');
     var legend = h('div', 'note legend', C.legendFor(C.DEFAULT_SORT));
+    var trackRow = h('div', 'note track');                            // one row under the explanation of Best trips (0.4.6)
+    trackRow.style.display = 'none';
     var foot = h('div', 'foot', NOTE);
-    add(panel, head, meta, msg, settings, filters, tabs, sorts, lists, legend, foot);
+    add(panel, head, meta, msg, settings, filters, tabs, sorts, lists, legend, trackRow, foot);
     add(wrap, panel, btn);
     shadow.appendChild(wrap);
 
@@ -2578,6 +2691,19 @@ var KSBM_UI = (function () {
       return r;
     }
 
+    // The section in Settings, from KSBM_CORE.trackSections (text only, set with textContent). Nothing to show: the section is not there.
+    function renderTrackBox(sec) {
+      trackBox.textContent = '';
+      trackBox.style.display = sec ? '' : 'none';
+      if (!sec) return;
+      trackBox.appendChild(h('h3', null, sec.title));
+      sec.blocks.forEach(function (b) {
+        trackBox.appendChild(h('div', 'tt', b.title));
+        b.lines.forEach(function (line) { trackBox.appendChild(h('div', 'tl', line)); });
+      });
+      trackBox.appendChild(h('div', 'note', sec.footer));
+    }
+
     function renderList(list, nowS, cash, sortKey) {
       var s = h('div', 'list');
       if (!list.ranked.length && !list.unknown.length && !list.thin.length) s.appendChild(h('div', 'empty', EMPTY_TEXT));
@@ -2651,6 +2777,10 @@ var KSBM_UI = (function () {
         openKey = null;
       }
       legend.style.display = ok ? '' : 'none';
+      var tr = view.track;
+      trackRow.textContent = tr && tr.line ? tr.line : '';
+      trackRow.style.display = ok && view.tab === 'trips' && tr && tr.line ? '' : 'none';      // only under Best trips
+      renderTrackBox(tr ? tr.sections : null);
     }
 
     // Redraws the time labels from the advice they already have: a new second, no new data, no reordering.
