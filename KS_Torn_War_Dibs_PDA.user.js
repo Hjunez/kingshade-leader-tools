@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PDA
 // @namespace    kingshade.torn
-// @version      2.1.1
+// @version      2.2.1
 // @description  Roster-local PDA presentation with v1.5.145 authority and shared-claim safety.
 // @author       Kingshade
 // @match        https://www.torn.com/factions.php*
@@ -15,6 +15,116 @@
 // ==/UserScript==
 
 /*
+ * 2.2.1 (2026-11-23): the Torn key can be saved anywhere. ONE MAIN CHANGE. Name,
+ * namespace, update address and every storage name are those of 2.2.0. This is
+ * a PDA-only fix (War Dibs PC saves the key without a Torn check and is not
+ * touched), so only the last digit moves: PDA 2.2.1, PC stays 2.2.0.
+ * FIXED
+ *   - On another faction's war page (VIEW) the Torn key could never be saved:
+ *     "Torn: candidate identity or capabilities failed; key unchanged". The save
+ *     first ran the full capability check (faction wars, opponent members, user
+ *     basic), which needs your OWN faction's war, and the transport refuses
+ *     everything but the members lists in VIEW. The same happened with no war
+ *     card for the key's own faction.
+ *   - A member whose saved key Torn had refused could not replace it while the
+ *     own DIBS record said CLEANUP-REQUIRED: the change was locked although the
+ *     refused key can clean nothing up.
+ * CHANGED
+ *   - In VIEW (or with no war card for the key's faction) a Save asks Torn ONE
+ *     thing: /v2/key/info, the identity. The request is let through the VIEW
+ *     transport by its own flag, set only around that one call (the pattern of
+ *     the key-owner row) and reset in a finally; nothing else is let through.
+ *     On your own war page the Save is exactly as in 2.2.0 (the full check, the
+ *     same calls in the same order).
+ *   - The same-player rule is unchanged: with an own DIBS record or a quarantine
+ *     record the key must belong to the same Torn ID, otherwise "Torn: key
+ *     belongs to another player; key unchanged". A key Torn refuses says
+ *     "Torn: key rejected by Torn (API n); key unchanged"; no answer at all says
+ *     "Torn: could not reach Torn to check the key; key unchanged". In VIEW the
+ *     reason stays on the Torn line for 20 s (the VIEW sync that follows would
+ *     otherwise overwrite it at once).
+ *   - A key saved on the identity check alone is stored as usual, but its war
+ *     rights count as UNCHECKED: keyScopeReady stays false and the Torn line says
+ *     "Torn: key saved · checked on your own war page". DIBS stays closed (VIEW
+ *     has no authority over any war, the phase is never LIVE there, claims need
+ *     keyScopeReady and the own identity) until fetchSelfIdentity has run the
+ *     full check on your own war page, as it does whenever the script starts
+ *     there. If that check fails, DIBS stays closed with Torn's reason and the
+ *     key stays saved. The key-owner row in VIEW uses the identity just proven.
+ *   - evaluateTornCredentialExternalLock: CLEANUP-REQUIRED no longer locks the
+ *     change while the saved key is one Torn has refused (rejected or capability
+ *     rejected). With a working key the lock is as before, and the same-player
+ *     rule of the save still applies.
+ * NOT CHANGED
+ *   - The other locks (write in progress, storage unresolved, ambiguous claims),
+ *     Forget Torn key, the FFScouter key, the transport rules in VIEW apart from
+ *     the one identity request above, the clock, Kvar 9, the 409 texts, the DIBS
+ *     rules, the UI apart from the Torn line, @connect, the update address and
+ *     every storage name.
+ * KNOWN ISSUES
+ *   - On your own war page, with a key already saved, a refused Save still flashes
+ *     its reason for less than a frame: the Torn sync that follows overwrites the
+ *     text in the same tick. Same as 2.2.0; VIEW keeps the reason for 20 s.
+ * VERIFICATION
+ *   - Synthetic only (Chromium 390 px with touch and a Node harness, against
+ *     stand-in Torn, KS and FFScouter services). Not yet tried on a phone.
+ * Everything else is unchanged from 2.2.0.
+ *
+ * 2.2.0 (2026-11-22): DIBS on the KS server's clock, and no extra claim-board
+ * read at the press. ONE MAIN CHANGE: when a DIBS press goes through, measured
+ * against the clock of the server that decides it. Name, namespace, update
+ * address and every storage name are those of 2.1.1. War Dibs PC and PDA share
+ * one version number (2.2.0 for both). Same change as War Dibs PC 2.2.0.
+ * FIXED
+ *   - The KS server clock uses the exact round-trip interval (serverTime - endedAt to
+ *     serverTime - startedAt, no loose upper edge), so a device clock that jumps or
+ *     drifts is caught within one board read instead of up to about one second late.
+ *   - DIBS opened up to ~1 s AFTER the real 2:00 (0-0.6 s once the clock was
+ *     warm, up to ~1 s straight after a page load or a clock reset), while the
+ *     KS server's gate and the War Room page sit on the real 2:00. The script
+ *     counted on Torn's times in WHOLE seconds and took the low edge.
+ *   - The server's own refusals 409 too_early and 409 no_hospital_time were
+ *     shown as "claim failed · SERVER OFFLINE". They now say what they
+ *     mean.
+ * CHANGED
+ *   - A second clock measure from the KS server's serverTime (milliseconds),
+ *     taken from every answer to claims / claim / unclaim / report (HTTP 200 or
+ *     409, nothing else, nothing asked for its sake). Its own function
+ *     (recordServerClockMs) with the rules of Torn's measure (round-trip limit,
+ *     drift margin, newest sample wins on a contradiction) but the EXACT interval
+ *     [serverTime - endedAt, serverTime - startedAt]; its own five values; the
+ *     two measures are never mixed.
+ *   - getTornNowMs() counts on the server's measure (its LOW edge) when there is
+ *     one, otherwise on Torn's, then Torn PDA's own clock, then the device
+ *     clock, as before. The countdown, the 2:00 gate in the cell and before the
+ *     claim, the claim times and the row tick all follow.
+ *   - The panel's Clock line says "KS server clock (+-ms · samples · resets)"
+ *     while the server's measure is in use.
+ *   - A press needs no board read when the board was read without error for this
+ *     war at most 5 s (two board polls) ago. An older board is read first, as
+ *     before. The server still decides: a target taken since the last read
+ *     answers 409 taken.
+ *   - 409 too_early -> "War Room: too early · DIBS opens at 2:00"; 409
+ *     no_hospital_time -> "War Room: claim refused · hospital time missing".
+ *     No backoff, no sign-out, no own record.
+ * NOT CHANGED
+ *   - The DIBS rules (2:00 gate, FF 2.00-3.40, low life 4.50 for 20 % or less,
+ *     online is free), hospital abroad, 48 h, Torn's measure and its functions,
+ *     every Torn call and interval, the board poll (2.5 s), the low-life queue,
+ *     auto-release, the KS report, the landing windows (their serverTime is in
+ *     seconds and goes nowhere near the clock), Share with KS (its own session
+ *     clock offset), filter and sort, the address, @connect and every storage
+ *     name. Nothing new is sent to the server.
+ * KNOWN ISSUES
+ *   - The "+-" width on the KS server line is the exact round-trip interval (tens of
+ *     ms). If the device clock jumps or drifts by more than that, the server's
+ *     measure resets with the next board answer (up to one poll, 2.5 s, later);
+ *     until then the script can be at most that width ahead of the server.
+ * VERIFICATION
+ *   - Synthetic only (Chromium against stand-in Torn and KS servers with a
+ *     virtual clock). Not yet tried on a phone.
+ * Everything else is unchanged from 2.1.1.
+ *
  * 2.1.1 (2026-11-10): a target in a hospital ABROAD is not DIBS-able. ONE MAIN
  * CHANGE. Name, namespace, update address and every storage name are those of
  * 2.1.0. Same change as War Dibs PC 1.1.19.
@@ -732,8 +842,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs",
-    version: "2.1.1",
-    instanceKey: "__ksTornWarDibsPdaV211Test",
+    version: "2.2.1",
+    instanceKey: "__ksTornWarDibsPdaV221Test",
     layerId: "ks-twd-pda-layer",
     rowHostPrefix: "ks-twd-pda-row-",
     panelId: "ks-twd-pda-panel",
@@ -1021,6 +1131,20 @@
   // True only for the synchronous moment fetchViewKeyOwner hands its request to
   // the transport (see isViewModePermittedRequest).
   let viewKeyInfoGrant = false;
+  // 2.2.1: true only for the synchronous moment a Torn key Save hands its ONE
+  // /v2/key/info call (the identity check) to the transport (see
+  // isViewModePermittedRequest and tornCandidateKeyProvesRecovery).
+  let tornKeySaveInfoGrant = false;
+  // 2.2.1: the Torn key that was saved after the identity check only, outside
+  // the own war page. Its war rights are NOT checked yet: keyScopeReady stays
+  // false until the full check (fetchSelfIdentity) passes on the own war page.
+  // Used for one panel line and nothing else; it gives no permission.
+  let tornKeyIdentityOnlyKey = "";
+  // 2.2.1: why a Torn key Save in VIEW was refused, kept on the Torn line for
+  // TORN_KEY_REFUSAL_MS because the VIEW sync that follows would otherwise
+  // overwrite the reason within a second. Display only.
+  let tornKeyRefusal = { text: "", until: 0 };
+  const TORN_KEY_REFUSAL_MS = 20000;
   const VIEW_KEY_OWNER_RETRY_MS = 30000;
   const lifeCache = new Map();
   const lifeReadAttempts = new Map();
@@ -1068,6 +1192,14 @@
   // those were the nextLow >= nextHigh branch discarding the intersection.
   let tornClockSampleCount = 0;
   let tornClockResetCount = 0;
+  // 2.2.0: the KS server's own measure, the same five values for the other
+  // clock. Torn's measure and the server's are never intersected with each
+  // other (see recordServerClock).
+  let serverClockLowMs = null;
+  let serverClockHighMs = null;
+  let serverClockBoundsAt = 0;
+  let serverClockSampleCount = 0;
+  let serverClockResetCount = 0;
   // The runtimeGeneration the clock sync burst has already run (or started)
   // for. -1 so generation 0 still runs once.
   let tornClockSyncBurstGeneration = -1;
@@ -1338,7 +1470,14 @@
   // early. The low edge puts our clock as far behind Torn as the evidence
   // permits, so the remaining time reads as high as the evidence permits. The
   // cell can read high while the interval is still wide. It can never read low.
+  //
+  // 2.2.0: the KS server's measure comes first. The server's clock is the one
+  // that decides whether a claim is accepted (its 2:00 gate runs on its own
+  // clock in milliseconds), so one clock in the script leaves no gap between
+  // the button and the server. Its LOW edge is used, for the same reason.
+  // Torn's measure is the fallback until the server has answered once.
   function getTornNowMs() {
+    if (Number.isFinite(serverClockLowMs)) { tornClockSource = "server"; return nowMs() + serverClockLowMs; }
     if (Number.isFinite(tornClockLowMs)) { tornClockSource = "bounded"; return nowMs() + tornClockLowMs; }
     if (typeof window.getCurrentTimestamp === "function") {
       try {
@@ -1350,7 +1489,82 @@
     return nowMs();
   }
 
+  // 2.2.0 correction 1: the server's measure. Every answer from the KS War Room
+  // server's war operations (claims, claim, unclaim, report) carries serverTime,
+  // the worker's own clock in MILLISECONDS, taken inside the call (Date.now() in
+  // the handler, after the request arrived and before the answer left). So the
+  // instant lay inside the round trip and, with offset = serverNow - deviceNow,
+  //
+  //     offset  in  [ serverTime - endedAt , serverTime - startedAt ]
+  //
+  // BOTH edges are exact. (Torn's own measure cannot do this: its times are whole
+  // seconds, so recordTornWholeSecondMs must keep a +1000 ms upper edge. With that
+  // loose edge a device clock that jumped or drifted by less than a second was
+  // never caught and the script could show DIBS open up to ~1 s early.) The
+  // interval is about as wide as the shortest round trip, so a jump or a drift
+  // larger than that is a contradiction and the measure starts over with the next
+  // board answer. The rules are those of recordTornWholeSecondMs otherwise: the
+  // round-trip limit, the drift margin on the kept bounds, and the newest sample
+  // winning outright on a contradiction. Torn's measure is not touched and the two
+  // are never mixed. Samples and resets are evidence only (the Clock line).
+  function recordServerClockMs(serverTimeMs, startedAt, endedAt) {
+    if (!Number.isFinite(serverTimeMs) || serverTimeMs <= 0) return;
+    if (!Number.isFinite(startedAt) || !Number.isFinite(endedAt)) return;
+    if (endedAt < startedAt) return;
+    // A round trip this long says almost nothing and may itself be stale.
+    if (endedAt - startedAt > CONFIG.tornClockMaxRoundTripMs) return;
+
+    const low = serverTimeMs - endedAt;
+    const high = serverTimeMs - startedAt;
+
+    if (!Number.isFinite(serverClockLowMs) || !Number.isFinite(serverClockHighMs)) {
+      serverClockLowMs = low;
+      serverClockHighMs = high;
+      serverClockBoundsAt = endedAt;
+      serverClockSampleCount += 1;
+      return;
+    }
+
+    // Two crystals drift apart. Let the kept bounds relax by that much before
+    // intersecting, so a long session does not slowly contradict itself.
+    const age = Math.max(0, endedAt - serverClockBoundsAt);
+    const slack = (age * CONFIG.tornClockDriftPpm) / 1e6;
+    const nextLow = Math.max(low, serverClockLowMs - slack);
+    const nextHigh = Math.min(high, serverClockHighMs + slack);
+
+    if (nextLow > nextHigh) {
+      // Contradiction: the device clock stepped or ran off. The newest evidence
+      // wins outright. (Strictly greater: an exact interval can have no width
+      // when startedAt equals endedAt.)
+      serverClockLowMs = low;
+      serverClockHighMs = high;
+      serverClockBoundsAt = endedAt;
+      serverClockSampleCount += 1;
+      serverClockResetCount += 1;
+      return;
+    }
+
+    serverClockLowMs = nextLow;
+    serverClockHighMs = nextHigh;
+    serverClockBoundsAt = endedAt;
+    serverClockSampleCount += 1;
+  }
+
+  function recordServerClock(result, body) {
+    const status = Number(result?.status);
+    if (status !== 200 && status !== 409) return;
+    if (!isPlainRecord(body)) return;
+    const serverTime = body.serverTime;
+    if (!Number.isSafeInteger(serverTime) || serverTime < 1e11) return;
+    if (typeof result.startedAt !== "number" || typeof result.endedAt !== "number") return;
+    recordServerClockMs(serverTime, result.startedAt, result.endedAt);
+  }
+
   function tornClockSourceLabel() {
+    if (tornClockSource === "server") {
+      const widthMs = Math.round(serverClockHighMs - serverClockLowMs);
+      return `KS server clock (±${widthMs} ms · ${serverClockSampleCount} samples · ${serverClockResetCount} resets)`;
+    }
     if (tornClockSource === "bounded") {
       const widthMs = Math.round(tornClockHighMs - tornClockLowMs);
       return `Torn bounded clock (±${widthMs} ms · ${tornClockSampleCount} samples · ${tornClockResetCount} resets)`;
@@ -1797,7 +2011,14 @@
     if (ffCredentialMutationInProgress) return lockVerdict(true, "FF-KEY-BUSY");
     if (claimAuthorityEvidenceUnresolved) return lockVerdict(true, "AUTH-EVIDENCE-UNRESOLVED");
     const recoveryEvidence = captureCredentialRecoveryEvidence();
-    if (recoveryEvidence.own?.cleanupRequired === true) return lockVerdict(true, "CLEANUP-REQUIRED", recoveryEvidence);
+    // 2.2.1: CLEANUP-REQUIRED locks the change only while the saved key still
+    // works. A key Torn has refused cannot clean anything up, so the member must
+    // be able to replace it; the same-player rule of the save still applies.
+    const storedKeyRefused = (storedTornCredentialRejected || storedTornCapabilityRejected) &&
+      Boolean(effectiveTornApiKey()) && effectiveTornApiKey() === validateTornApiKey(storedTornApiKey);
+    if (recoveryEvidence.own?.cleanupRequired === true && !storedKeyRefused) {
+      return lockVerdict(true, "CLEANUP-REQUIRED", recoveryEvidence);
+    }
     if (credentialRecoveryEvidenceActive(recoveryEvidence)) {
       return lockVerdict(!credentialRecoveryChangeAvailable(), "RECOVERY-ACTIVE", recoveryEvidence);
     }
@@ -2248,7 +2469,7 @@
     try {
       const url = new URL(String(rawUrl || ""));
       if (url.origin !== SCRIPT.tornApiOrigin) return false;
-      if (url.pathname === SCRIPT.tornKeyInfoPath) return viewKeyInfoGrant && isProfileWarRoute();
+      if (url.pathname === SCRIPT.tornKeyInfoPath) return (viewKeyInfoGrant || tornKeySaveInfoGrant) && isProfileWarRoute();
       return viewPermittedFactionIds().some(id => url.pathname === `/v2/faction/${id}/members`);
     } catch { return false; }
   }
@@ -2372,6 +2593,10 @@
       const value = JSON.parse(result.responseText || "");
       if (isPlainRecord(value)) parsed = value;
     } catch {}
+    // 2.2.0: every answer to a war operation is also a reading of the server's
+    // clock (200 and 409 only; nothing is asked for its sake). The round trip
+    // (startedAt, endedAt) is taken here, from the transport's own result.
+    if (KS_SERVER.warOps.includes(op)) recordServerClock(result, parsed);
     return { ok: result.ok === true, status: Number(result.status) || 0, body: parsed };
   }
 
@@ -3718,20 +3943,50 @@
     };
   }
 
+  // 2.2.1: what a key Save learns about the candidate key. Always starts with
+  // ONE /v2/key/info call (the identity) and the same-player rule. Then:
+  //   own war page and the key's own faction is on the war card -> the full
+  //     check of 2.2.0 (faction wars, opponent members, user basic): level "full";
+  //   anywhere else (VIEW on another faction's war, or no war card for the
+  //     key's faction) -> level "identity": nothing more is asked of Torn, the
+  //     war rights stay UNCHECKED and are proven later by fetchSelfIdentity on
+  //     the own war page.
+  // reason, when refused: "stale" | "network" | "rejected" | "identity" |
+  // "other-player" | "failed" (the full check failed).
   async function tornCandidateKeyProvesRecovery(key, evidence, isCurrent) {
-    if (!isCurrent()) return false;
+    // specific: only outside the own war page (VIEW) a refusal says why; on the
+    // own war page the one text of 2.2.0 stays.
+    const specific = viewOnlyMode();
+    const refused = (reason, detail = "") => ({ ok: false, level: "", identity: null, reason, detail, specific });
+    if (!isCurrent()) return refused("stale");
     try {
-      const identityResult = await tornApiRequest(SCRIPT.tornKeyInfoPath, key, {
-        cacheBust: true,
-        trackCredentialState: false
-      });
-      if (!isCurrent() || !identityResult?.ok || identityResult.body?.error) return false;
+      // The transport checks tornKeySaveInfoGrant synchronously inside this call.
+      let identityRequest;
+      tornKeySaveInfoGrant = true;
+      try {
+        identityRequest = tornApiRequest(SCRIPT.tornKeyInfoPath, key, {
+          cacheBust: true,
+          trackCredentialState: false
+        });
+      } finally { tornKeySaveInfoGrant = false; }
+      const identityResult = await identityRequest;
+      if (!isCurrent()) return refused("stale");
+      if (!identityResult?.ok || identityResult.body?.error) {
+        const code = Number(identityResult?.body?.error?.code);
+        const detail = Number.isSafeInteger(code) && code >= 0 ? ` (API ${code})` : "";
+        return refused(identityResult?.body?.error || identityResult?.status > 0 ? "rejected" : "network", detail);
+      }
       const identity = normalizeSelfIdentity(identityResult.body);
-      if (!identity) return false;
+      if (!identity) return refused("identity");
       const expectedPlayerId = credentialRecoveryExpectedPlayerId(evidence);
-      if (expectedPlayerId === null) return false;
-      if (credentialRecoveryEvidenceActive(evidence) && !expectedPlayerId) return false;
-      if (expectedPlayerId && identity.playerId !== expectedPlayerId) return false;
+      if (expectedPlayerId === null) return refused("identity");
+      if (credentialRecoveryEvidenceActive(evidence) && !expectedPlayerId) return refused("identity");
+      if (expectedPlayerId && identity.playerId !== expectedPlayerId) {
+        return { ...refused("other-player"), specific: specific || !operationalWarSurfaceForFaction(identity.factionId) };
+      }
+      if (viewOnlyMode() || !operationalWarSurfaceForFaction(identity.factionId)) {
+        return { ok: true, level: "identity", identity, reason: "", detail: "" };
+      }
       const operational = await verifyTornOperationalCapabilities({
         key,
         identity,
@@ -3739,9 +3994,11 @@
         isCurrent,
         trackCredentialState: false
       });
-      return Boolean(isCurrent() && operational);
+      return Boolean(isCurrent() && operational)
+        ? { ok: true, level: "full", identity, reason: "", detail: "" }
+        : refused("failed");
     } catch {
-      return false;
+      return refused("failed");
     }
   }
 
@@ -5787,9 +6044,18 @@
     scanWarRows();
 
     try {
-      invalidateSharedReads();
-      if (!(await fetchSharedClaims({ allowDuringWrite: true }))) {
-        throw new Error("fresh claim board read failed");
+      // 2.2.0 (Kvar 9): a board read without error for exactly this war at
+      // most two board polls ago stands; no extra read at the press. The server
+      // still decides: a target taken since the last read answers 409 taken. An
+      // older board is read as before, after any read in flight is dropped.
+      const boardFresh = sharedClaimsVerifiedAt > 0 &&
+        nowMs() - sharedClaimsVerifiedAt <= CONFIG.sharedPollMs * 2 &&
+        sharedClaimsWireId === wireId;
+      if (!boardFresh) {
+        invalidateSharedReads();
+        if (!(await fetchSharedClaims({ allowDuringWrite: true }))) {
+          throw new Error("fresh claim board read failed");
+        }
       }
       if (!claimCreationCurrent()) return;
       if (
@@ -5908,6 +6174,16 @@
       }
       if (result?.status === 409 && status === "unreadable") {
         holdSharedWriteFailure("War Room: cannot verify — try again");
+        return;
+      }
+      // 2.2.0: the server's own refusals have their own words. No backoff, no
+      // sign-out, no own record; its serverTime already went to the clock.
+      if (result?.status === 409 && status === "too_early") {
+        holdSharedWriteFailure("War Room: too early · DIBS opens at 2:00");
+        return;
+      }
+      if (result?.status === 409 && status === "no_hospital_time") {
+        holdSharedWriteFailure("War Room: claim refused · hospital time missing");
         return;
       }
       if (!result?.ok || answer?.ok !== true || (status !== "claimed" && status !== "already_claimed")) {
@@ -8680,6 +8956,14 @@
 
   // 1.5.173: the summary row's own text for a Torn-error condition. Pure
   // display formatting of an already-set, unmodified tornStatusState.message.
+  // 2.2.1: true while the saved Torn key has had the identity check only (saved
+  // in VIEW or without a war card for its faction), VIEW is still showing and
+  // no error is on the Torn line. Display only.
+  function tornKeyIdentityOnlyNote() {
+    return Boolean(tornKeyIdentityOnlyKey) && tornKeyIdentityOnlyKey === validateTornApiKey(storedTornApiKey) &&
+      viewOnlyMode() && !keyScopeReady && tornStatusState.state !== "error";
+  }
+
   function tornStatusReasonText() {
     const message = normalizeText(tornStatusState.message);
     return message.replace(/^Torn:\s*/i, "") || "unknown";
@@ -8781,6 +9065,10 @@
       // 1.5.187: while Torn says "too many requests" the line says so and counts down.
       const tornLine = tornPausedNow()
         ? `Torn: paused ${Math.ceil((tornRateLimitedUntil - nowMs()) / 1000)} s — Torn says too many requests (all your tools together)`
+        : tornKeyRefusal.text && nowMs() < tornKeyRefusal.until && viewOnlyMode()
+        ? tornKeyRefusal.text
+        : tornKeyIdentityOnlyNote()
+        ? "Torn: key saved · checked on your own war page"
         : tornStatusState.message;
       $("torn-status").textContent = tornLine;
       $("torn-status").title = tornLine;
@@ -9155,15 +9443,25 @@
     invalidateSharedReads();
     operationSharedEpoch = sharedAuthorityEpoch;
     updatePanel();
-    const candidateOperational = await tornCandidateKeyProvesRecovery(
+    const candidate = await tornCandidateKeyProvesRecovery(
       key,
       recoveryEvidence,
       operationForegroundCurrent
     );
-    if (!candidateOperational || !operationForegroundCurrent()) {
+    if (!candidate.ok || !operationForegroundCurrent()) {
       if (operationOwns()) tornCredentialMutationInProgress = false;
       if (runtimeActive && isRuntimeEligible()) {
-        setTornStatusState("error", "Torn: candidate identity or capabilities failed; key unchanged", 0);
+        // 2.2.1: in VIEW a refusal at the identity step says why; on the own war
+        // page, and for a failed full check, the one text of 2.2.0 stays.
+        const refusedText = candidate.specific && candidate.reason === "other-player"
+          ? "Torn: key belongs to another player; key unchanged"
+          : candidate.specific && candidate.reason === "rejected"
+          ? `Torn: key rejected by Torn${candidate.detail}; key unchanged`
+          : candidate.specific && candidate.reason === "network"
+          ? "Torn: could not reach Torn to check the key; key unchanged"
+          : "Torn: candidate identity or capabilities failed; key unchanged";
+        setTornStatusState("error", refusedText, 0);
+        if (viewOnlyMode() && candidate.specific) tornKeyRefusal = { text: refusedText, until: nowMs() + TORN_KEY_REFUSAL_MS };
         if (effectiveTornApiKey()) void fetchSharedClaims();
         if (effectiveTornApiKey()) void fetchTornStatuses({ force: true });
       }
@@ -9207,7 +9505,14 @@
     closeTornCredentialEditor();
     opponentMembersState = { factionId: "", members: new Map(), fetchedAt: 0 };
     currentWarSurface = null;
-    setTornStatusState("ready", "Torn: key saved · syncing…", 0);
+    // 2.2.1: after an identity-only check the war rights are unchecked: say so,
+    // and let VIEW's key-owner row use the identity just proven (no new call).
+    tornKeyIdentityOnlyKey = candidate.level === "identity" ? key : "";
+    tornKeyRefusal = { text: "", until: 0 };
+    if (candidate.level === "identity" && viewOnlyMode() && isProfileWarRoute()) {
+      Object.assign(viewKeyOwner, { key, playerId: candidate.identity.playerId, factionId: candidate.identity.factionId, failedAt: 0 });
+    }
+    setTornStatusState("ready", candidate.level === "identity" ? "Torn: key saved · checked on your own war page" : "Torn: key saved · syncing…", 0);
     if (runtimeActive && isRuntimeEligible()) {
       void fetchSharedClaims();
       void fetchTornStatuses({ force: true });

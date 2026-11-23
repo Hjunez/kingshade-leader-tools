@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PC
 // @namespace    kingshade.torn
-// @version      2.0.0
+// @version      2.2.0
 // @downloadURL  https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @description  PC TEST: DIBS as a native roster column beside Torn's Attack cell; FF and Est from FFScouter's get-stats API. War Stuff Enhanced is detected and shown read-only; it never blocks.
@@ -17,6 +17,61 @@
 // ==/UserScript==
 
 /*
+ * KS Torn War Dibs PC v2.2.0 (2026-11-22) -- DIBS on the KS server's clock, and no
+ * extra claim-board read at the press. ONE MAIN CHANGE: when a DIBS press goes
+ * through, measured against the clock of the server that decides it. Name,
+ * namespace, update address and every storage name are those of 2.0.0.
+ * War Dibs PC and PDA share one version number (2.2.0 for both).
+ * FIXED
+ *   - The KS server clock uses the exact round-trip interval (serverTime - endedAt to
+ *     serverTime - startedAt, no loose upper edge), so a device clock that jumps or
+ *     drifts is caught within one board read instead of up to about one second late.
+ *   - DIBS opened up to ~1 s AFTER the real 2:00 (0-0.6 s once the clock was
+ *     warm, up to ~1 s straight after a page load or a clock reset), while the
+ *     KS server's gate and the War Room page sit on the real 2:00. The script
+ *     counted on Torn's times in WHOLE seconds and took the low edge.
+ *   - A press that came while a background read of the claim board was running
+ *     failed with "fresh claim board read failed" (fetchSharedClaims returned
+ *     false while a read was in flight).
+ *   - The server's own refusals 409 too_early and 409 no_hospital_time were
+ *     shown as "claim failed · server offline". They now say what they mean.
+ * CHANGED
+ *   - A second clock measure from the KS server's serverTime (milliseconds),
+ *     taken from every answer to claims / claim / unclaim / report (HTTP 200 or
+ *     409, nothing else, nothing asked for its sake). Its own function
+ *     (recordServerClockMs) with the rules of Torn's measure (round-trip limit,
+ *     drift margin, newest sample wins on a contradiction) but the EXACT interval
+ *     [serverTime - endedAt, serverTime - startedAt]; its own five values; the
+ *     two measures are never mixed.
+ *   - getTornNowMs() counts on the server's measure (its LOW edge) when there is
+ *     one, otherwise on Torn's, as before. The countdown, the 2:00 gate in the
+ *     cell and before the claim, the claim times and the second tick all follow.
+ *   - New panel line "Clock: ..." after the Life line: "KS server clock (+-ms ·
+ *     samples · resets)", "Torn bounded clock (+-ms)", "Torn page clock" or
+ *     "device clock — UNSYNCED".
+ *   - A press needs no board read when the board was read without error for this
+ *     war at most 5 s (two board polls) ago. An older board is read first, as
+ *     before, after any read in flight is dropped. The server still decides: a
+ *     target taken since the last read answers 409 taken.
+ *   - 409 too_early -> "War Room: too early · DIBS opens at 2:00"; 409
+ *     no_hospital_time -> "War Room: claim refused · hospital time missing".
+ *     No backoff, no sign-out, no own record.
+ * NOT CHANGED
+ *   - The DIBS rules (2:00 gate, FF 2.00-3.40, low life 4.50 for 20 % or less,
+ *     online is free), hospital abroad, 48 h, Torn's measure and its functions,
+ *     every Torn call and interval, the board poll (2.5 s), the low-life queue,
+ *     auto-release, the KS report, Share with KS, the address, @connect and every
+ *     storage name. Nothing new is sent to the server.
+ * KNOWN ISSUES
+ *   - The "+-" width on the KS server line is the exact round-trip interval (tens of
+ *     ms). If the device clock jumps or drifts by more than that, the server's
+ *     measure resets with the next board answer (up to one poll, 2.5 s, later);
+ *     until then the script can be at most that width ahead of the server.
+ * VERIFICATION
+ *   - Synthetic only (Chromium against stand-in Torn and KS servers with a
+ *     virtual clock). Not yet tried on a real war.
+ * Everything else is unchanged from 2.0.0.
+ *
  * KS Torn War Dibs PC v2.0.0 (2026-11-10) -- the KS server has its own address.
  * ONE MAIN CHANGE: the KS server address is now https://warroom.kingshadeprotocol.com.
  * Nothing else changed. Name, namespace, update address and every storage name
@@ -780,8 +835,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs PC",
-    version: "2.0.0",
-    instanceKey: "__ksTornWarDibsPcV200",
+    version: "2.2.0",
+    instanceKey: "__ksTornWarDibsPcV220",
     rowHostPrefix: "ks-twd-wse-row-v010-",
     rosterStyleId: "ks-twd-wse-roster-style-v010",
     panelId: "ks-twd-wse-panel",
@@ -1071,6 +1126,14 @@
   let tornClockLowMs = null;
   let tornClockHighMs = null;
   let tornClockBoundsAt = 0;
+  // 2.2.0: the KS server's own measure, the same five values for the other
+  // clock. Torn's measure and the server's are never intersected with each
+  // other. Samples and resets are evidence only (shown on the Clock line).
+  let serverClockLowMs = null;
+  let serverClockHighMs = null;
+  let serverClockBoundsAt = 0;
+  let serverClockSampleCount = 0;
+  let serverClockResetCount = 0;
   let pendingTargetId = "";
   let ownClaimMissingReads = 0;
   let ownClaimLastConfirmedAt = 0;
@@ -1261,7 +1324,14 @@
   // early. The low edge puts our clock as far behind Torn as the evidence
   // permits, so the remaining time reads as high as the evidence permits. The
   // cell can read high while the interval is still wide. It can never read low.
+  //
+  // 2.2.0: the KS server's measure comes first. The server's clock is the one
+  // that decides whether a claim is accepted (its 2:00 gate runs on its own
+  // clock in milliseconds), so one clock in the script leaves no gap between
+  // the button and the server. Its LOW edge is used, for the same reason. Torn's
+  // measure is the fallback until the server has answered once.
   function getTornNowMs() {
+    if (Number.isFinite(serverClockLowMs)) return nowMs() + serverClockLowMs;
     if (Number.isFinite(tornClockLowMs)) return nowMs() + tornClockLowMs;
     if (typeof window.getCurrentTimestamp === "function") {
       try {
@@ -1270,6 +1340,94 @@
       } catch {}
     }
     return nowMs();
+  }
+
+  // 2.2.0: which clock getTornNowMs() counts on, for the Clock line in the panel.
+  function tornClockSourceLabel() {
+    if (Number.isFinite(serverClockLowMs) && Number.isFinite(serverClockHighMs)) {
+      const widthMs = Math.round(serverClockHighMs - serverClockLowMs);
+      return `KS server clock (±${widthMs} ms · ${serverClockSampleCount} samples · ${serverClockResetCount} resets)`;
+    }
+    if (Number.isFinite(tornClockLowMs) && Number.isFinite(tornClockHighMs)) {
+      return `Torn bounded clock (±${Math.round(tornClockHighMs - tornClockLowMs)} ms)`;
+    }
+    if (typeof window.getCurrentTimestamp === "function") {
+      try {
+        if (Number.isFinite(window.getCurrentTimestamp())) return "Torn page clock";
+      } catch {}
+    }
+    return "device clock — UNSYNCED";
+  }
+
+  // 2.2.0 correction 1: the server's measure. Every answer from the KS War Room
+  // server's war operations (claims, claim, unclaim, report) carries serverTime,
+  // the worker's own clock in MILLISECONDS, taken inside the call (Date.now() in
+  // the handler, after the request arrived and before the answer left). So the
+  // instant lay inside the round trip and, with offset = serverNow - deviceNow,
+  //
+  //     offset  in  [ serverTime - endedAt , serverTime - startedAt ]
+  //
+  // BOTH edges are exact. (Torn's own measure cannot do this: its times are whole
+  // seconds, so recordTornWholeSecondMs must keep a +1000 ms upper edge. With that
+  // loose edge a device clock that jumped or drifted by less than a second was
+  // never caught and the script could show DIBS open up to ~1 s early.) The
+  // interval is about as wide as the shortest round trip, so a jump or a drift
+  // larger than that is a contradiction and the measure starts over with the next
+  // board answer. The rules are those of recordTornWholeSecondMs otherwise: the
+  // round-trip limit, the drift margin on the kept bounds, and the newest sample
+  // winning outright on a contradiction. Torn's measure is not touched and the two
+  // are never mixed. Samples and resets are evidence only (the Clock line).
+  function recordServerClockMs(serverTimeMs, startedAt, endedAt) {
+    if (!Number.isFinite(serverTimeMs) || serverTimeMs <= 0) return;
+    if (!Number.isFinite(startedAt) || !Number.isFinite(endedAt)) return;
+    if (endedAt < startedAt) return;
+    // A round trip this long says almost nothing and may itself be stale.
+    if (endedAt - startedAt > CONFIG.tornClockMaxRoundTripMs) return;
+
+    const low = serverTimeMs - endedAt;
+    const high = serverTimeMs - startedAt;
+
+    if (!Number.isFinite(serverClockLowMs) || !Number.isFinite(serverClockHighMs)) {
+      serverClockLowMs = low;
+      serverClockHighMs = high;
+      serverClockBoundsAt = endedAt;
+      serverClockSampleCount += 1;
+      return;
+    }
+
+    // Two crystals drift apart. Let the kept bounds relax by that much before
+    // intersecting, so a long session does not slowly contradict itself.
+    const age = Math.max(0, endedAt - serverClockBoundsAt);
+    const slack = (age * CONFIG.tornClockDriftPpm) / 1e6;
+    const nextLow = Math.max(low, serverClockLowMs - slack);
+    const nextHigh = Math.min(high, serverClockHighMs + slack);
+
+    if (nextLow > nextHigh) {
+      // Contradiction: the device clock stepped or ran off. The newest evidence
+      // wins outright. (Strictly greater: an exact interval can have no width
+      // when startedAt equals endedAt.)
+      serverClockLowMs = low;
+      serverClockHighMs = high;
+      serverClockBoundsAt = endedAt;
+      serverClockSampleCount += 1;
+      serverClockResetCount += 1;
+      return;
+    }
+
+    serverClockLowMs = nextLow;
+    serverClockHighMs = nextHigh;
+    serverClockBoundsAt = endedAt;
+    serverClockSampleCount += 1;
+  }
+
+  function recordServerClock(result, body) {
+    const status = Number(result?.status);
+    if (status !== 200 && status !== 409) return;
+    if (!isPlainRecord(body)) return;
+    const serverTime = body.serverTime;
+    if (!Number.isSafeInteger(serverTime) || serverTime < 1e11) return;
+    if (typeof result.startedAt !== "number" || typeof result.endedAt !== "number") return;
+    recordServerClockMs(serverTime, result.startedAt, result.endedAt);
   }
 
   // Cell-sized time. formatCountdown stays as it is for tooltips and the panel,
@@ -2103,6 +2261,9 @@
       } catch {
         return ksNotSent("busy", "CHECKING");
       }
+      // 2.2.0: every answer to a war operation is also a reading of the
+      // server's clock (200 and 409 only; nothing is asked for its sake).
+      if (KS_SERVER.warOps.includes(op)) recordServerClock(result, result.body);
       const status = Number(result.status) || 0;
       const body = result.body;
       if (status === 401 && body && normalizeText(body.error) === "unauthorized") {
@@ -2475,6 +2636,18 @@
       return ksBoardWire !== wireWarId(currentWarSurface?.warId);
     } catch {
       return true;
+    }
+  }
+
+  // 2.2.0 (Kvar 9): the board was read without error for exactly this war at
+  // most two board polls ago, so a press needs no board read of its own. The
+  // server still decides: a target taken since the last read answers 409 taken.
+  function ksBoardFreshForClaim() {
+    if (!(ksBoardVerifiedAt > 0) || nowMs() - ksBoardVerifiedAt > 2 * CONFIG.sharedPollMs) return false;
+    try {
+      return ksBoardWire === wireWarId(ksWarIdOnScreen());
+    } catch {
+      return false;
     }
   }
 
@@ -4862,7 +5035,13 @@
     let createdClaim = null;
 
     try {
-      if (!(await fetchSharedClaims())) throw new Error("fresh claim board read failed");
+      // 2.2.0 (Kvar 9): a board read within two polls stands; no extra read at
+      // the press. An older board is read as before, and any background read
+      // still in flight is dropped first so it cannot make this press fail.
+      if (!ksBoardFreshForClaim()) {
+        invalidateSharedReads();
+        if (!(await fetchSharedClaims())) throw new Error("fresh claim board read failed");
+      }
       if (currentOwnClaim() || sharedClaimForTarget(targetId)) throw new Error("target already claimed");
       if (sharedClaimsUnreadable.has(targetId) || ksBoardUnknown()) throw new Error("claim state for this target could not be read");
       if (eligibility.fairFight > CONFIG.maxFairFight && !(await waitForLifeClaimReadSlot(targetId, writeRuntimeCurrent))) {
@@ -5004,6 +5183,16 @@
       if (httpStatus === 409 && serverStatus === "unreadable") {
         sharedClaimsUnreadable.add(targetId);
         holdSharedWriteFailure("War Room: cannot verify — try again");
+        return;
+      }
+      // 2.2.0: the server's own refusals have their own words. No backoff, no
+      // sign-out, no own record; its serverTime already went to the clock.
+      if (httpStatus === 409 && serverStatus === "too_early") {
+        holdSharedWriteFailure("War Room: too early · DIBS opens at 2:00");
+        return;
+      }
+      if (httpStatus === 409 && serverStatus === "no_hospital_time") {
+        holdSharedWriteFailure("War Room: claim refused · hospital time missing");
         return;
       }
       throw new Error(ksFailureWords(result?.ksFailure));
@@ -6640,6 +6829,7 @@
           <div class="status-item" data-role="rw-item"><span class="dot"></span><span class="status" data-role="rw-status">DIBS: checking RW…</span></div>
           <div class="status-item" data-role="ff-item"><span class="dot"></span><span class="status" data-role="ff-status">FF: waiting…</span></div>
           <div class="status-item" data-role="life-item"><span class="dot"></span><span class="status" data-role="life-status">Life: 0 targets read · newest unknown</span></div>
+          <div class="status-item" data-role="clock-item"><span class="dot"></span><span class="status" data-role="clock-status">Clock: checking…</span></div>
           <div class="status-item" data-role="wse-item"><span class="dot"></span><span class="status" data-role="wse-status">WSE: checking…</span></div>
         </div>
         <div class="controls">
@@ -6764,6 +6954,13 @@
       $("life-status").textContent = lifeText;
       setTitleIfChanged($("life-status"), lifeText);
       if ($("life-item")) $("life-item").dataset.state = lifeProfileMissing ? "unknown" : "idle";
+    }
+    // 2.2.0: which clock the countdown and the 2:00 gate count on.
+    if ($("clock-status")) {
+      const clockText = `Clock: ${tornClockSourceLabel()}`;
+      if ($("clock-status").textContent !== clockText) $("clock-status").textContent = clockText;
+      setTitleIfChanged($("clock-status"), "The clock the countdown and the 2:00 gate count on: the KS server's clock once it has answered, otherwise Torn's.");
+      if ($("clock-item")) $("clock-item").dataset.state = "idle";
     }
     // Read only. Nothing is gated on WSE; the line just says whether it is here.
     const wseText = isWarStuffEnhancedPresent() ? "WSE: detected" : "WSE: not detected";
