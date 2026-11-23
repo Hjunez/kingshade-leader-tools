@@ -768,6 +768,36 @@
     #targetHost.hide-est tbody td:nth-child(4), #targetHost.hide-status tbody td:nth-child(5) { visibility: hidden; }
   }
 
+  /* ---- R36 (2026-11): the Share with KS card, first thing in Sign in ----
+     A card of its own, full width, above the key field. OFF is a warning: the page's warning colour as a 2 px edge
+     and background, and a heading that says it is off. ON is calm: the page's good colour. Its text and heading are
+     tokens of their own (as R25 and R27), so that text is 4.5:1 or better on the card in both themes; the edge is the
+     page's own --warn / --good, 3:1 or better against the panel. The button is the page's primary button, made
+     taller (44 px at least, 48 px on a phone, where it also takes the whole width). */
+  #shareCard {
+    --r36-ink: #14202b; --r36-head: #6b4803; --r36-edge: var(--warn); --r36-bg: var(--warn-soft);
+    display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: 4px;
+    border: 2px solid var(--r36-edge); background: var(--r36-bg); color: var(--r36-ink);
+  }
+  :root:not([data-theme="light"]) #shareCard { --r36-ink: #e3e9ef; --r36-head: #f2cd73; }
+  #shareCard.on { --r36-edge: var(--good); --r36-bg: var(--good-soft); --r36-head: #0f5a41; }
+  :root:not([data-theme="light"]) #shareCard.on { --r36-head: #8fe3c0; }
+  #shareCard .sharehead {
+    margin: 0; font-family: var(--display); font-weight: 700; font-size: 18px; letter-spacing: .03em;
+    line-height: 1.2; color: var(--r36-head);
+  }
+  #shareCard .sharerow { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+  #shareCard .sharebtn { min-height: 44px; font-size: 15px; padding: 10px 22px; }
+  #shareCard .sharestatus { margin: 0; font-size: 14px; font-weight: 600; color: var(--r36-ink); overflow-wrap: anywhere; }
+  #shareCard .sharenote { margin: 0; font-size: 13px; line-height: 1.45; max-width: 120ch; color: var(--r36-ink); }
+  @media (max-width: 700px) {
+    #shareCard { padding: 12px 12px; gap: 8px; }
+    #shareCard .sharehead { font-size: 16px; }
+    #shareCard .sharerow { align-self: stretch; align-items: stretch; }
+    #shareCard .sharebtn { min-height: 48px; width: 100%; white-space: normal; }
+    #shareCard .sharenote { font-size: 12px; line-height: 1.4; }
+  }
+
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
@@ -792,7 +822,8 @@
     <div>
       <h1>War Room</h1>
       <p>The other faction's roster during a Ranked War, and one shared board for who has called
-        which target. It reads; it never attacks, opens or sends anything for you.</p>
+        which target. It reads; it never attacks, opens or sends anything for you &mdash; except your own
+        battle stats, and only if you switch on Share with KS below.</p>
     </div>
     <div class="mastside">
       <span class="stamp">Ranked War &middot; shared DIBS</span>
@@ -808,6 +839,20 @@
     </div>
     <div class="panel-body">
 
+      <div id="shareCard" role="group" aria-labelledby="shareHead">
+        <p class="sharehead" id="shareHead">Share with KS is OFF &mdash; turn it on to help the faction's stat estimates</p>
+        <div class="sharerow">
+          <button type="button" class="btn primary sharebtn" id="shareBtn" aria-pressed="false">Share with KS: OFF</button>
+          <p class="sharestatus" id="shareStatus" role="status">Off &middot; nothing is sent.</p>
+        </div>
+        <p class="sharenote">When on, this page reads your own battle stats from Torn's API every 6 hours while it is open
+          and sends only the five numbers (strength, defense, speed, dexterity, total) and your Torn ID, taken from the
+          sign-in, to the KS War Room server. KS uses them only to turn Fair Fight results into stat estimates for the
+          faction. They are never shown to anyone, inside or outside the faction, and it does not change DIBS. Your key
+          is sent to the KS War Room server only at sign-in, as for DIBS, and is never stored or logged there. Turning
+          this off stops all sending.</p>
+      </div>
+
       <div>
         <label class="lbl" for="apiKey">Your Torn Custom API Key</label>
         <div class="toolbar">
@@ -819,10 +864,12 @@
           <button type="button" class="btn quiet" id="forgetKey">Forget key</button>
         </div>
         <p class="fieldhint">The same key the KS Torn War Dibs scripts use: a custom key with
-          faction &rarr; members, wars, chain and user &rarr; basic, profile. <strong>Create custom API
+          faction &rarr; members, wars, chain and user &rarr; basic, profile, battlestats. <strong>Create custom API
           key</strong> opens Torn's own key page with exactly that filled in. A key without
           profile still works for everything except low-life DIBS. A key without chain still
-          works too: the chain count is then taken from the war reading, without a timer.</p>
+          works too: the chain count is then taken from the war reading, without a timer.
+          battlestats is needed only for Share with KS above; a key without it works for
+          everything else as before.</p>
         <p class="fieldhint said" id="lifeSaid" hidden></p>
       </div>
 
@@ -865,14 +912,16 @@
           are, and everything below them is the long version of the same answer.</p>
         <dl>
           <dt>Data Storage</dt><dd>Temporary (&lt; 1 day). A war's board is deleted by the server
-            after twelve hours without a change.</dd>
+            after twelve hours without a change. The one exception is Share with KS, which is off
+            until you switch it on: see its paragraph below.</dd>
           <dt>Data Sharing</dt><dd>Faction. Who holds which target is shown to this faction only.</dd>
           <dt>Purpose of Use</dt><dd>Competitive advantage.</dd>
           <dt>Key Storage &amp; Sharing</dt><dd>Not stored/shared. Your key is never stored on the
             server, never written to its log, and never shown to another member.</dd>
           <dt>Key Access Level</dt><dd>Public. A custom key with faction &rarr; members, wars, chain and
-            user &rarr; basic, profile &mdash; the key the KS Torn War Dibs scripts use, with chain added.
-            Without chain in the key, the chain count is shown from the war reading, without a timer.</dd>
+            user &rarr; basic, profile, battlestats &mdash; the key the KS Torn War Dibs scripts use, with chain added.
+            Without chain in the key, the chain count is shown from the war reading, without a timer.
+            battlestats is needed only for Share with KS; a key without it works for everything else as before.</dd>
         </dl>
 
         <dl>
@@ -907,7 +956,8 @@
             less). If Torn says no, fails or does not answer within fifteen seconds, nothing is
             sent. Every request is
             tagged <code>KSWarRoom</code>, and the page stops itself at 100 requests a minute.
-            <strong>Nothing else.</strong> The hospital report described below is sent from the
+            <strong>Nothing else,</strong> except the one reading of your own battle stats that Share with KS makes
+            when you have switched it on (see Share with KS). The hospital report described below is sent from the
             roster reading this page already does &mdash; it never asks Torn again for it.</dd>
           <dt>The clock</dt>
           <dd>The 2:00 limit is never counted on this device's clock. It is counted on Torn's
@@ -933,7 +983,8 @@
             It is sent the war ID, a target's Torn ID, and the target's hospital end time as Torn
             reported it. Every 30 seconds, while the page is on screen, it is also asked for the landing
             windows (see Landing time); that request carries the slip and the name of the view, nothing
-            else. <strong>It is never sent your Torn key</strong> after the sign-in, and
+            else. When you have switched Share with KS on it is also sent your own battle stats (see
+            Share with KS). <strong>It is never sent your Torn key</strong> after the sign-in, and
             never your FFScouter key.</dd>
           <dt>Who a claim belongs to</dt>
           <dd>The server takes your Torn ID from the signed slip, not from anything this page puts
@@ -967,12 +1018,25 @@
             (the time of each reading and the two total scores) is kept there too, so a reload does
             not start over, and removed when the war is over. Your choice for Honor bars is kept there as well, once you have
             pressed that button. Your choice between the dark and the light theme is kept there as
-            well, once you have pressed that button. Nothing else &mdash; and not the sign-in slip. Each key has
+            well, once you have pressed that button. Your choice for Share with KS is kept there as well, and,
+            once it has sent, the times of the last and the next send (never the numbers). Nothing else &mdash; and not the sign-in slip. Each key has
             its own Forget button above.</dd>
           <dt>Writes</dt>
           <dd>Nothing in Torn, ever. No attacks, no clicks, no navigation, no page scraping, no
             background watching, nothing to do with captcha. The only thing this page writes is a
-            line on the faction's own claim board.</dd>
+            line on the faction's own claim board &mdash; and, only if you switch Share with KS on, your own
+            battle stats to the KS server (see Share with KS).</dd>
+          <dt>Share with KS (opt-in, off by default)</dt>
+          <dd>When on, your own battle stats (strength, defense, speed, dexterity, total) and your Torn ID go to the
+            KS War Room server every 6 hours, while this page is on screen. The page reads them from Torn
+            (<code>/v2/user/battlestats</code>, with your own key; once a send has gone through, not again for 6 hours)
+            and sends them with the sign-in it already has; your key is never in that request. The server holds them until
+            the KS server has fetched them (at most 7 days); the KS server keeps them to compute stat estimates for the
+            faction. They are never shown to anyone, inside or outside the faction. It does not change DIBS and it is not
+            needed for it. Nothing is sent or stored on any server while it is off. Data Storage: Persistent on the KS
+            server &middot; Data Sharing: None (never shown to anyone) &middot; Purpose of Use: Faction stat estimates
+            &middot; Key Storage &amp; Sharing: Not stored/shared &middot; Key Access Level: Custom (user &rarr; battlestats).
+            It needs a key with battlestats: use Create custom API key above and paste the new key.</dd>
           <dt>Attack link</dt>
           <dd>Every row has an Attack link to Torn's own attack page for that player. It is a
             plain link: this page does not open it, click it or load it, and Torn is asked for
@@ -1176,6 +1240,7 @@
         <dt>FF and EST</dt><dd id="advFf" class="tid"></dd>
         <dt>Life</dt><dd id="advLife" class="tid"></dd>
         <dt>Chain</dt><dd id="advChain" class="tid"></dd>
+        <dt>Share</dt><dd id="advShare" class="tid"></dd>
         <dt>Honor bars</dt><dd id="advHonors" class="tid"></dd>
         <dt>Clock</dt><dd id="advClock" class="tid"></dd>
         <dt>Last refusal</dt><dd id="advError" class="tid"></dd>
@@ -1225,7 +1290,7 @@
   // Torn's own key page with the selections this page needs filled in. The
   // exact address KS Torn War Dibs PC 1.1.10 opens (SCRIPT.tornCustomKeyUrl),
   // so a key made from either place is the same key.
-  var TORN_CUSTOM_KEY_URL = "https://www.torn.com/preferences.php#tab=api?step=addNewKey&title=KS%20Torn%20War%20Dibs%20PC&faction=members,wars,chain&user=basic,profile";
+  var TORN_CUSTOM_KEY_URL = "https://www.torn.com/preferences.php#tab=api?step=addNewKey&title=KS%20Torn%20War%20Dibs%20PC&faction=members,wars,chain&user=basic,profile,battlestats";
   var KEY_STORE = 'ks-leader-board-key';
   var SORT_STORE = 'ks-war-room-sort';
   // The FFScouter key, under a name of its own. It is not the Torn key and
@@ -1902,7 +1967,8 @@
 
   var el = {};
   ['apiKey','toggleKey','loadBtn','forgetKey','errorBox','okBox',
-   'createKey','lifeSaid','aboutServer','advLife','advChain','advClock','advWipeNote',
+   'createKey','lifeSaid','aboutServer','advLife','advChain','advShare','advClock','advWipeNote',
+   'shareCard','shareHead','shareBtn','shareStatus',
    'ffKey','toggleFfKey','forgetFfKey','ffSaid','ffBar',
    'sessionSaid','sessionState','sessionRetry',
    'warPanel','warWho','warMeta','warClock','warScore','warChain','warLead',
@@ -2226,6 +2292,11 @@
       return get('/faction/chain', options);
     }
 
+    // R36. The member's own battle stats, whole: what they mean, and whether they may be sent, is decided in Share.
+    function loadBattlestats(options) {
+      return get('/user/battlestats', options);
+    }
+
     // One target's life, for low-life DIBS. The answer is handed back whole:
     // what it means, and how often it may be asked for, is decided in Life,
     // just below. This is only the call.
@@ -2272,6 +2343,7 @@
       loadTargets: loadTargets,
       loadOwnNames: loadOwnNames,
       loadChain: loadChain,
+      loadBattlestats: loadBattlestats,
       loadLife: loadLife,
       loadBasic: loadBasic,
       forget: function () {
@@ -5967,6 +6039,403 @@
     if (el.advChain.textContent !== advLine) el.advChain.textContent = advLine;
   }
 
+  // =========================================================================
+  // SHARE WITH KS (R36) - the member's own battle stats to the KS server. Opt-in, OFF until the member presses the
+  // button in the card at the top of Sign in. The same thing, step for step, as KS Torn War Dibs PC 2.0.0 does on its
+  // own war page (its "1.1.16 Share with KS"); the differences are the ones this page needs:
+  //   - It is not tied to a war. It needs only the key the member loaded (Load the war has accepted it, and the field
+  //     still holds it), the page on screen, and a sign-in that is there or can be made.
+  //   - The sign-in goes FIRST, before Torn is asked for the stats (as in loadAll): our server asks Torn about the key,
+  //     and a key it refuses is not asked about again. A refused key is remembered by a short tag of it - never the key.
+  //   - It never writes to what the rest of the page reads: a send's answer never touches Claims (board, status,
+  //     back-off), Roster.setError or "Last refusal". The only shared thing is Session (the sign-in slip).
+  //   - It waits for a DIBS write (a press, an automatic release, a hospital report) and goes right after it.
+  //   - The time of the reading (observedAt) is counted on the clock the page counts on (Torn's, else the KS server's),
+  //     never on this device's alone. With neither measured, ONE request to /session/check reads the server's time first.
+  // The numbers (strength, defense, speed, dexterity, total) live in local variables of one attempt: never in the page,
+  // the console, a title, Advanced or storage. Storage holds only the choice, a tag of a refused key and times.
+  // Torn is asked at most once every 6 hours when a send has gone through; the page's own 100 a minute limit applies.
+  // =========================================================================
+  var SHARE = Object.freeze({
+    prefsKey: 'ks-war-room:share',
+    timingKey: 'ks-war-room:share-timing',
+    clientName: 'KS War Room',
+    clientVersion: 'R36',
+    intervalSeconds: 6 * 3600,
+    checkMs: 10 * 60 * 1000,
+    kickMs: 5000,
+    busyRetryMs: 3000,
+    lockSeconds: 90,
+    backoffMinutes: Object.freeze([15, 30, 60, 120, 360]),
+    badRequestPauseSeconds: 24 * 3600,
+    default429Seconds: 3600,
+    statMax: 1e12,
+    requestTimeoutMs: 15000
+  });
+
+  // A DIBS write is in progress: a press (actBusy, set in act and autoReleaseOwnClaim) or a hospital report.
+  var reportBusy = false;
+
+  var Share = (function () {
+    var epoch = 0;             // bumped whenever what is out stops counting (switch, key)
+    var inFlight = false;
+    var timer = null;          // the 10 minute check
+    var kickTimer = null;      // the first attempt, 5 s after the page loads, the switch or a new key
+    var failureStreak = 0;
+    var lastProblem = '';      // in memory only: why the last attempt did not go through
+    var lastProblemKind = '';  // '' | 'wait' | 'offline' | 'problem'
+    var acceptedKey = '';      // the key Load the war accepted; share never uses what is merely typed
+    var hashFor = '';
+    var hashValue = '';
+
+    function nowS() { return Math.floor(nowMs() / 1000); }
+    function isRecord(value) { return !!value && typeof value === 'object' && !Array.isArray(value); }
+
+    function readPrefs() {
+      try {
+        var value = JSON.parse(localStorage.getItem(SHARE.prefsKey) || 'null');
+        if (isRecord(value) && value.schemaVersion === 1) {
+          return {
+            schemaVersion: 1,
+            enabled: value.enabled === true,
+            refusedKeyHash: typeof value.refusedKeyHash === 'string' ? value.refusedKeyHash : '',
+            refusedReason: typeof value.refusedReason === 'string' ? value.refusedReason : ''
+          };
+        }
+      } catch (e) { /* unreadable or blocked: the defaults, nothing is deleted */ }
+      return { schemaVersion: 1, enabled: false, refusedKeyHash: '', refusedReason: '' };
+    }
+
+    function writePrefs(patch) {
+      var next = Object.assign({}, readPrefs(), patch || {}, { schemaVersion: 1 });
+      try { localStorage.setItem(SHARE.prefsKey, JSON.stringify(next)); } catch (e) { /* storage blocked */ }
+      return next;
+    }
+
+    function readTiming() {
+      var empty = { schemaVersion: 1, lastAcceptedAt: 0, nextAllowedAt: 0, lockUntil: 0 };
+      try {
+        var value = JSON.parse(localStorage.getItem(SHARE.timingKey) || 'null');
+        if (!isRecord(value) || value.schemaVersion !== 1) return empty;
+        var num = function (field) { return Number.isSafeInteger(value[field]) && value[field] > 0 ? value[field] : 0; };
+        return { schemaVersion: 1, lastAcceptedAt: num('lastAcceptedAt'), nextAllowedAt: num('nextAllowedAt'), lockUntil: num('lockUntil') };
+      } catch (e) { return empty; }
+    }
+
+    function writeTiming(patch) {
+      var next = Object.assign({}, readTiming(), patch || {}, { schemaVersion: 1 });
+      try { localStorage.setItem(SHARE.timingKey, JSON.stringify(next)); } catch (e) { /* storage blocked */ }
+      return next;
+    }
+
+    // A short tag of the key (two 32-bit FNV-1a passes), only to recognise "the same key" after a refusal. Not reversible,
+    // synchronous, and the key itself is written nowhere.
+    function hashKey(k) {
+      if (!k) return '';
+      if (hashFor === k && hashValue) return hashValue;
+      var pass = function (text, seed) {
+        var h = seed >>> 0;
+        for (var i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+        return ('00000000' + h.toString(16)).slice(-8);
+      };
+      hashValue = pass('share|ks|' + k, 2166136261) + pass(k + '|ks|share', 0x811c9dc5 ^ 0x5bd1e995);
+      hashFor = k;
+      return hashValue;
+    }
+
+    // The key share may use: the one Load the war accepted, while the field still holds it and it has the shape of a key.
+    function key() {
+      var typed = el.apiKey.value.trim();
+      return acceptedKey !== '' && typed === acceptedKey && TORN_API_KEY_PATTERN.test(typed) ? typed : '';
+    }
+
+    function visible() { return !document.hidden && document.visibilityState === 'visible'; }
+
+    function formatAgo(seconds) {
+      var s = Math.max(0, Math.floor(seconds));
+      if (s < 60) return 'just now';
+      var m = Math.floor(s / 60);
+      if (m < 60) return m + 'm ago';
+      return Math.floor(m / 60) + 'h ' + (m % 60) + 'm ago';
+    }
+
+    function formatIn(seconds) {
+      var m = Math.ceil(Math.max(0, Math.ceil(seconds)) / 60);
+      if (m < 60) return m + 'm';
+      return Math.floor(m / 60) + 'h ' + (m % 60) + 'm';
+    }
+
+    function refusedNow(prefs, k) {
+      return !!(prefs.refusedKeyHash && k && prefs.refusedKeyHash === hashKey(k));
+    }
+
+    // The one line under the button. Never a number from the stats.
+    function statusLine() {
+      var prefs = readPrefs();
+      if (!prefs.enabled) return 'Off · nothing is sent.';
+      if (SIM) return 'On · not sent in simulation.';
+      var k = key();
+      if (!k) return 'On · paste your Torn key and press Load the war.';
+      if (refusedNow(prefs, k)) {
+        if (prefs.refusedReason === 'no_battlestats') return 'Not sent · your key has no battle stats access. Create a new key with the Create custom API key button and paste it here.';
+        if (prefs.refusedReason === 'not_a_member') return 'Not sent · this key is not in the faction. Sharing is for faction members only.';
+        return 'Not sent · the KS server rejected the key.';
+      }
+      var timing = readTiming();
+      var now = nowS();
+      if (timing.nextAllowedAt > now && lastProblemKind) {
+        if (lastProblemKind === 'wait') return 'On · waiting ' + formatIn(timing.nextAllowedAt - now) + ' · the KS server asked to wait.';
+        if (lastProblemKind === 'offline') return 'On · KS server offline · retry in ' + formatIn(timing.nextAllowedAt - now) + '.';
+        return lastProblem;
+      }
+      if (inFlight) return 'On · sending…';
+      if (timing.lastAcceptedAt > 0) return 'On · sent ' + formatAgo(now - timing.lastAcceptedAt) + '.';
+      return 'On · sends while this page is open, every 6 hours.';
+    }
+
+    // When the next send is due, in seconds, or 0 when none is waiting to be.
+    function nextAt() {
+      var prefs = readPrefs();
+      var k = key();
+      if (!prefs.enabled || SIM || !k || refusedNow(prefs, k)) return 0;
+      var timing = readTiming();
+      var due = Math.max(timing.nextAllowedAt, timing.lastAcceptedAt > 0 ? timing.lastAcceptedAt + SHARE.intervalSeconds : 0);
+      return due > nowS() ? due : 0;
+    }
+
+    function advancedLine() {
+      var line = statusLine();
+      var due = nextAt();
+      return due ? line + ' · next in ' + formatIn(due - nowS()) : line;
+    }
+
+    function render() {
+      var on = readPrefs().enabled;
+      var set = function (node, value) { if (node.textContent !== value) node.textContent = value; };
+      el.shareCard.classList.toggle('on', on);
+      set(el.shareHead, on
+        ? 'Share with KS is ON — your stats help the faction\'s stat estimates'
+        : 'Share with KS is OFF — turn it on to help the faction\'s stat estimates');
+      set(el.shareBtn, on ? 'Share with KS: ON' : 'Share with KS: OFF');
+      el.shareBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      set(el.shareStatus, statusLine());
+      set(el.advShare, advancedLine());
+    }
+
+    function setProblem(kind, line, waitSeconds) {
+      lastProblemKind = kind;
+      lastProblem = line;
+      if (waitSeconds > 0) writeTiming({ nextAllowedAt: nowS() + Math.ceil(waitSeconds) });
+    }
+
+    function backoff() {
+      var steps = SHARE.backoffMinutes;
+      var minutes = steps[Math.min(failureStreak, steps.length - 1)];
+      failureStreak += 1;
+      setProblem('offline', '', minutes * 60);
+    }
+
+    // A stat as Torn gives it: a whole number, or an object with the number in value.
+    function readStat(stats, name) {
+      var value = stats ? stats[name] : undefined;
+      if (isRecord(value)) value = value.value;
+      return Number.isSafeInteger(value) && value >= 0 && value <= SHARE.statMax ? value : null;
+    }
+
+    // Why an attempt may not start now: '' = it may, 'write' = only a DIBS write is in the way, 'no' = anything else.
+    function gate(now) {
+      var prefs = readPrefs();
+      if (!prefs.enabled || SIM || inFlight || !visible()) return 'no';
+      var k = key();
+      if (!k || refusedNow(prefs, k)) return 'no';
+      var timing = readTiming();
+      if (timing.nextAllowedAt > now) return 'no';
+      var since = now - timing.lastAcceptedAt;
+      if (timing.lastAcceptedAt > 0 && since >= 0 && since < SHARE.intervalSeconds) return 'no';
+      if (timing.lockUntil > now) return 'no';
+      if (actBusy || reportBusy) return 'write';
+      return '';
+    }
+
+    async function rawPost(path, token, fields) {
+      var body = { session: token };
+      Object.keys(fields).forEach(function (name) { body[name] = fields[name]; });
+      var askedAt = nowMs();
+      var response;
+      try {
+        var init = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+        if (typeof AbortSignal === 'function' && typeof AbortSignal.timeout === 'function') init.signal = AbortSignal.timeout(SHARE.requestTimeoutMs);
+        response = await fetch(CLAIM_SERVER + path, init);
+      } catch (failure) {
+        return { status: 0, body: null, askedAt: askedAt, endedAt: nowMs() };
+      }
+      var endedAt = nowMs();
+      var parsed = null;
+      try { parsed = await response.json(); } catch (e) { parsed = null; }
+      return { status: response.status, body: isRecord(parsed) ? parsed : null, askedAt: askedAt, endedAt: endedAt };
+    }
+
+    // One request to the claim server with the sign-in. A 401 drops the slip and allows ONE new sign-in and one more try;
+    // nothing here is ever a Claims call, so no answer changes the board, the board's status or its back-off.
+    async function post(path, fields) {
+      var token = await Session.ensure();
+      if (!token) return { status: -1, body: null };
+      var result = await rawPost(path, token, fields);
+      if (result.status === 401) {
+        Session.forget();
+        token = await Session.ensure();
+        sessionRender();
+        if (!token) return { status: -1, body: null };
+        result = await rawPost(path, token, fields);
+      }
+      return result;
+    }
+
+    async function maybeRun() {
+      var allowed = gate(nowS());
+      if (allowed === 'write') { kickIn(SHARE.busyRetryMs); return; }
+      if (allowed !== '') return;
+      var k = key();
+      var hash = hashKey(k);
+      var mine = epoch;
+      var lockUntil = nowS() + SHARE.lockSeconds;
+      writeTiming({ lockUntil: lockUntil });
+      inFlight = true;
+      render();
+      var current = function () { return mine === epoch && readPrefs().enabled && key() === k; };
+      try {
+        // 1. The sign-in this page has, or makes.
+        var token = await Session.ensure();
+        sessionRender();
+        if (!current()) return;
+        if (!token) {
+          var word = Session.state();
+          if (word === 'not_a_member') writePrefs({ refusedKeyHash: hash, refusedReason: 'not_a_member' });
+          else if (word === 'key_rejected') writePrefs({ refusedKeyHash: hash, refusedReason: 'key_rejected' });
+          else backoff();
+          return;
+        }
+        // 2. Torn: the member's own battle stats.
+        var answer;
+        try {
+          answer = await Roster.loadBattlestats({ timeoutMs: CONFIG.requestTimeoutMs });
+        } catch (error) {
+          if (!current()) return;
+          if (error.tornCode === 16) writePrefs({ refusedKeyHash: hash, refusedReason: 'no_battlestats' });
+          else backoff();
+          return;
+        }
+        if (!current()) return;
+        var stats = isRecord(answer) ? answer.battlestats : null;
+        var payload = {
+          strength: readStat(stats, 'strength'), defense: readStat(stats, 'defense'),
+          speed: readStat(stats, 'speed'), dexterity: readStat(stats, 'dexterity'), total: readStat(stats, 'total')
+        };
+        var parts = [payload.strength, payload.defense, payload.speed, payload.dexterity];
+        if (parts.some(function (v) { return v === null; }) || payload.total === null ||
+            payload.total !== parts.reduce(function (a, b) { return a + b; }, 0)) {
+          setProblem('problem', "Not sent · Torn's answer could not be read.", SHARE.intervalSeconds);
+          return;
+        }
+        // 3. When it was read, on the clock the page counts on. With none measured, ONE look at the server's time.
+        if (!tornClockReady()) {
+          var look = await post('/session/check', {});
+          if (!current()) return;
+          if (look.status === 200 && look.body && look.body.ok === true) recordServerClock(look.askedAt, look.endedAt, look.body.serverTime);
+        }
+        if (!tornClockReady()) { backoff(); return; }
+        var observedAt = Math.floor(getTornNowMs() / 1000);
+        // 4. Send. The key is not in it, and neither is a Torn ID: the server takes that from the slip.
+        var sent = await post('/intel/submit', {
+          schemaVersion: 1, kind: 'battlestats', observedAt: observedAt, payload: payload,
+          client: { name: SHARE.clientName, version: SHARE.clientVersion }
+        });
+        if (!current()) return;
+        var body = sent.body;
+        if (sent.status === 200 && body && body.ok === true && (body.accepted === true || body.reason === 'duplicate')) {
+          failureStreak = 0;
+          lastProblem = '';
+          lastProblemKind = '';
+          writeTiming({ lastAcceptedAt: nowS(), nextAllowedAt: 0 });
+        } else if (sent.status === 429) {
+          var after = Number(body && body.retryAfterSeconds);
+          setProblem('wait', '', Number.isFinite(after) && after > 0 ? after : SHARE.default429Seconds);
+        } else if (sent.status === 400) {
+          var ord = String((body && body.error) || '').toLowerCase().replace(/[^a-z_]/g, '').slice(0, 40) || 'bad_request';
+          setProblem('problem', 'Not sent · the KS server refused the data (' + ord + '). Reload this page.', SHARE.badRequestPauseSeconds);
+        } else {
+          backoff();
+        }
+      } catch (error) {
+        if (mine === epoch) backoff();
+      } finally {
+        if (readTiming().lockUntil === lockUntil) writeTiming({ lockUntil: 0 });
+        inFlight = false;
+        render();
+      }
+    }
+
+    function kickIn(ms) {
+      if (timer === null) return;   // stopped (hidden, left, off): nothing is scheduled behind its back
+      if (kickTimer !== null) clearTimeout(kickTimer);
+      kickTimer = setTimeout(function () { kickTimer = null; maybeRun(); }, ms);
+    }
+
+    function stop() {
+      if (timer !== null) clearInterval(timer);
+      if (kickTimer !== null) clearTimeout(kickTimer);
+      timer = null;
+      kickTimer = null;
+    }
+
+    // Runs only while the switch is on and the page is on screen; the same timer is never installed twice.
+    function start() {
+      stop();
+      if (!readPrefs().enabled || SIM || !visible()) return;
+      timer = setInterval(function () { maybeRun(); }, SHARE.checkMs);
+      kickIn(SHARE.kickMs);
+    }
+
+    return {
+      render: render,
+      start: start,
+      stop: stop,
+      line: advancedLine,
+      toggle: function () {
+        var enabled = !readPrefs().enabled;
+        writePrefs({ enabled: enabled });
+        epoch += 1;
+        lastProblem = '';
+        lastProblemKind = '';
+        if (enabled) start(); else stop();
+        render();
+      },
+      // Load the war accepted this key. A key other than the one before is asked for soon (not a repeat of the same one).
+      keyAccepted: function (k) {
+        var changed = k !== acceptedKey;
+        acceptedKey = k;
+        if (changed) {
+          epoch += 1;
+          failureStreak = 0;
+          lastProblem = '';
+          lastProblemKind = '';
+          start();
+        }
+        render();
+      },
+      // Forget key: the choice stays (it is the member's), what was learnt about that key goes.
+      forgetKey: function () {
+        acceptedKey = '';
+        epoch += 1;
+        failureStreak = 0;
+        lastProblem = '';
+        lastProblemKind = '';
+        writePrefs({ refusedKeyHash: '', refusedReason: '' });
+        render();
+      }
+    };
+  })();
+
   // R29. The lead in the war line. Before the war: "Target 5,900". Live or over: "Lead 1,234 / 5,900", or
   // "Behind 1,234 / 5,900" when they lead, with a bar (wide screens only) filled to lead / target. Without a
   // target, or without a real score for both sides, the span is empty and hidden - never a guessed figure.
@@ -6126,6 +6595,7 @@
     sessionRender();
     ffKeyRender();
     lifeKeyRender();
+    Share.render();
     renderWar();
     sizeResetLayout();
     renderTargets();
@@ -6616,6 +7086,7 @@
       if (reportedAt[target.id] === observedAt) continue;
       reportedAt[target.id] = observedAt;
 
+      reportBusy = true;   // R36: Share with KS waits for a report to finish
       try {
         await Claims.report(war.warId, target.id, reported, observedAt);
       } catch (error) {
@@ -6623,6 +7094,8 @@
         // Anything else: the board is already dropped or will be re-read on
         // the next tick. A report that did not arrive frees nothing, and
         // nothing is shown as free because of it.
+      } finally {
+        reportBusy = false;
       }
     }
   }
@@ -6673,6 +7146,7 @@
       // Past this point the key is one Torn accepted. Worth keeping, and
       // worth using. A key that never got that far is not written down.
       write(KEY_STORE, key);
+      Share.keyAccepted(key);   // R36: Share with KS may use this key from now on
       if (!signedIn) {
         // Not a member, or our server is not answering. The roster still
         // loads - it always did - and only the DIBS column stays shut.
@@ -6816,10 +7290,10 @@
   }
 
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) { ffStop(); ChainView.sync(); renderWarChain(); } else { ffStart(); ChainView.kick(true); }
+    if (document.hidden) { ffStop(); Share.stop(); ChainView.sync(); renderWarChain(); } else { ffStart(); Share.start(); ChainView.kick(true); }
   });
-  window.addEventListener('pagehide', ffStop);
-  window.addEventListener('pageshow', function () { if (!document.hidden) ffStart(); });
+  window.addEventListener('pagehide', function () { ffStop(); Share.stop(); });
+  window.addEventListener('pageshow', function () { if (!document.hidden) { ffStart(); Share.start(); } });
 
   // ----------------------------------------------------------------- wiring
 
@@ -6830,6 +7304,7 @@
     el.toggleKey.setAttribute('aria-pressed', showing ? 'false' : 'true');
   });
 
+  el.shareBtn.addEventListener('click', Share.toggle);
   el.loadBtn.addEventListener('click', loadAll);
   el.apiKey.addEventListener('keydown', function (e) { if (e.key === 'Enter') loadAll(); });
 
@@ -6845,6 +7320,8 @@
     LandingView.forget();
     // R33: and our chain, read with that key.
     ChainView.forget();
+    // R36: Share with KS keeps its choice, and forgets what it learnt about that key.
+    Share.forgetKey();
     // The sign-in was made from that key. It goes with it.
     Session.forget();
     Claims.drop();
@@ -6916,6 +7393,7 @@
   if (storedFfKey) el.ffKey.value = storedFfKey;
   render();
   if (storedKey) loadAll();
+  Share.start();   // R36: only runs when the member has switched Share with KS on; the first attempt comes 5 s after the load
 
   setInterval(tick, CLAIM_POLL_MS);
   if (!document.hidden) ffStart();
@@ -6935,6 +7413,8 @@
     // R33: our chain counts down on this second hand and is asked for from it (no timer of its own).
     ChainView.kick(false);
     renderWarChain();
+    // R36: "sent 2h 5m ago" and "next in 5h 40m" move with time. No timer of its own; it asks nothing.
+    Share.render();
   }
   function startTargetClock() {
     if (targetClock === null) targetClock = setInterval(secondHand, 1000);
