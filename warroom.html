@@ -819,9 +819,10 @@
           <button type="button" class="btn quiet" id="forgetKey">Forget key</button>
         </div>
         <p class="fieldhint">The same key the KS Torn War Dibs scripts use: a custom key with
-          faction &rarr; members, wars and user &rarr; basic, profile. <strong>Create custom API
+          faction &rarr; members, wars, chain and user &rarr; basic, profile. <strong>Create custom API
           key</strong> opens Torn's own key page with exactly that filled in. A key without
-          profile still works for everything except low-life DIBS.</p>
+          profile still works for everything except low-life DIBS. A key without chain still
+          works too: the chain count is then taken from the war reading, without a timer.</p>
         <p class="fieldhint said" id="lifeSaid" hidden></p>
       </div>
 
@@ -869,8 +870,9 @@
           <dt>Purpose of Use</dt><dd>Competitive advantage.</dd>
           <dt>Key Storage &amp; Sharing</dt><dd>Not stored/shared. Your key is never stored on the
             server, never written to its log, and never shown to another member.</dd>
-          <dt>Key Access Level</dt><dd>Public. A custom key with faction &rarr; members, wars and
-            user &rarr; basic, profile &mdash; the key the KS Torn War Dibs scripts use.</dd>
+          <dt>Key Access Level</dt><dd>Public. A custom key with faction &rarr; members, wars, chain and
+            user &rarr; basic, profile &mdash; the key the KS Torn War Dibs scripts use, with chain added.
+            Without chain in the key, the chain count is shown from the war reading, without a timer.</dd>
         </dl>
 
         <dl>
@@ -1010,7 +1012,11 @@
             war is live and this page is on screen, and counted down with the Torn clock in between, so a
             hit shows only at the next reading; when the time runs out first it says ? because the page
             cannot tell whether someone hit. It turns to the warning colour below 2:00 and to red below
-            1:00, and is hidden when there is no chain or Torn did not answer.</dd>
+            1:00, and is hidden when there is no chain or Torn did not answer. When your key has no
+            chain in it, Torn refuses the chain call and this page stops asking; the war line then
+            shows the chain count taken from the war reading, for example Chain 704, without a timer,
+            in the muted colour, for as long as that reading is less than six minutes old. Create a new
+            key with the Create custom API key button to get the timer.</dd>
           <dt>Filters</dt>
           <dd>The Filters button opens a panel with the sort (the same choice as the column headings;
             Last action with the arrow up puts the most recent first), the activity and the status you
@@ -1169,6 +1175,7 @@
         <dt>Landing windows</dt><dd id="advLanding" class="tid"></dd>
         <dt>FF and EST</dt><dd id="advFf" class="tid"></dd>
         <dt>Life</dt><dd id="advLife" class="tid"></dd>
+        <dt>Chain</dt><dd id="advChain" class="tid"></dd>
         <dt>Honor bars</dt><dd id="advHonors" class="tid"></dd>
         <dt>Clock</dt><dd id="advClock" class="tid"></dd>
         <dt>Last refusal</dt><dd id="advError" class="tid"></dd>
@@ -1218,7 +1225,7 @@
   // Torn's own key page with the selections this page needs filled in. The
   // exact address KS Torn War Dibs PC 1.1.10 opens (SCRIPT.tornCustomKeyUrl),
   // so a key made from either place is the same key.
-  var TORN_CUSTOM_KEY_URL = "https://www.torn.com/preferences.php#tab=api?step=addNewKey&title=KS%20Torn%20War%20Dibs%20PC&faction=members,wars&user=basic,profile";
+  var TORN_CUSTOM_KEY_URL = "https://www.torn.com/preferences.php#tab=api?step=addNewKey&title=KS%20Torn%20War%20Dibs%20PC&faction=members,wars,chain&user=basic,profile";
   var KEY_STORE = 'ks-leader-board-key';
   var SORT_STORE = 'ks-war-room-sort';
   // The FFScouter key, under a name of its own. It is not the Torn key and
@@ -1895,7 +1902,7 @@
 
   var el = {};
   ['apiKey','toggleKey','loadBtn','forgetKey','errorBox','okBox',
-   'createKey','lifeSaid','aboutServer','advLife','advClock','advWipeNote',
+   'createKey','lifeSaid','aboutServer','advLife','advChain','advClock','advWipeNote',
    'ffKey','toggleFfKey','forgetFfKey','ffSaid','ffBar',
    'sessionSaid','sessionState','sessionRetry',
    'warPanel','warWho','warMeta','warClock','warScore','warChain','warLead',
@@ -2138,6 +2145,9 @@
         // R31. Torn's second of this reading (the pace in the war board is counted on it), the device moment it was
         // taken and whether the second is Torn's own. A reading made before the Torn clock was measured is told on
         // that clock afterwards (Pace.observe), never on the device clock alone.
+        // R35. Our faction's chain as Torn's war reading says it, whole as it came (ChainView checks it): the count
+        // shown when the key has no chain access.
+        chain: ours ? ours.chain : undefined,
         readAt: now,
         readMs: nowMs(),
         readTorn: Number.isSafeInteger(responseTimestamp) && responseTimestamp > 0,
@@ -5766,8 +5776,14 @@
   //   - It stands back for the regular polling: while that has an error standing, or its pause after one (tornBackoffUntil),
   //     or a dead key (tornHalted), the chain asks nothing, so trouble with Torn is never made worse by it.
   //   - Fail-closed: a failure, a reading of a shape not expected or a dead key leaves no chain on screen for that
-  //     attempt. The failure goes to Advanced like the others; the box at the top is left alone. A key Torn says is
-  //     no good (2, 10, 13, 18) is not asked with again until Load the war.
+  //     attempt. R35: the outcome is kept here and shown on the Chain row in Advanced; it is no longer written to the
+  //     page's shared error (Roster.setError), so a refused chain call never stands in the way of the regular polling or
+  //     shows up as "Last refusal". A key Torn says is no good (2, 10, 13, 18) is not asked with again until Load the war.
+  //   - R35: Torn answers 16 ("access level not high enough") when the member's key has no chain selection. The page then
+  //     asks nothing more of /v2/faction/chain for as long as the key is the same (a new key, or Forget key, lifts it) and
+  //     shows our chain count from the war reading it already makes (/v2/faction/wars, factions[].chain): "Chain 704",
+  //     without a timer, in the muted colour, only while that reading is less than 3 x WAR_POLL_MS old, the war is live and
+  //     the field is a whole number of 1 or more.
   //   - Shown only with at least one hit, time left, and no cooldown. Called by renderWar and the second hand;
   //     it asks Torn nothing but through kick.
   // =========================================================================
@@ -5781,6 +5797,9 @@
     var started = 0;        // the number of the newest call
     var applied = 0;        // the number of the newest call whose outcome (an answer or a failure) was taken in
     var halted = false;     // Torn said the key is no good
+    var noAccess = false;   // R35: Torn said 16, this key has no chain access ...
+    var deniedKey = '';     // ... and this is the key it said it about
+    var last = null;        // R35: what the last asking came to: { kind: 'ok' | 'noaccess' | 'error', code, hits, at (Date.now()) }
 
     function ready() {
       var war = Roster.war();
@@ -5789,6 +5808,7 @@
     }
 
     function clear() {
+      last = null;
       if (data === null && lastStart === 0) return;
       data = null;
       lastStart = 0;
@@ -5821,21 +5841,33 @@
         if (gen !== generation || mine < applied) return;
         applied = mine;
         data = null;
-        Roster.setError(error.message, error.diagnostic);
-        if (error.tornCode === 2 || error.tornCode === 10 || error.tornCode === 13 || error.tornCode === 18) halted = true;
+        if (error.tornCode === 16) {
+          // R35: this key has no chain selection. Not an error of the page: asked no more for this key.
+          if (key !== el.apiKey.value.trim()) return;
+          noAccess = true;
+          deniedKey = key;
+          lastStart = 0;
+          last = { kind: 'noaccess', code: 16, hits: 0, at: Date.now() };
+        } else {
+          last = { kind: 'error', code: Number.isInteger(error.tornCode) ? error.tornCode : 0, hits: 0, at: Date.now() };
+          if (error.tornCode === 2 || error.tornCode === 10 || error.tornCode === 13 || error.tornCode === 18) halted = true;
+        }
         renderWarChain();
-        renderAdvanced();
         return;
       }
       if (gen !== generation || mine < applied || key !== el.apiKey.value.trim() || !ready()) return;
       applied = mine;
       data = outcome;
+      last = outcome ? { kind: 'ok', code: 0, hits: outcome.current, at: Date.now() } : { kind: 'error', code: -1, hits: 0, at: Date.now() };
       renderWarChain();
     }
 
     // Called once a second by the second hand, and with force when the page becomes visible again.
     function kick(force) {
       if (!ready()) { clear(); return; }
+      // R35: a new key lifts the stop; with the same key nothing is asked of a call Torn has said this key cannot make.
+      if (noAccess && deniedKey !== el.apiKey.value.trim()) { noAccess = false; deniedKey = ''; last = null; lastStart = 0; }
+      if (noAccess) return;
       // While the regular polling is in trouble with Torn (its own error is still standing) the chain adds nothing to it.
       if (halted || tornHalted || nowMs() < tornBackoffUntil || Roster.lastError() !== '') return;
       var now = nowMs();
@@ -5846,9 +5878,45 @@
       start(now);
     }
 
+    // R35. Our chain's count from the war reading: a whole number of 1 or more, while the reading is not older than
+    // 3 x WAR_POLL_MS, or null.
+    function reserve() {
+      var war = Roster.war();
+      var count = war ? war.chain : undefined;
+      if (!war || typeof count !== 'number' || !Number.isSafeInteger(count) || count < 1) return null;
+      if (nowMs() - war.readMs > 3 * WAR_POLL_MS) return null;
+      return count;
+    }
+
+    function denied() { return noAccess && deniedKey === el.apiKey.value.trim(); }
+
+    // The Chain row in Advanced.
+    function line() {
+      var war = Roster.war();
+      if (!war || !(SIM || war.state === 'live')) return 'off · no live war';
+      var time = function (ms) { return new Date(ms).toLocaleTimeString(); };
+      if (denied()) {
+        return reserve() !== null
+          ? 'no access (Torn 16) · showing count from war reading · read ' + time(Roster.stamps().war)
+          : 'no access (Torn 16) · no chain count in war reading';
+      }
+      if (last === null) return 'waiting';
+      if (last.kind === 'ok') return 'ok · ' + last.hits + (last.hits === 1 ? ' hit' : ' hits') + ' · read ' + time(last.at);
+      return 'error · ' + (last.code > 0 ? 'Torn ' + last.code : (last.code === -1 ? 'unexpected answer' : 'no answer')) + ' · ' + time(last.at);
+    }
+
     // { text, title, tone } for the war line, or null while nothing is to be shown.
     function view() {
       if (!ready()) { clear(); return null; }
+      if (denied()) {
+        var count = reserve();
+        if (count === null) return null;
+        return {
+          text: (window.matchMedia && window.matchMedia(PHONE_QUERY).matches ? 'C ' : 'Chain ') + groupDigits(count), tone: 'unk',
+          title: "From Torn's war reading, up to 2 minutes old. Your API key has no chain access, so there is no timer. " +
+            'Create a new key with the Create custom API key button to get the timer.'
+        };
+      }
       if (data === null || data.current < 1 || data.timeout <= 0) return null;
       var tornNow = getTornNowMs();
       if (data.cooldown * 1000 > tornNow) return null;
@@ -5872,11 +5940,12 @@
     return {
       kick: kick,
       view: view,
+      line: line,
       // The page stopped counting (hidden, left, a key removed): drop what was read and what is out.
       sync: function () { if (!ready()) clear(); },
       // Load the war was pressed: a key Torn refused may be tried again.
       reset: function () { halted = false; },
-      forget: function () { halted = false; clear(); generation += 1; }
+      forget: function () { halted = false; noAccess = false; deniedKey = ''; clear(); generation += 1; }
     };
   })();
 
@@ -5894,6 +5963,8 @@
     }
     el.warChain.hidden = !shown;
     el.warPanel.classList.toggle('chain-on', !!shown);   // a phone makes room for the chain's own row only while it shows
+    var advLine = ChainView.line();   // R35: the Chain row in Advanced
+    if (el.advChain.textContent !== advLine) el.advChain.textContent = advLine;
   }
 
   // R29. The lead in the war line. Before the war: "Target 5,900". Live or over: "Lead 1,234 / 5,900", or
