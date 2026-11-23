@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PDA TEST
 // @namespace    kingshade.torn
-// @version      2.2.0
+// @version      2.2.1
 // @description  Roster-local PDA presentation with v1.5.145 authority and shared-claim safety.
 // @author       Kingshade
 // @match        https://www.torn.com/factions.php*
@@ -15,6 +15,61 @@
 // ==/UserScript==
 
 /*
+ * 2.2.1 (2026-11-23): the Torn key can be saved anywhere. ONE MAIN CHANGE. Name,
+ * namespace, update address and every storage name are those of 2.2.0. This is
+ * a PDA-only fix (War Dibs PC saves the key without a Torn check and is not
+ * touched), so only the last digit moves: PDA 2.2.1, PC stays 2.2.0.
+ * FIXED
+ *   - On another faction's war page (VIEW) the Torn key could never be saved:
+ *     "Torn: candidate identity or capabilities failed; key unchanged". The save
+ *     first ran the full capability check (faction wars, opponent members, user
+ *     basic), which needs your OWN faction's war, and the transport refuses
+ *     everything but the members lists in VIEW. The same happened with no war
+ *     card for the key's own faction.
+ *   - A member whose saved key Torn had refused could not replace it while the
+ *     own DIBS record said CLEANUP-REQUIRED: the change was locked although the
+ *     refused key can clean nothing up.
+ * CHANGED
+ *   - In VIEW (or with no war card for the key's faction) a Save asks Torn ONE
+ *     thing: /v2/key/info, the identity. The request is let through the VIEW
+ *     transport by its own flag, set only around that one call (the pattern of
+ *     the key-owner row) and reset in a finally; nothing else is let through.
+ *     On your own war page the Save is exactly as in 2.2.0 (the full check, the
+ *     same calls in the same order).
+ *   - The same-player rule is unchanged: with an own DIBS record or a quarantine
+ *     record the key must belong to the same Torn ID, otherwise "Torn: key
+ *     belongs to another player; key unchanged". A key Torn refuses says
+ *     "Torn: key rejected by Torn (API n); key unchanged"; no answer at all says
+ *     "Torn: could not reach Torn to check the key; key unchanged". In VIEW the
+ *     reason stays on the Torn line for 20 s (the VIEW sync that follows would
+ *     otherwise overwrite it at once).
+ *   - A key saved on the identity check alone is stored as usual, but its war
+ *     rights count as UNCHECKED: keyScopeReady stays false and the Torn line says
+ *     "Torn: key saved · checked on your own war page". DIBS stays closed (VIEW
+ *     has no authority over any war, the phase is never LIVE there, claims need
+ *     keyScopeReady and the own identity) until fetchSelfIdentity has run the
+ *     full check on your own war page, as it does whenever the script starts
+ *     there. If that check fails, DIBS stays closed with Torn's reason and the
+ *     key stays saved. The key-owner row in VIEW uses the identity just proven.
+ *   - evaluateTornCredentialExternalLock: CLEANUP-REQUIRED no longer locks the
+ *     change while the saved key is one Torn has refused (rejected or capability
+ *     rejected). With a working key the lock is as before, and the same-player
+ *     rule of the save still applies.
+ * NOT CHANGED
+ *   - The other locks (write in progress, storage unresolved, ambiguous claims),
+ *     Forget Torn key, the FFScouter key, the transport rules in VIEW apart from
+ *     the one identity request above, the clock, Kvar 9, the 409 texts, the DIBS
+ *     rules, the UI apart from the Torn line, @connect, the update address and
+ *     every storage name.
+ * KNOWN ISSUES
+ *   - On your own war page, with a key already saved, a refused Save still flashes
+ *     its reason for less than a frame: the Torn sync that follows overwrites the
+ *     text in the same tick. Same as 2.2.0; VIEW keeps the reason for 20 s.
+ * VERIFICATION
+ *   - Synthetic only (Chromium 390 px with touch and a Node harness, against
+ *     stand-in Torn, KS and FFScouter services). Not yet tried on a phone.
+ * Everything else is unchanged from 2.2.0.
+ *
  * 2.2.0 (2026-11-22): DIBS on the KS server's clock, and no extra claim-board
  * read at the press. ONE MAIN CHANGE: when a DIBS press goes through, measured
  * against the clock of the server that decides it. Name, namespace, update
@@ -787,8 +842,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs",
-    version: "2.2.0",
-    instanceKey: "__ksTornWarDibsPdaV220Test",
+    version: "2.2.1",
+    instanceKey: "__ksTornWarDibsPdaV221Test",
     layerId: "ks-twd-pda-layer",
     rowHostPrefix: "ks-twd-pda-row-",
     panelId: "ks-twd-pda-panel",
@@ -1076,6 +1131,20 @@
   // True only for the synchronous moment fetchViewKeyOwner hands its request to
   // the transport (see isViewModePermittedRequest).
   let viewKeyInfoGrant = false;
+  // 2.2.1: true only for the synchronous moment a Torn key Save hands its ONE
+  // /v2/key/info call (the identity check) to the transport (see
+  // isViewModePermittedRequest and tornCandidateKeyProvesRecovery).
+  let tornKeySaveInfoGrant = false;
+  // 2.2.1: the Torn key that was saved after the identity check only, outside
+  // the own war page. Its war rights are NOT checked yet: keyScopeReady stays
+  // false until the full check (fetchSelfIdentity) passes on the own war page.
+  // Used for one panel line and nothing else; it gives no permission.
+  let tornKeyIdentityOnlyKey = "";
+  // 2.2.1: why a Torn key Save in VIEW was refused, kept on the Torn line for
+  // TORN_KEY_REFUSAL_MS because the VIEW sync that follows would otherwise
+  // overwrite the reason within a second. Display only.
+  let tornKeyRefusal = { text: "", until: 0 };
+  const TORN_KEY_REFUSAL_MS = 20000;
   const VIEW_KEY_OWNER_RETRY_MS = 30000;
   const lifeCache = new Map();
   const lifeReadAttempts = new Map();
@@ -1942,7 +2011,14 @@
     if (ffCredentialMutationInProgress) return lockVerdict(true, "FF-KEY-BUSY");
     if (claimAuthorityEvidenceUnresolved) return lockVerdict(true, "AUTH-EVIDENCE-UNRESOLVED");
     const recoveryEvidence = captureCredentialRecoveryEvidence();
-    if (recoveryEvidence.own?.cleanupRequired === true) return lockVerdict(true, "CLEANUP-REQUIRED", recoveryEvidence);
+    // 2.2.1: CLEANUP-REQUIRED locks the change only while the saved key still
+    // works. A key Torn has refused cannot clean anything up, so the member must
+    // be able to replace it; the same-player rule of the save still applies.
+    const storedKeyRefused = (storedTornCredentialRejected || storedTornCapabilityRejected) &&
+      Boolean(effectiveTornApiKey()) && effectiveTornApiKey() === validateTornApiKey(storedTornApiKey);
+    if (recoveryEvidence.own?.cleanupRequired === true && !storedKeyRefused) {
+      return lockVerdict(true, "CLEANUP-REQUIRED", recoveryEvidence);
+    }
     if (credentialRecoveryEvidenceActive(recoveryEvidence)) {
       return lockVerdict(!credentialRecoveryChangeAvailable(), "RECOVERY-ACTIVE", recoveryEvidence);
     }
@@ -2393,7 +2469,7 @@
     try {
       const url = new URL(String(rawUrl || ""));
       if (url.origin !== SCRIPT.tornApiOrigin) return false;
-      if (url.pathname === SCRIPT.tornKeyInfoPath) return viewKeyInfoGrant && isProfileWarRoute();
+      if (url.pathname === SCRIPT.tornKeyInfoPath) return (viewKeyInfoGrant || tornKeySaveInfoGrant) && isProfileWarRoute();
       return viewPermittedFactionIds().some(id => url.pathname === `/v2/faction/${id}/members`);
     } catch { return false; }
   }
@@ -3867,20 +3943,50 @@
     };
   }
 
+  // 2.2.1: what a key Save learns about the candidate key. Always starts with
+  // ONE /v2/key/info call (the identity) and the same-player rule. Then:
+  //   own war page and the key's own faction is on the war card -> the full
+  //     check of 2.2.0 (faction wars, opponent members, user basic): level "full";
+  //   anywhere else (VIEW on another faction's war, or no war card for the
+  //     key's faction) -> level "identity": nothing more is asked of Torn, the
+  //     war rights stay UNCHECKED and are proven later by fetchSelfIdentity on
+  //     the own war page.
+  // reason, when refused: "stale" | "network" | "rejected" | "identity" |
+  // "other-player" | "failed" (the full check failed).
   async function tornCandidateKeyProvesRecovery(key, evidence, isCurrent) {
-    if (!isCurrent()) return false;
+    // specific: only outside the own war page (VIEW) a refusal says why; on the
+    // own war page the one text of 2.2.0 stays.
+    const specific = viewOnlyMode();
+    const refused = (reason, detail = "") => ({ ok: false, level: "", identity: null, reason, detail, specific });
+    if (!isCurrent()) return refused("stale");
     try {
-      const identityResult = await tornApiRequest(SCRIPT.tornKeyInfoPath, key, {
-        cacheBust: true,
-        trackCredentialState: false
-      });
-      if (!isCurrent() || !identityResult?.ok || identityResult.body?.error) return false;
+      // The transport checks tornKeySaveInfoGrant synchronously inside this call.
+      let identityRequest;
+      tornKeySaveInfoGrant = true;
+      try {
+        identityRequest = tornApiRequest(SCRIPT.tornKeyInfoPath, key, {
+          cacheBust: true,
+          trackCredentialState: false
+        });
+      } finally { tornKeySaveInfoGrant = false; }
+      const identityResult = await identityRequest;
+      if (!isCurrent()) return refused("stale");
+      if (!identityResult?.ok || identityResult.body?.error) {
+        const code = Number(identityResult?.body?.error?.code);
+        const detail = Number.isSafeInteger(code) && code >= 0 ? ` (API ${code})` : "";
+        return refused(identityResult?.body?.error || identityResult?.status > 0 ? "rejected" : "network", detail);
+      }
       const identity = normalizeSelfIdentity(identityResult.body);
-      if (!identity) return false;
+      if (!identity) return refused("identity");
       const expectedPlayerId = credentialRecoveryExpectedPlayerId(evidence);
-      if (expectedPlayerId === null) return false;
-      if (credentialRecoveryEvidenceActive(evidence) && !expectedPlayerId) return false;
-      if (expectedPlayerId && identity.playerId !== expectedPlayerId) return false;
+      if (expectedPlayerId === null) return refused("identity");
+      if (credentialRecoveryEvidenceActive(evidence) && !expectedPlayerId) return refused("identity");
+      if (expectedPlayerId && identity.playerId !== expectedPlayerId) {
+        return { ...refused("other-player"), specific: specific || !operationalWarSurfaceForFaction(identity.factionId) };
+      }
+      if (viewOnlyMode() || !operationalWarSurfaceForFaction(identity.factionId)) {
+        return { ok: true, level: "identity", identity, reason: "", detail: "" };
+      }
       const operational = await verifyTornOperationalCapabilities({
         key,
         identity,
@@ -3888,9 +3994,11 @@
         isCurrent,
         trackCredentialState: false
       });
-      return Boolean(isCurrent() && operational);
+      return Boolean(isCurrent() && operational)
+        ? { ok: true, level: "full", identity, reason: "", detail: "" }
+        : refused("failed");
     } catch {
-      return false;
+      return refused("failed");
     }
   }
 
@@ -8848,6 +8956,14 @@
 
   // 1.5.173: the summary row's own text for a Torn-error condition. Pure
   // display formatting of an already-set, unmodified tornStatusState.message.
+  // 2.2.1: true while the saved Torn key has had the identity check only (saved
+  // in VIEW or without a war card for its faction), VIEW is still showing and
+  // no error is on the Torn line. Display only.
+  function tornKeyIdentityOnlyNote() {
+    return Boolean(tornKeyIdentityOnlyKey) && tornKeyIdentityOnlyKey === validateTornApiKey(storedTornApiKey) &&
+      viewOnlyMode() && !keyScopeReady && tornStatusState.state !== "error";
+  }
+
   function tornStatusReasonText() {
     const message = normalizeText(tornStatusState.message);
     return message.replace(/^Torn:\s*/i, "") || "unknown";
@@ -8949,6 +9065,10 @@
       // 1.5.187: while Torn says "too many requests" the line says so and counts down.
       const tornLine = tornPausedNow()
         ? `Torn: paused ${Math.ceil((tornRateLimitedUntil - nowMs()) / 1000)} s — Torn says too many requests (all your tools together)`
+        : tornKeyRefusal.text && nowMs() < tornKeyRefusal.until && viewOnlyMode()
+        ? tornKeyRefusal.text
+        : tornKeyIdentityOnlyNote()
+        ? "Torn: key saved · checked on your own war page"
         : tornStatusState.message;
       $("torn-status").textContent = tornLine;
       $("torn-status").title = tornLine;
@@ -9323,15 +9443,25 @@
     invalidateSharedReads();
     operationSharedEpoch = sharedAuthorityEpoch;
     updatePanel();
-    const candidateOperational = await tornCandidateKeyProvesRecovery(
+    const candidate = await tornCandidateKeyProvesRecovery(
       key,
       recoveryEvidence,
       operationForegroundCurrent
     );
-    if (!candidateOperational || !operationForegroundCurrent()) {
+    if (!candidate.ok || !operationForegroundCurrent()) {
       if (operationOwns()) tornCredentialMutationInProgress = false;
       if (runtimeActive && isRuntimeEligible()) {
-        setTornStatusState("error", "Torn: candidate identity or capabilities failed; key unchanged", 0);
+        // 2.2.1: in VIEW a refusal at the identity step says why; on the own war
+        // page, and for a failed full check, the one text of 2.2.0 stays.
+        const refusedText = candidate.specific && candidate.reason === "other-player"
+          ? "Torn: key belongs to another player; key unchanged"
+          : candidate.specific && candidate.reason === "rejected"
+          ? `Torn: key rejected by Torn${candidate.detail}; key unchanged`
+          : candidate.specific && candidate.reason === "network"
+          ? "Torn: could not reach Torn to check the key; key unchanged"
+          : "Torn: candidate identity or capabilities failed; key unchanged";
+        setTornStatusState("error", refusedText, 0);
+        if (viewOnlyMode() && candidate.specific) tornKeyRefusal = { text: refusedText, until: nowMs() + TORN_KEY_REFUSAL_MS };
         if (effectiveTornApiKey()) void fetchSharedClaims();
         if (effectiveTornApiKey()) void fetchTornStatuses({ force: true });
       }
@@ -9375,7 +9505,14 @@
     closeTornCredentialEditor();
     opponentMembersState = { factionId: "", members: new Map(), fetchedAt: 0 };
     currentWarSurface = null;
-    setTornStatusState("ready", "Torn: key saved · syncing…", 0);
+    // 2.2.1: after an identity-only check the war rights are unchecked: say so,
+    // and let VIEW's key-owner row use the identity just proven (no new call).
+    tornKeyIdentityOnlyKey = candidate.level === "identity" ? key : "";
+    tornKeyRefusal = { text: "", until: 0 };
+    if (candidate.level === "identity" && viewOnlyMode() && isProfileWarRoute()) {
+      Object.assign(viewKeyOwner, { key, playerId: candidate.identity.playerId, factionId: candidate.identity.factionId, failedAt: 0 });
+    }
+    setTornStatusState("ready", candidate.level === "identity" ? "Torn: key saved · checked on your own war page" : "Torn: key saved · syncing…", 0);
     if (runtimeActive && isRuntimeEligible()) {
       void fetchSharedClaims();
       void fetchTornStatuses({ force: true });
