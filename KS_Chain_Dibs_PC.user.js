@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Chain Dibs PC
 // @namespace    kingshade.torn.chaindibs
-// @version      0.8.1
+// @version      0.8.2
 // @description  A small floating window with your faction chain: timer, the queue for the next hit, and the Im here rule so the chain does not break. Only the member who made the hit leaves the queue. When anybody may hit, FREE HIT links to a free target. Im here is locked when you cannot hit. Stand first without pressing Im here for 3 hits and you are removed as AFK. A bonus hit is announced. The minimized window still shows who is first and who is the hitter, and a yellow frame tells you when you hold the hit. If you hold the hit and fail, the button I failed - free hit lets everybody hit at once and shows them who released it. Minimized, the window becomes a Dibs row under Torns own Chain bar in the left side menu; click it to open. The window looks like the boxes of Torns side menu.
 // @author       Kingshade
 // @downloadURL  https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Chain_Dibs_PC.user.js
@@ -20,8 +20,9 @@
 // ==/UserScript==
 
 /*
- * KS Chain Dibs PC 0.8.1
+ * KS Chain Dibs PC 0.8.2
  *
+ * 0.8.2  ONE MAIN CHANGE: when Torn asks the script to wait, the search for your hit waits too and looks again afterwards, instead of giving up. Nothing else changed.
  * 0.8.1  ONE MAIN CHANGE: Rejoin cannot be lost by mistake. It is ON unless you turned it off, the button sits at the bottom away from Im here, and a change shows a short line. Also: AFK now after 3 hits as first without Im here (was 5). Also: if your hit is not found, the window says why and the KS server logs the reason, so the cause can be found.
  * 0.8.0  ONE MAIN CHANGE: looks like Torn. Minimized, the window becomes a Dibs row under Torns own Chain bar in the left sidebar. Click it to open. Without the sidebar it stays a small floating window. Nothing else changed.
  * 0.7.3  ONE MAIN CHANGE: the KS server address is now warroom.kingshadeprotocol.com.
@@ -189,7 +190,7 @@
   if (window[INSTANCE_KEY]) return;
   window[INSTANCE_KEY] = true;
 
-  var VERSION = '0.8.1';
+  var VERSION = '0.8.2';
 
   // The ONE place the server address lives.
   var SERVER_BASE = 'https://warroom.kingshadeprotocol.com';
@@ -263,6 +264,11 @@
   var HIT_LIMIT = 10;                  // the last 10 outgoing attacks
   var HIT_RETRY_MS = 2000;             // no hit found: ask again after this
   var HIT_MAX_RETRIES = 3;             // ... at most this many more times for each new hit
+  // 0.8.2: while Torn has asked us to wait, no call is made and the search does not count it as a try: it looks again
+  // HIT_PAUSE_AFTER_MS after the pause ends. It gives up (torn_paused) only when it has waited for the pause this long
+  // since the search began: 5 minutes is half of HIT_LOOKBACK_S, so the attack is still inside the window Torn is asked about.
+  var HIT_PAUSE_MAX_MS = 300000;
+  var HIT_PAUSE_AFTER_MS = 500;
   var HIT_BUSY_MS = 250;               // an older call is still on its way: look again after this
   var HIT_DIAG_MSG_MS = 15000;         // 0.8.1: how long "Your hit was not found" stays in the window
   var HIT_DIAG_TEXT = 'Your hit was not found - you keep your place in the queue. Reason: ';
@@ -1554,18 +1560,20 @@
     if (hitCtl && hitCtl.chainId === chainId) {
       hitCtl.high = cur;
       hitCtl.tries = 0;
+      hitCtl.free = 0;
       hitCtl.gen = hitGen;
       if (ownedBetween(chainId, prev, cur)) hitCtl.wasOwner = true;
     } else {
-      hitCtl = { gen: hitGen, chainId: chainId, low: prev + 1, high: cur, tries: 0, lastKind: 'not_found', lastSeen: 'none', lastAttacks: 0, diagSent: false, wasOwner: ownedBetween(chainId, prev, cur) };
+      hitCtl = { gen: hitGen, chainId: chainId, startedAt: Date.now(), low: prev + 1, high: cur, tries: 0, free: 0, lastKind: 'not_found', lastSeen: 'none', lastAttacks: 0, diagSent: false, wasOwner: ownedBetween(chainId, prev, cur) };
     }
     hitTry();
   }
 
   // One look at the member's own last attacks. The first call goes at once, the
   // next ones 2 s apart, at most 3 more. At most 10 calls in any 60 s, one at a
-  // time. A try that cannot be made (Torn asked us to wait, the 60 s limit is
-  // used up) counts as a try.
+  // time. A try that cannot be made because the 60 s limit is used up counts as a
+  // try. 0.8.2: a try that cannot be made because Torn asked us to wait does NOT
+  // count: the search waits for the pause to end (hitWaitPause).
   function hitTry() {
     hitTimer = null;
     var ctl = hitCtl;
@@ -1577,12 +1585,14 @@
     var seenSnap = (shared && shared.snap) ? shared.snap : null;
     if (seenSnap && !seenSnap.you.inQueue) { hitCtl = null; return; }
     if (attacksBusy) { hitTimer = window.setTimeout(hitTry, HIT_BUSY_MS); return; }
+    // 0.8.2: Torn asked us to wait: no call, no try used up - look again when the pause is over.
+    if (Date.now() < tornPausedUntil) { hitWaitPause(ctl); return; }
     ctl.tries += 1;
     var gen = ctl.gen;
     ctl.lastAttacks = 0;
     ctl.lastSeen = 'none';
-    if (Date.now() < tornPausedUntil || attacksInWindow() >= HIT_WINDOW_MAX) {
-      ctl.lastKind = Date.now() < tornPausedUntil ? 'paused' : 'window';
+    if (attacksInWindow() >= HIT_WINDOW_MAX) {
+      ctl.lastKind = 'window';
       hitMiss(ctl);
       return;
     }
@@ -1604,6 +1614,10 @@
         if (code === 5) {
           tornPausedUntil = Date.now() + TORN_PAUSE_MS;
           publish({ torn: { kind: 'paused', until: tornPausedUntil, msg: 'Torn asked us to wait' } });
+          // 0.8.2: this call does not use up a try; the search waits for the pause to end.
+          ctl.free += 1;
+          hitWaitPause(ctl);
+          return;
         } else if (code === 16) {
           sendHitDiag(ctl, 'torn_error_16', false);
           hitCtl = null;
@@ -1625,8 +1639,22 @@
 
   function hitMiss(ctl) {
     if (hitCtl !== ctl) return;
-    if (ctl.tries > HIT_MAX_RETRIES) { sendHitDiag(ctl, diagOutcome(ctl), false); hitCtl = null; return; }
+    if (ctl.tries - ctl.free > HIT_MAX_RETRIES) { sendHitDiag(ctl, diagOutcome(ctl), false); hitCtl = null; return; }
     hitTimer = window.setTimeout(hitTry, HIT_RETRY_MS);
+  }
+
+  // 0.8.2: Torn has asked us to wait. No call is made now and nothing is counted as a try; ONE timer wakes the
+  // search just after the pause ends (the pause may have been renewed by then, then it waits again). Only when the
+  // search has been waiting this way for HIT_PAUSE_MAX_MS since it began does it give up with torn_paused.
+  function hitWaitPause(ctl) {
+    if (hitCtl !== ctl) return;
+    ctl.lastKind = 'paused';
+    ctl.lastAttacks = 0;
+    ctl.lastSeen = 'none';
+    var now = Date.now();
+    if (now - ctl.startedAt >= HIT_PAUSE_MAX_MS) { sendHitDiag(ctl, 'torn_paused', false); hitCtl = null; return; }
+    if (hitTimer) { window.clearTimeout(hitTimer); hitTimer = null; }
+    hitTimer = window.setTimeout(hitTry, Math.max(tornPausedUntil - now, 0) + HIT_PAUSE_AFTER_MS);
   }
 
   // ---- 0.8.1 measurement: why a hit search ended without a report (no extra Torn call)
