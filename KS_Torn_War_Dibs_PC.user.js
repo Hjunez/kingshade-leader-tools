@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PC
 // @namespace    kingshade.torn
-// @version      2.2.0
+// @version      2.2.1
 // @downloadURL  https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @description  PC TEST: DIBS as a native roster column beside Torn's Attack cell; FF and Est from FFScouter's get-stats API. War Stuff Enhanced is detected and shown read-only; it never blocks.
@@ -16,6 +16,36 @@
 // @noframes
 // ==/UserScript==
 
+/*
+ * KS Torn War Dibs PC v2.2.1 (2026-11-23) -- the RW line never reads "RW: UNKNOWN".
+ * ONE MAIN CHANGE: the text (and dot) of the panel's RW line. Name, namespace,
+ * update address and every storage name are those of 2.2.0. This is a platform
+ * fix: War Dibs PDA 2.2.1 already has these texts; the shared number stays 2.2.0
+ * for the DIBS rules.
+ * FIXED
+ *   - On another faction's war page the panel said "RW: UNKNOWN" (the script does
+ *     not read /wars there). It now says "RW: VIEW · read-only" with a grey dot.
+ *   - On your own war page, before own-faction /wars has confirmed LIVE (or when
+ *     that answer failed or is old), the line said "RW: UNKNOWN". It now says
+ *     "RW: VERIFYING" (red dot, as before).
+ * CHANGED
+ *   - Order of the line: VIEW -> "RW: VIEW · read-only"; LIVE -> "RW: LIVE";
+ *     PREWAR -> "RW: PREWAR · <time>"; anything else -> "RW: VERIFYING".
+ *     Hover texts: VIEW "Another faction's Ranked War. DIBS is available only on
+ *     your own faction's active Ranked War."; VERIFYING "DIBS stays locked until
+ *     own-faction wars confirms this visible war LIVE".
+ * NOT CHANGED
+ *   - currentRwPhase and RW_PHASE, every DIBS decision (what is locked in each
+ *     mode is exactly as in 2.2.0), the compact LIVE / PREWAR / WAIT badge, the
+ *     clock and the 2:00 gate, the Clock line, the WSE line, every request, the
+ *     address, @connect and every storage name.
+ * KNOWN ISSUES
+ *   - See 2.2.0 below. (The 2.2.0 and older note that the RW line reads
+ *     "RW: UNKNOWN" while you travel is fixed here.)
+ * VERIFICATION
+ *   - Synthetic only (Chromium against stand-in Torn and KS servers). Not yet
+ *     tried on a real war page. See RAPPORT_PC_2.2.1.txt.
+ *
 /*
  * KS Torn War Dibs PC v2.2.0 (2026-11-22) -- DIBS on the KS server's clock, and no
  * extra claim-board read at the press. ONE MAIN CHANGE: when a DIBS press goes
@@ -835,8 +865,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs PC",
-    version: "2.2.0",
-    instanceKey: "__ksTornWarDibsPcV220",
+    version: "2.2.1",
+    instanceKey: "__ksTornWarDibsPcV221",
     rowHostPrefix: "ks-twd-wse-row-v010-",
     rosterStyleId: "ks-twd-wse-roster-style-v010",
     panelId: "ks-twd-wse-panel",
@@ -6920,9 +6950,11 @@
 
     const rwState = currentRwPhase();
     if (rwItem) {
-      rwItem.dataset.state = rwState.phase === RW_PHASE.LIVE
-        ? "online"
-        : (rwState.phase === RW_PHASE.PREWAR ? "idle" : "error");
+      rwItem.dataset.state = viewOnlyMode()
+        ? "idle"
+        : (rwState.phase === RW_PHASE.LIVE
+          ? "online"
+          : (rwState.phase === RW_PHASE.PREWAR ? "idle" : "error"));
     }
     const compactStatus = $("compact-status");
     const compactStatusText = $("compact-status-text");
@@ -6937,10 +6969,25 @@
         : (rwState.phase === RW_PHASE.PREWAR ? "PREWAR" : "WAIT");
     }
     if ($("rw-status")) {
-      $("rw-status").textContent = rwState.phase === RW_PHASE.LIVE
-        ? "RW: LIVE"
-        : (rwState.phase === RW_PHASE.PREWAR ? `RW: PREWAR · ${formatRwRunway(rwState.runwaySeconds)}` : "RW: UNKNOWN");
-      setTitleIfChanged($("rw-status"), rwState.phase === RW_PHASE.LIVE ? "Own-faction /wars confirms this Ranked War is live" : "DIBS remains locked until own-faction /wars confirms LIVE");
+      // 2.2.1: the line never reads UNKNOWN. VIEW (another faction's war, or your
+      // own faction's profile address while you travel) says so; an own war that
+      // /wars has not yet confirmed LIVE says VERIFYING. DIBS decisions unchanged.
+      let rwText; let rwTitle;
+      if (viewOnlyMode()) {
+        rwText = "RW: VIEW · read-only";
+        rwTitle = "Another faction's Ranked War. DIBS is available only on your own faction's active Ranked War.";
+      } else if (rwState.phase === RW_PHASE.LIVE) {
+        rwText = "RW: LIVE";
+        rwTitle = "Own-faction /wars confirms this Ranked War is live";
+      } else if (rwState.phase === RW_PHASE.PREWAR) {
+        rwText = `RW: PREWAR · ${formatRwRunway(rwState.runwaySeconds)}`;
+        rwTitle = "DIBS remains locked until own-faction /wars confirms LIVE";
+      } else {
+        rwText = "RW: VERIFYING";
+        rwTitle = "DIBS stays locked until own-faction wars confirms this visible war LIVE";
+      }
+      $("rw-status").textContent = rwText;
+      setTitleIfChanged($("rw-status"), rwTitle);
     }
     if ($("status")) { $("status").textContent = sharedStatus.message; setTitleIfChanged($("status"), sharedStatus.message); }
     if ($("ff-item")) $("ff-item").dataset.state = fairFightStatus.state;
