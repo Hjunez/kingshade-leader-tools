@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PC
 // @namespace    kingshade.torn
-// @version      2.2.1
+// @version      2.2.2
 // @downloadURL  https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
-// @description  PC TEST: DIBS as a native roster column beside Torn's Attack cell; FF and Est from FFScouter's get-stats API. War Stuff Enhanced is detected and shown read-only; it never blocks.
+// @description  PC TEST: DIBS as a native roster column beside Torn's Attack cell; FF and Est from FFScouter's get-stats API.
 // @author       Kingshade
 // @match        https://www.torn.com/factions.php*
 // @match        https://torn.com/factions.php*
@@ -16,6 +16,31 @@
 // @noframes
 // ==/UserScript==
 
+/*
+ * KS Torn War Dibs PC v2.2.2 (2026-11-24) -- the "WSE: ..." status line is gone.
+ * ONE MAIN CHANGE: the panel no longer shows a War Stuff Enhanced line. Name, namespace,
+ * update address and every storage name are those of 2.2.1. This is a platform fix:
+ * War Dibs PDA 2.2.1 never had the line.
+ * FIXED
+ *   - (nothing was broken; the line was meaningless once DIBS no longer depended on WSE)
+ * CHANGED
+ *   - Removed the panel line "WSE: detected" / "WSE: not detected", the code that wrote it,
+ *     the detection function isWarStuffEnhancedPresent() and the sentence "War Stuff
+ *     Enhanced: detected read-only..." in the disclosure text. The script no longer reads any
+ *     War Stuff Enhanced marker. The @description no longer says WSE is detected.
+ *   - The remaining panel lines keep their order: War Room, Torn, RW, FF, Life, Clock.
+ * NOT CHANGED
+ *   - Every DIBS decision, the RW line from 2.2.1, the clock and the 2:00 gate, Kvar 9, the 409
+ *     texts, Share with KS, the keys, every request, the address, @connect and every storage
+ *     name. warStuffEnhancedGate() and its three call sites (it always returns false). The
+ *     v0.1.0 "wse" storage names and the one-time migration from them (they are this script's
+ *     own old name, not War Stuff Enhanced).
+ * KNOWN ISSUES
+ *   - See 2.2.0 below.
+ * VERIFICATION
+ *   - Synthetic only (Chromium against stand-in Torn and KS servers). Not yet tried on a real
+ *     war page. See RAPPORT_PC_2.2.2.txt.
+ *
 /*
  * KS Torn War Dibs PC v2.2.1 (2026-11-23) -- the RW line never reads "RW: UNKNOWN".
  * ONE MAIN CHANGE: the text (and dot) of the panel's RW line. Name, namespace,
@@ -865,8 +890,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs PC",
-    version: "2.2.1",
-    instanceKey: "__ksTornWarDibsPcV221",
+    version: "2.2.2",
+    instanceKey: "__ksTornWarDibsPcV222",
     rowHostPrefix: "ks-twd-wse-row-v010-",
     rosterStyleId: "ks-twd-wse-roster-style-v010",
     panelId: "ks-twd-wse-panel",
@@ -6190,24 +6215,9 @@
     return rosterStyleWithoutOrder(record.oldValue, isList) === rosterStyleWithoutOrder(target.getAttribute("style"), isList);
   }
 
-  // Exact detection contract ported from PDA v1.5.144. These attributes are
-  // written by War Stuff Enhanced itself; FFScouter reads the same
-  // data-twse-last-action-timestamp, which is why it is a reliable marker.
-  function isWarStuffEnhancedPresent() {
-    if (document.documentElement?.hasAttribute("data-twse-injected")) return true;
-    const root = document.getElementById("faction_war_list_id");
-    if (!(root instanceof HTMLElement)) return false;
-    return Boolean(root.querySelector([
-      "li.enemy[data-twse-last-action-timestamp]",
-      "li.your[data-twse-last-action-timestamp]",
-      ".twse-copy-btn[data-player-id]",
-      ".status[data-twse-overridden]"
-    ].join(",")));
-  }
-
-  // v0.1.0: War Stuff Enhanced is a coexistence partner, not a blocker. Its
-  // presence is still read by isWarStuffEnhancedPresent() and reported on the
-  // panel, but nothing is gated on it. The three call sites stay in place.
+  // v0.1.0: War Stuff Enhanced is a coexistence partner, not a blocker. Nothing
+  // is gated on it and the panel does not show it (2.2.2). The three call sites
+  // stay in place.
   function warStuffEnhancedGate() {
     return false;
   }
@@ -6860,7 +6870,6 @@
           <div class="status-item" data-role="ff-item"><span class="dot"></span><span class="status" data-role="ff-status">FF: waiting…</span></div>
           <div class="status-item" data-role="life-item"><span class="dot"></span><span class="status" data-role="life-status">Life: 0 targets read · newest unknown</span></div>
           <div class="status-item" data-role="clock-item"><span class="dot"></span><span class="status" data-role="clock-status">Clock: checking…</span></div>
-          <div class="status-item" data-role="wse-item"><span class="dot"></span><span class="status" data-role="wse-status">WSE: checking…</span></div>
         </div>
         <div class="controls">
           <button type="button" data-role="key">FFScouter key</button><span class="sep">·</span>
@@ -6887,8 +6896,6 @@
           <br>
           <strong>FFScouter key/integration:</strong> key stored only locally, encrypted in this browser; sent only to FFScouter's get-stats endpoint for Fair Fight and battle-stat estimates of the opponent roster (one batched request, refreshed at most once a minute). FFScouter is not used for DIBS.
           <a data-role="ff-terms" target="_blank" rel="noopener noreferrer">FFScouter terms/data policy</a> · <a data-role="ff-privacy" target="_blank" rel="noopener noreferrer">Privacy</a>.
-          <br>
-          <strong>War Stuff Enhanced:</strong> detected read-only. This script never writes to, hides or moves anything War Stuff Enhanced renders.
         </div>
       </div>
     `;
@@ -7008,12 +7015,6 @@
       if ($("clock-status").textContent !== clockText) $("clock-status").textContent = clockText;
       setTitleIfChanged($("clock-status"), "The clock the countdown and the 2:00 gate count on: the KS server's clock once it has answered, otherwise Torn's.");
       if ($("clock-item")) $("clock-item").dataset.state = "idle";
-    }
-    // Read only. Nothing is gated on WSE; the line just says whether it is here.
-    const wseText = isWarStuffEnhancedPresent() ? "WSE: detected" : "WSE: not detected";
-    if ($("wse-status")) {
-      if ($("wse-status").textContent !== wseText) $("wse-status").textContent = wseText;
-      setTitleIfChanged($("wse-status"), "War Stuff Enhanced is read-only for this script: nothing it renders is written to, hidden or moved.");
     }
     if ($("torn-status")) {
       // 1.1.11: while Torn says "too many requests" the line says so and counts down.
