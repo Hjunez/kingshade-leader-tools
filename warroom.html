@@ -960,9 +960,9 @@
             when you have switched it on (see Share with KS). The hospital report described below is sent from the
             roster reading this page already does &mdash; it never asks Torn again for it.</dd>
           <dt>The clock</dt>
-          <dd>The 2:00 limit is never counted on this device's clock. It is counted on Torn's
-            time when Torn's answers give it, and otherwise on the KS War Room server's time,
-            which comes with every reading of the claim board. The page makes no request for
+          <dd>The 2:00 limit is never counted on this device's clock. It is counted on the KS
+            War Room server's time, which comes with every reading of the claim board, and
+            otherwise on Torn's time when Torn's answers give it. The page makes no request for
             either &mdash; it reads the time off answers it already gets &mdash; and always takes
             the earliest time those answers allow, so a target can open a moment late here but
             not early by this device's doing. Until one of the two has been read, no target can
@@ -1537,14 +1537,16 @@
   // TWO MEASURES, NEVER MIXED. Torn does not always say what time it is in a
   // way a web page can see: /v2/faction/wars carries no timestamp in its body
   // (measured 2026-10-06), and a browser hides the Date header unless Torn
-  // lets it through. So there is a second measure, taken the same way off the
-  // KS War Room server: every answer from the claim board carries serverTime,
-  // the board is read every few seconds anyway, and no member can set that
-  // clock. The two measures have their own bounds and are never intersected
-  // with each other - one is Torn's clock and one is the server's.
+  // lets it through, and when it does say, it says a whole second. The KS War
+  // Room server says its own clock in milliseconds: every answer from the
+  // claim board carries serverTime, the board is read every few seconds
+  // anyway, and no member can set that clock. The two measures have their own
+  // bounds and are never intersected with each other - one is the server's
+  // clock and one is Torn's.
   //
-  //   getTornNowMs():  Torn's measure when there is one,
-  //                    otherwise the server's,
+  //   getTornNowMs():  the server's measure when there is one (exact to the
+  //                    round trip, see recordServerClockMs),
+  //                    otherwise Torn's (whole seconds, so a second loose),
   //                    otherwise nothing - see below.
   //
   // UNTIL THERE IS A MEASURE NOTHING CAN BE CALLED. The scripts always have
@@ -1714,12 +1716,15 @@
     deviceClockAnchor = nowMs() - performance.now();
   }
 
-  // The measure the page counts on: Torn's when there is one, otherwise the
-  // server's, otherwise none. A change from one to the other in the middle of
-  // a session is counted - it is a reset of the clock the member is looking at.
+  // The measure the page counts on: the server's when there is one, otherwise
+  // Torn's, otherwise none. The server's comes first because it is the tighter:
+  // milliseconds, exact to the round trip, where Torn's is whole seconds with a
+  // second's slack on the high edge. A change from one to the other in the
+  // middle of a session is counted - it is a reset of the clock the member is
+  // looking at.
   function clockSource() {
     dropMeasuresIfDeviceClockMoved();
-    const source = Number.isFinite(tornClockLowMs) ? 'torn' : (Number.isFinite(serverClockLowMs) ? 'server' : '');
+    const source = Number.isFinite(serverClockLowMs) ? 'server' : (Number.isFinite(tornClockLowMs) ? 'torn' : '');
     if (source !== clockSourceInUse) {
       if (source !== '' && clockSourceInUse !== '') clockSourceResets += 1;
       if (source !== '') clockSourceInUse = source;
@@ -1737,13 +1742,13 @@
   // The scripts' getTornNowMs with two differences. Theirs asks the Torn page
   // it runs in for window.getCurrentTimestamp() before it falls back on the
   // device; this page is not a Torn page and has no such function. And this
-  // one has the server's measure to fall back on before the device. Without
-  // any measure the device clock is what is left, and it is used for nothing
-  // but drawing - tornClockReady() keeps every decision shut until then.
+  // one counts on the server's measure first, then Torn's, before the device.
+  // Without any measure the device clock is what is left, and it is used for
+  // nothing but drawing - tornClockReady() keeps every decision shut until then.
   function getTornNowMs() {
     const source = clockSource();
-    if (source === 'torn') return nowMs() + tornClockLowMs;
     if (source === 'server') return nowMs() + serverClockLowMs;
+    if (source === 'torn') return nowMs() + tornClockLowMs;
     return nowMs();
   }
 
@@ -1753,20 +1758,20 @@
   // time of a roster reading, told on the clock the page counts on.
   function clockLowMs() {
     const source = clockSource();
-    return source === 'torn' ? tornClockLowMs : (source === 'server' ? serverClockLowMs : null);
+    return source === 'server' ? serverClockLowMs : (source === 'torn' ? tornClockLowMs : null);
   }
 
   // The line in Advanced. It says which clock is being counted on, in the
   // words the PDA script's panel uses for its own.
   function tornClockLabel() {
     const source = clockSource();
-    if (source === 'torn') {
-      const widthMs = Math.round(tornClockHighMs - tornClockLowMs);
-      return `Torn bounded clock (±${widthMs} ms · ${tornClockSampleCount} samples · ${tornClockResetCount + clockSourceResets} resets)`;
-    }
     if (source === 'server') {
       const widthMs = Math.round(serverClockHighMs - serverClockLowMs);
       return `KS server clock (±${widthMs} ms · ${serverClockSampleCount} samples · ${serverClockResetCount + clockSourceResets} resets)`;
+    }
+    if (source === 'torn') {
+      const widthMs = Math.round(tornClockHighMs - tornClockLowMs);
+      return `Torn bounded clock (±${widthMs} ms · ${tornClockSampleCount} samples · ${tornClockResetCount + clockSourceResets} resets)`;
     }
     return 'UNSYNCED · DIBS is off';
   }
@@ -1781,42 +1786,73 @@
     if (Number.isFinite(tornClockLowMs)) anchorDeviceClock();
   }
 
-  // The five variables of Torn's measure and the five of the server's change
-  // places. The functions that keep the bounds are the scripts' own, cut out
-  // whole, and they are written against one set of names; this is how the
-  // very same functions - not a second copy that could drift from the first -
-  // keep the server's bounds too. It is done and undone inside one call, with
-  // nothing in between that waits, so no other code ever sees the swapped
-  // state, and the two sets of bounds can never meet.
-  function swapClockMeasures() {
-    let kept;
-    kept = tornClockLowMs; tornClockLowMs = serverClockLowMs; serverClockLowMs = kept;
-    kept = tornClockHighMs; tornClockHighMs = serverClockHighMs; serverClockHighMs = kept;
-    kept = tornClockBoundsAt; tornClockBoundsAt = serverClockBoundsAt; serverClockBoundsAt = kept;
-    kept = tornClockSampleCount; tornClockSampleCount = serverClockSampleCount; serverClockSampleCount = kept;
-    kept = tornClockResetCount; tornClockResetCount = serverClockResetCount; serverClockResetCount = kept;
+  // One answer from the KS War Room server, handed to the clock. serverTime is
+  // the worker's own clock in MILLISECONDS, taken inside the call (its clock reading
+  // in the handler, after the request arrived and before the answer left). So
+  // the instant lay inside the round trip and, with offset = serverNow -
+  // deviceNow,
+  //
+  //     offset  in  [ serverTime - endedAt , serverTime - startedAt ]
+  //
+  // BOTH edges are exact. Torn's own measure cannot do this: its times are
+  // whole seconds, so recordTornWholeSecondMs must keep a +1000 ms upper edge,
+  // and with that loose edge a device clock that jumped or drifted by less than
+  // a second was never caught and the page could show DIBS open up to about a
+  // second early. The exact interval is about as wide as the shortest round
+  // trip, so a jump or a drift larger than that is a contradiction and the
+  // measure starts over with the next board answer. The rules are those of
+  // recordTornWholeSecondMs otherwise: the round-trip limit, the drift margin on
+  // the kept bounds, and the newest sample winning outright on a contradiction.
+  // Torn's measure is not touched and the two are never mixed. Samples and
+  // resets are evidence only (the Clock line in Advanced).
+  function recordServerClockMs(serverTimeMs, startedAt, endedAt) {
+    if (!Number.isFinite(serverTimeMs) || serverTimeMs <= 0) return;
+    if (!Number.isFinite(startedAt) || !Number.isFinite(endedAt)) return;
+    if (endedAt < startedAt) return;
+    // A round trip this long says almost nothing and may itself be stale.
+    if (endedAt - startedAt > CONFIG.tornClockMaxRoundTripMs) return;
+
+    const low = serverTimeMs - endedAt;
+    const high = serverTimeMs - startedAt;
+
+    if (!Number.isFinite(serverClockLowMs) || !Number.isFinite(serverClockHighMs)) {
+      serverClockLowMs = low;
+      serverClockHighMs = high;
+      serverClockBoundsAt = endedAt;
+      serverClockSampleCount += 1;
+      return;
+    }
+
+    // Two crystals drift apart. Let the kept bounds relax by that much before
+    // intersecting, so a long session does not slowly contradict itself.
+    const age = Math.max(0, endedAt - serverClockBoundsAt);
+    const slack = (age * CONFIG.tornClockDriftPpm) / 1e6;
+    const nextLow = Math.max(low, serverClockLowMs - slack);
+    const nextHigh = Math.min(high, serverClockHighMs + slack);
+
+    if (nextLow > nextHigh) {
+      // Contradiction: the device clock stepped or ran off. The newest evidence
+      // wins outright. (Strictly greater: an exact interval can have no width
+      // when startedAt equals endedAt.)
+      serverClockLowMs = low;
+      serverClockHighMs = high;
+      serverClockBoundsAt = endedAt;
+      serverClockSampleCount += 1;
+      serverClockResetCount += 1;
+      return;
+    }
+
+    serverClockLowMs = nextLow;
+    serverClockHighMs = nextHigh;
+    serverClockBoundsAt = endedAt;
+    serverClockSampleCount += 1;
   }
 
-  // One answer from the KS War Room server, handed to the clock. serverTime is
-  // the worker's own clock in milliseconds at the moment it answered. It goes
-  // through the scripts' own recordTornClockOffset, as a timestamp in seconds
-  // with its fraction kept: the function then takes that instant as the start
-  // of its interval, so
-  //
-  //     offset  in  [ serverTime - endedAt , serverTime + 1000 - startedAt )
-  //
-  // The instant was current at some moment inside the round trip, so the low
-  // edge - the only edge the page counts on - is exact to the round trip, and
-  // the high edge is a second looser than it need be, which costs nothing.
+  // One answer from the KS War Room server, handed to the clock.
   function recordServerClock(startedAt, endedAt, serverTime) {
     if (!Number.isSafeInteger(serverTime) || serverTime < 1e11) return;
     dropMeasuresIfDeviceClockMoved();
-    swapClockMeasures();
-    try {
-      trackedRecordTornClockOffset({ startedAt: startedAt, endedAt: endedAt }, { timestamp: serverTime / 1000 });
-    } finally {
-      swapClockMeasures();
-    }
+    recordServerClockMs(serverTime, startedAt, endedAt);
     if (Number.isFinite(serverClockLowMs)) anchorDeviceClock();
   }
 
