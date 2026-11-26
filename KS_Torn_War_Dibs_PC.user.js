@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PC
 // @namespace    kingshade.torn
-// @version      2.2.2
+// @version      2.4.0
 // @downloadURL  https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Torn_War_Dibs_PC.user.js
 // @description  PC TEST: DIBS as a native roster column beside Torn's Attack cell; FF and Est from FFScouter's get-stats API.
@@ -16,6 +16,60 @@
 // @noframes
 // ==/UserScript==
 
+/*
+ * KS Torn War Dibs PC v2.4.0 (2026-11-24) -- Torn-style grey panel and DIBS cells (colours, borders and font family only)
+ * ONE MAIN CHANGE: the panel and the DIBS buttons use Torn's own dark grey
+ * colours (panel #333333, cells #222222, edges #444444, text #dddddd, green #82c91e, red #ee6666,
+ * yellow #e4bd58), Arial and 5 px corners instead of the blue/slate design and system-ui. Name,
+ * namespace, update address and every storage name are those of 2.3.0. War Dibs PC and PDA share one
+ * version number (2.4.0 for both); the same change is made in War Dibs PDA.
+ * FIXED
+ *   - (nothing was broken; this is a look change decided by the owner)
+ * CHANGED
+ *   - Colours, border colours and corner radius (5 px), box-shadow colours and the font family
+ *     (Arial) in the panel styles and in the DIBS cell styles. Plain buttons use Torn's grey gradient;
+ *     the DIBS that can be pressed is Torn's green (#55691a on #82c91e).
+ *   - Cell states: free = green text, locked/prewar/CHECKING = yellow text, TAKEN = red text, blocked and
+ *     (PC) prewar = grey text, all on #222222 with a #444444 edge.
+ * NOT CHANGED
+ *   - The DIBS rules (FF limits, 2:00 gate, low life 30%, online = free for all, hospital abroad, 48 h),
+ *     the layout (sizes, padding, positions, row heights), text sizes and weights, every text, class name
+ *     and storage name, the claim paths, keys, Share with KS, @connect and every request.
+ *     The FF colour scale and the FF circles are not touched. Three own colours stay as they were:
+ *     the pink low-life cell, the blue own DIBS (DIBBED/RELEASE) and the red QUEUED cell.
+ * KNOWN ISSUES
+ *   - Text size, clipped rows and the privacy text are left for a later version.
+ *   - None found in the PC styles; all text colours reach 4.5:1 against their surface.
+ * VERIFICATION
+ *   - Synthetic only (Chromium against stand-in Torn and KS services; before/after pictures). Not yet seen in
+ *     the real Torn page. See RAPPORT_2.4.0.txt.
+ *
+ * KS Torn War Dibs PC v2.3.0 (2026-11-24) -- Low-life DIBS limit raised from 20% to 30% life
+ * (owner decision 2026-11-24). ONE MAIN CHANGE: a target whose fresh life is 30% or less
+ * (it was 20% or less) may be DIBSed up to Fair Fight 4.50. Name, namespace, update address
+ * and every storage name are those of 2.2.2. War Dibs PC and PDA share one version number
+ * (2.3.0 for both); the same change is made in War Dibs PDA and in the War Room page.
+ * FIXED
+ *   - (nothing was broken; this is a rule change decided by the owner)
+ * CHANGED
+ *   - CONFIG.lowHpLifeMaxRatio 0.20 -> 0.30. The limit is still inclusive: exactly 30.0%
+ *     counts as low life, 30.1% does not. It is used in two places only, both read it from
+ *     CONFIG: lowHpForTarget (the decision and the pink LOW HP cell) and the fresh life read
+ *     just before a claim ("claim refused · low life could not be confirmed").
+ *   - The panel note now reads "Low life (≤30%): FF up to 4.50" (both the normal text and the
+ *     text shown before own-war confirmation).
+ * NOT CHANGED
+ *   - The FF limits (2.00-3.40, low life up to 4.50), the 2:00 gate, online = free for all,
+ *     hospital abroad, 48 h, the low-life queue (which targets are read, pace, budget, 15 s
+ *     validity), the clock, the claim paths, storage, keys, Share with KS, the colours, the
+ *     address, @connect and every request. The server has no life rule and is not touched.
+ *     The older changelog entries below keep "20%" as history.
+ * KNOWN ISSUES
+ *   - See 2.2.0 below.
+ * VERIFICATION
+ *   - Synthetic only (Chromium against stand-in Torn and KS servers). Not yet tried on a real
+ *     war page. See RAPPORT_2.3.0.txt.
+ *
 /*
  * KS Torn War Dibs PC v2.2.2 (2026-11-24) -- the "WSE: ..." status line is gone.
  * ONE MAIN CHANGE: the panel no longer shows a War Stuff Enhanced line. Name, namespace,
@@ -890,8 +944,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs PC",
-    version: "2.2.2",
-    instanceKey: "__ksTornWarDibsPcV222",
+    version: "2.4.0",
+    instanceKey: "__ksTornWarDibsPcV240",
     rowHostPrefix: "ks-twd-wse-row-v010-",
     rosterStyleId: "ks-twd-wse-roster-style-v010",
     panelId: "ks-twd-wse-panel",
@@ -921,7 +975,7 @@
     gateSeconds: 120,
     minFairFight: 2.0,
     maxFairFight: 3.4,
-    lowHpLifeMaxRatio: 0.20,
+    lowHpLifeMaxRatio: 0.30,
     lowHpMaxFairFight: 4.5,
     lifeMaxAgeMs: 15000,
     lifeReadMinIntervalMs: 10000,
@@ -6239,20 +6293,20 @@
     shadow.innerHTML = `
         <style>
           :host { display:block; width:100%; height:100%; margin:0; box-sizing:border-box; }
-          button { box-sizing:border-box; display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%; height:100%; min-width:0; min-height:0; margin:0; padding:1px 2px; border:1px solid #718096; border-radius:4px; background:#1a202c; color:#e2e8f0; font:800 9px/1.05 Arial,sans-serif; text-align:center; white-space:nowrap; touch-action:manipulation; overflow:hidden; cursor:pointer; -webkit-tap-highlight-color:transparent; }
-          button.ready { border-color:#38a169; background:#22543d; color:#f0fff4; }
-          button.free { border-color:#38b2ac; background:#234e52; color:#e6fffa; }
+          button { box-sizing:border-box; display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%; height:100%; min-width:0; min-height:0; margin:0; padding:1px 2px; border:1px solid #444444; border-radius:4px; background:#222222; color:#dddddd; font:800 9px/1.05 Arial,sans-serif; text-align:center; white-space:nowrap; touch-action:manipulation; overflow:hidden; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+          button.ready { border-color:#82c91e; background:#55691a; color:#ffffff; }
+          button.free { border-color:#444444; background:#222222; color:#82c91e; }
           button.lowhp { border-color:#d53f8c; background:#702459; color:#fff5f7; }
-          button.locked { border-color:#975a16; background:#744210; color:#fefcbf; }
-          button.prewar { border-color:#5f6875; background:#3b4048; color:#c5ccd5; filter:saturate(.35); }
+          button.locked { border-color:#444444; background:#222222; color:#e4bd58; }
+          button.prewar { border-color:#444444; background:#222222; color:#999999; filter:saturate(.35); }
           button.prewar:disabled { opacity:.72; }
-          button.prewar .sub { color:#b8c0ca; }
-          button.unknown { border-color:#9b2c2c; background:#742a2a; color:#fff5f5; }
-          button.unavailable { border-color:#4a5568; background:#2d3748; color:#cbd5e0; }
+          button.prewar .sub { color:#999999; }
+          button.unknown { border-color:#444444; background:#222222; color:#e4bd58; }
+          button.unavailable { border-color:#444444; background:#222222; color:#dddddd; }
           button.claimed { border-color:#3182ce; background:#2a4365; color:#ebf8ff; }
-          button.blocked { border-color:#4a5568; background:#171923; color:#718096; }
-          button.shared { border-color:#805ad5; background:#44337a; color:#faf5ff; }
-          button.working { border-color:#0ea5e9; background:#0c4a6e; color:#e0f2fe; }
+          button.blocked { border-color:#444444; background:#222222; color:#999999; }
+          button.shared { border-color:#444444; background:#222222; color:#ee6666; }
+          button.working { border-color:#999999; background:#222222; color:#ffffff; }
           button.cleanup { border-color:#dc2626; background:#7f1d1d; color:#fff1f2; }
           button:disabled { opacity:.55; cursor:default; }
           .label { display:block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -6816,39 +6870,39 @@
     shadow.innerHTML = `
       <style>
         :host { all:initial; display:block; position:fixed; z-index:2147483647; isolation:isolate; pointer-events:auto; box-sizing:border-box; overflow:visible; }
-        .panel { box-sizing:border-box; width:100%; padding:10px 12px 9px; border:1px solid rgba(100,116,139,.55); border-radius:8px; background:rgba(15,23,42,.96); color:#dbe5f1; font-family:system-ui,sans-serif; }
+        .panel { box-sizing:border-box; width:100%; padding:10px 12px 9px; border:1px solid #222222; border-radius:5px; background:#333333; color:#dddddd; font-family:Arial,sans-serif; }
         .top { display:flex; justify-content:space-between; align-items:center; gap:6px; min-width:0; }
-        .brand { font:850 13px/1.25 system-ui,sans-serif; color:#f8fafc; }
-        .version { font:750 10px/1.25 system-ui,sans-serif; color:#8fa0b4; }
+        .brand { font:850 13px/1.25 Arial,sans-serif; color:#ffffff; }
+        .version { font:750 10px/1.25 Arial,sans-serif; color:#c8c8c8; }
         .top-actions { display:flex; align-items:center; justify-content:flex-end; gap:5px; }
         .compact-brand,.compact-status { display:none; }
-        .compact-brand { color:#f8fafc; font:850 12px/1.25 system-ui,sans-serif; white-space:nowrap; }
-        .compact-status { min-width:0; align-items:center; gap:5px; color:#cbd5e1; font:800 11px/1.25 system-ui,sans-serif; white-space:nowrap; }
-        .panel-toggle { flex:0 0 auto; padding:4px 9px; border:1px solid rgba(148,163,184,.45); border-radius:5px; color:#dbe5f1; font:750 10px/1.25 system-ui,sans-serif; text-decoration:none !important; }
+        .compact-brand { color:#ffffff; font:850 12px/1.25 Arial,sans-serif; white-space:nowrap; }
+        .compact-status { min-width:0; align-items:center; gap:5px; color:#dddddd; font:800 11px/1.25 Arial,sans-serif; white-space:nowrap; }
+        .panel-toggle { flex:0 0 auto; padding:4px 9px; border:1px solid #222222; border-radius:5px; background:linear-gradient(#555555,#333333); color:#ffffff; font:750 10px/1.25 Arial,sans-serif; text-decoration:none !important; }
         .status-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:6px; margin-top:8px; }
-        .status-item { min-width:0; display:flex; align-items:center; gap:6px; padding:6px 8px; border:1px solid rgba(100,116,139,.25); border-radius:6px; background:rgba(2,6,23,.45); }
-        .dot { flex:0 0 7px; width:7px; height:7px; border-radius:50%; background:#64748b; }
-        [data-state='ready'] .dot,[data-state='online'] .dot { background:#22c55e; }
-        [data-state='upcoming'] .dot,[data-state='degraded'] .dot { background:#f59e0b; }
+        .status-item { min-width:0; display:flex; align-items:center; gap:6px; padding:6px 8px; border:1px solid #444444; border-radius:5px; background:#222222; }
+        .dot { flex:0 0 7px; width:7px; height:7px; border-radius:50%; background:#999999; }
+        [data-state='ready'] .dot,[data-state='online'] .dot { background:#82c91e; }
+        [data-state='upcoming'] .dot,[data-state='degraded'] .dot { background:#e4bd58; }
         [data-state='syncing'] .dot,[data-state='writing'] .dot { background:#38bdf8; }
-        [data-state='error'] .dot,[data-state='offline'] .dot,[data-state='unknown'] .dot,[data-state='ended'] .dot { background:#ef4444; }
-        .status { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#cbd5e1; font:700 11px/1.3 system-ui,sans-serif; }
+        [data-state='error'] .dot,[data-state='offline'] .dot,[data-state='unknown'] .dot,[data-state='ended'] .dot { background:#ee6666; }
+        .status { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#dddddd; font:700 11px/1.3 Arial,sans-serif; }
         .controls { display:flex; align-items:center; flex-wrap:wrap; gap:5px; margin-top:8px; }
-        button,a { border:0; padding:0; background:none; color:#94a3b8; font:700 11px/1.3 system-ui,sans-serif; text-decoration:none; cursor:pointer; }
-        button:hover,a:hover { color:#fff; text-decoration:underline; }
+        button,a { border:0; padding:0; background:none; color:#c8c8c8; font:700 11px/1.3 Arial,sans-serif; text-decoration:none; cursor:pointer; }
+        button:hover,a:hover { color:#ffffff; text-decoration:underline; }
         button:disabled { opacity:.4; cursor:default; text-decoration:none; }
-        .sep { color:#667386; font:700 11px/1 system-ui,sans-serif; }
-        .test-toggle { padding:3px 6px; border:1px solid #92400e; border-radius:5px; color:#fbbf24; text-decoration:none !important; }
-        .test-toggle.on { border-color:#f59e0b; background:#78350f; color:#fffbeb; }
+        .sep { color:#999999; font:700 11px/1 Arial,sans-serif; }
+        .test-toggle { padding:3px 6px; border:1px solid #e4bd58; border-radius:5px; color:#e4bd58; text-decoration:none !important; }
+        .test-toggle.on { border-color:#e4bd58; background:#e4bd58; color:#222222; }
         .test-toggle[hidden] { display:none; }
         .editor { display:none; align-items:center; gap:5px; margin-top:5px; }
         .editor.open { display:flex; }
-        .editor input { min-width:0; flex:1 1 180px; height:28px; box-sizing:border-box; border:1px solid #64748b; border-radius:5px; background:#111827; color:#f8fafc; padding:4px 7px; font:700 10px/1 system-ui,sans-serif; outline:none; }
-        .note { margin-top:7px; color:#8794a5; font:600 10px/1.4 system-ui,sans-serif; }
-        .api-policy { margin-top:9px; padding-top:8px; border-top:1px solid rgba(148,163,184,.18); color:#9aa9ba; font:600 9px/1.45 system-ui,sans-serif; }
-        .api-policy strong { color:#d8e1eb; font-weight:750; }
-        .api-policy a { color:#b9d7f2; text-decoration:underline; }
-        .warning { color:#fbbf24; }
+        .editor input { min-width:0; flex:1 1 180px; height:28px; box-sizing:border-box; border:1px solid #999999; border-radius:5px; background:#222222; color:#ffffff; padding:4px 7px; font:700 10px/1 Arial,sans-serif; outline:none; }
+        .note { margin-top:7px; color:#c8c8c8; font:600 10px/1.4 Arial,sans-serif; }
+        .api-policy { margin-top:9px; padding-top:8px; border-top:1px solid #444444; color:#c8c8c8; font:600 9px/1.45 Arial,sans-serif; }
+        .api-policy strong { color:#ffffff; font-weight:750; }
+        .api-policy a { color:#dddddd; text-decoration:underline; }
+        .warning { color:#e4bd58; }
         :host([data-ks-twd-panel-minimized='true']) .panel { padding:5px 7px; }
         :host([data-ks-twd-panel-minimized='true']) .brand,
         :host([data-ks-twd-panel-minimized='true']) .version,
@@ -6884,7 +6938,7 @@
         <div class="editor" data-role="torn-key-editor"><input data-role="torn-key-input" type="text" maxlength="16" autocomplete="off" placeholder="16-character Torn API key"><button type="button" data-role="torn-key-save">Save</button><button type="button" data-role="torn-key-cancel">Cancel</button></div>
         <div class="controls"><button type="button" data-role="share-toggle" aria-pressed="false">Share with KS: OFF</button><span class="sep">·</span><span data-role="share-status">Off · nothing is sent.</span></div>
         <div class="note">Share with KS: when on, KS War Dibs reads your own battle stats from Torn's API every 6 hours while your own war page is open and sends only the five numbers (strength, defense, speed, dexterity, total) to the KS War Room server. KS uses them only to turn Fair Fight results into stat estimates for the faction. They are never shown to anyone, inside or outside the faction. It does not change DIBS. Your key is sent to the KS War Room server only at sign-in, as for DIBS, and is never stored or logged there. Turning this off stops all sending.</div>
-        <div class="note" data-role="note">LIVE: Hospital ≤2:00 + FF 2.00–3.40. Online targets are free for all. Low life (≤20%): FF up to 4.50. First successful DIBS wins; claimant can RELEASE.</div>
+        <div class="note" data-role="note">LIVE: Hospital ≤2:00 + FF 2.00–3.40. Online targets are free for all. Low life (≤30%): FF up to 4.50. First successful DIBS wins; claimant can RELEASE.</div>
         <div class="api-policy">
           <strong>Torn API key:</strong> stored only locally, encrypted in this browser; sent to api.torn.com and, when signing in, to the KS War Room server, which asks Torn who the key belongs to and does not store or log it. Purpose: key-owner identity, own-faction Ranked War state, one opponent-members status batch while the roster is visible, and one final target basic check immediately before DIBS, and life of opponents who are about to leave hospital (low-life DIBS), and the names of your own faction's members for the DIBS column (one request at most every 5 minutes, kept in memory only). Required selections: faction → members,wars and user → basic, profile (and battlestats, for Share with KS only).
           <br>
@@ -7043,7 +7097,7 @@
     const note = $("note");
     if (note) note.textContent = rwState.phase === RW_PHASE.PREWAR
       ? `PREWAR: DIBS locked · ${formatRwRunway(rwState.runwaySeconds)} to start.`
-      : "LIVE requires own /wars confirmation. Hospital ≤2:00 + FF 2.00–3.40. Online targets are free for all. Low life (≤20%): FF up to 4.50. First successful DIBS wins; claimant can RELEASE.";
+      : "LIVE requires own /wars confirmation. Hospital ≤2:00 + FF 2.00–3.40. Online targets are free for all. Low life (≤30%): FF up to 4.50. First successful DIBS wins; claimant can RELEASE.";
   }
 
   async function saveSharedKeyFromEditor() {

@@ -928,7 +928,7 @@
           <dt>DIBS rules</dt>
           <dd>The same rules as KS Torn War Dibs PC and PDA, decided the same way. A target can be
             called only while the war is live, in hospital with 2:00 or less left, with a Fair
-            Fight of 2.00&ndash;3.40. A target with 20% life or less may be called up to Fair Fight
+            Fight of 2.00&ndash;3.40. A target with 30% life or less may be called up to Fair Fight
             4.50. A target that is online is free for all and cannot be called; when its activity
             is unknown or the reading is too old, DIBS applies as usual. One active DIBS per
             member; the first successful DIBS wins and the holder can release it. A target in a
@@ -1219,7 +1219,7 @@
       <span class="tid simreset-size" id="simResetIdleSize" aria-hidden="true"></span>
       <span class="tid simreset-size" id="simResetArmedSize" aria-hidden="true"></span>
     </div>
-    <p class="rulesline" id="rulesLine">LIVE: Hospital ≤2:00 + FF 2.00–3.40. Online targets are free for all. Low life (≤20%): FF up to 4.50. First successful DIBS wins; claimant can RELEASE.</p>
+    <p class="rulesline" id="rulesLine">LIVE: Hospital ≤2:00 + FF 2.00–3.40. Online targets are free for all. Low life (≤30%): FF up to 4.50. First successful DIBS wins; claimant can RELEASE.</p>
     <div class="stale" id="staleBar" hidden></div>
     <div class="stale" id="ffBar" hidden></div>
     <div id="targetHost"></div>
@@ -1398,7 +1398,7 @@
     gateSeconds: 120,
     minFairFight: 2.0,
     maxFairFight: 3.4,
-    lowHpLifeMaxRatio: 0.20,
+    lowHpLifeMaxRatio: 0.30,
     lowHpMaxFairFight: 4.5,
     lifeMaxAgeMs: 15000,
     lifeReadMinIntervalMs: 10000,
@@ -5020,7 +5020,7 @@
       } else if (reason === 'fair-fight-too-low' || reason === 'fair-fight-too-high') {
         out.note = 'Outside your FF range (' + ffRangeText() + ')';
         out.short = 'Outside FF range';
-        // Would 20% life or less have opened it? Asked of the rule function,
+        // Would the low-life limit have opened it? Asked of the rule function,
         // not worked out here.
         if (decisionFor(target, { ownTargetId: '', rwPhase: ctx.rwPhase }, true).state === TARGET_STATE.READY) {
           var seen = Life.fresh(target.id);

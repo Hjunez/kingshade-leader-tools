@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Torn War Dibs PDA
 // @namespace    kingshade.torn
-// @version      2.2.1
+// @version      2.4.0
 // @description  Roster-local PDA presentation with v1.5.145 authority and shared-claim safety.
 // @author       Kingshade
 // @match        https://www.torn.com/factions.php*
@@ -15,6 +15,60 @@
 // ==/UserScript==
 
 /*
+ * 2.4.0 (2026-11-24): Torn-style grey panel and DIBS cells (colours, borders and font family only)
+ * ONE MAIN CHANGE: the panel and the DIBS buttons use Torn's own dark grey
+ * colours (panel #333333, cells #222222, edges #444444, text #dddddd, green #82c91e, red #ee6666,
+ * yellow #e4bd58), Arial and 5 px corners instead of the blue/slate design and system-ui. Name,
+ * namespace, update address and every storage name are those of 2.3.0. War Dibs PC and PDA share one
+ * version number (2.4.0 for both); the same change is made in War Dibs PC.
+ * FIXED
+ *   - (nothing was broken; this is a look change decided by the owner)
+ * CHANGED
+ *   - Colours, border colours and corner radius (5 px), box-shadow colours and the font family
+ *     (Arial) in the panel styles and in the DIBS cell styles. Plain buttons use Torn's grey gradient;
+ *     the DIBS that can be pressed is Torn's green (#55691a on #82c91e).
+ *   - Cell states: free = green text, locked/prewar/CHECKING = yellow text, TAKEN = red text, blocked =
+ *     grey text, all on #222222 with a #444444 edge. Hospital, stats and landing marks follow the same colours.
+ * NOT CHANGED
+ *   - The DIBS rules (FF limits, 2:00 gate, low life 30%, online = free for all, hospital abroad, 48 h),
+ *     the layout (sizes, padding, positions, row heights), text sizes and weights, every text, class name
+ *     and storage name, the claim paths, keys, Share with KS, @connect and every request.
+ *     The FF colour scale and the FF circles are not touched. Three own colours stay as they were:
+ *     the pink low-life cell, the blue own DIBS (DIBBED/RELEASE) and the red QUEUED cell.
+ * KNOWN ISSUES
+ *   - Text size, clipped rows and the privacy text are left for a later version.
+ *   - The red #ee6666 of the Filters error text and the danger-zone label on the panel colour #333333 is 4.05:1
+ *     (Torn's own red on Torn's own surface; owner-approved exception).
+ * VERIFICATION
+ *   - Synthetic only (Chromium against stand-in Torn and KS services; before/after pictures). Not yet seen in
+ *     the real Torn page. See RAPPORT_2.4.0.txt.
+ *
+ * 2.3.0 (2026-11-24): Low-life DIBS limit raised from 20% to 30% life (owner decision
+ * 2026-11-24). ONE MAIN CHANGE: a target whose fresh life is 30% or less (it was 20% or
+ * less) may be DIBSed up to Fair Fight 4.50. Name, namespace, update address and every
+ * storage name are those of 2.2.1. War Dibs PC and PDA share one version number (2.3.0
+ * for both); the same change is made in War Dibs PC and in the War Room page.
+ * FIXED
+ *   - (nothing was broken; this is a rule change decided by the owner)
+ * CHANGED
+ *   - CONFIG.lowHpLifeMaxRatio 0.20 -> 0.30. The limit is still inclusive: exactly 30.0%
+ *     counts as low life, 30.1% does not. It is used in two places only, both read it from
+ *     CONFIG: lowHpForTarget (the decision and the pink LOW HP cell) and the fresh life read
+ *     just before a claim ("claim refused · low life could not be confirmed").
+ *   - The panel note now reads "Low life (≤30%): FF up to 4.50" (both the markup text and the
+ *     text the script sets on the note while it runs).
+ * NOT CHANGED
+ *   - The FF limits (2.00-3.40, low life up to 4.50), the 2:00 gate, online = free for all,
+ *     hospital abroad, 48 h, the low-life queue (which targets are read, pace, budget, 15 s
+ *     validity), the clock, the claim paths, storage, keys, Share with KS, the colours, the
+ *     address, @connect and every request. The server has no life rule and is not touched.
+ *     The older changelog entries below keep "20%" as history.
+ * KNOWN ISSUES
+ *   - See 2.2.0 below.
+ * VERIFICATION
+ *   - Synthetic only (Chromium 390 px with touch and a Node harness, against stand-in Torn,
+ *     KS and FFScouter services). Not yet tried on a phone. See RAPPORT_2.3.0.txt.
+ *
  * 2.2.1 (2026-11-23): the Torn key can be saved anywhere. ONE MAIN CHANGE. Name,
  * namespace, update address and every storage name are those of 2.2.0. This is
  * a PDA-only fix (War Dibs PC saves the key without a Torn check and is not
@@ -842,8 +896,8 @@
 
   const SCRIPT = Object.freeze({
     name: "KS Torn War Dibs",
-    version: "2.2.1",
-    instanceKey: "__ksTornWarDibsPdaV221Test",
+    version: "2.4.0",
+    instanceKey: "__ksTornWarDibsPdaV240Test",
     layerId: "ks-twd-pda-layer",
     rowHostPrefix: "ks-twd-pda-row-",
     panelId: "ks-twd-pda-panel",
@@ -892,7 +946,7 @@
     gateSeconds: 120,
     minFairFight: 2.0,
     maxFairFight: 3.4,
-    lowHpLifeMaxRatio: 0.20,
+    lowHpLifeMaxRatio: 0.30,
     lowHpMaxFairFight: 4.5,
     lifeMaxAgeMs: 15000,
     lifeReadMinIntervalMs: 10000,
@@ -6978,47 +7032,48 @@
         [data-role='row-host'] { position:absolute; display:block; overflow:visible; pointer-events:none; contain:layout style; font-family:Arial,sans-serif; }
         .presenter { position:absolute; display:none; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; pointer-events:none; text-align:center; }
         .presenter[hidden] { display:none !important; }
-        .hospital { border:1px solid rgba(15,23,42,.55); border-radius:4px; color:#fff; background:rgba(15,23,42,.88); text-shadow:0 1px 1px #000; font-weight:900; line-height:14px; }
+        .hospital { border:1px solid #ee6666; border-radius:4px; color:#ee6666; background:rgba(34,34,34,.92); text-shadow:0 1px 1px #000; font-weight:900; line-height:14px; }
         /* 1.5.191: a round FF circle and a small dark stats mark, as in KS Scout. */
         .ff { align-items:center; justify-content:center; padding:0; border:0; border-radius:50%; color:#fff; font:700 10px/1 Arial,sans-serif; font-variant-numeric:tabular-nums; }
-        .est { padding:0 2px; border:1px solid rgba(148,163,184,.45); border-radius:4px; color:#e2e8f0; background:rgba(15,23,42,.92); font:700 8px/10px Arial,sans-serif; text-overflow:clip; }
-        .hospital { color:#ffe2e2; background:rgba(127,29,29,.88); border-color:rgba(248,113,113,.75); font-size:7px; }
-        button[data-role='dibs'] { position:absolute; display:none; min-width:34px; min-height:30px; margin:0; padding:1px 2px; border:1px solid #718096; border-radius:6px; background:rgba(26,32,44,.96); color:#e2e8f0; font:900 8px/1.05 Arial,sans-serif; text-align:center; touch-action:manipulation; -webkit-tap-highlight-color:transparent; pointer-events:auto; overflow:hidden; }
+        .est { padding:0 2px; border:1px solid #444444; border-radius:4px; color:#dddddd; background:rgba(34,34,34,.92); font:700 8px/10px Arial,sans-serif; text-overflow:clip; }
+        .hospital { color:#ee6666; background:rgba(34,34,34,.92); border-color:#ee6666; font-size:7px; }
+        button[data-role='dibs'] { position:absolute; display:none; min-width:34px; min-height:30px; margin:0; padding:1px 2px; border:1px solid #444444; border-radius:5px; background:#222222; color:#dddddd; font:900 8px/1.05 Arial,sans-serif; text-align:center; touch-action:manipulation; -webkit-tap-highlight-color:transparent; pointer-events:auto; overflow:hidden; }
         button[data-role='dibs'] .label { display:block; font:900 12px/1.15 Arial,sans-serif; white-space:nowrap; }
         button[data-role='dibs'] .sub { display:block; font:700 8px/1.1 Arial,sans-serif; opacity:.85; white-space:nowrap; }
-        button[data-role='dibs'].ready { border-color:#38a169; background:#22543d; color:#f0fff4; }
-        button[data-role='dibs'].free { border-color:#38b2ac; background:#234e52; color:#e6fffa; }
+        button[data-role='dibs'].ready { border-color:#82c91e; background:#55691a; color:#ffffff; }
+        button[data-role='dibs'].free { border-color:#444444; background:#222222; color:#82c91e; }
         button[data-role='dibs'].lowhp { border-color:#d53f8c; background:#702459; color:#fff5f7; }
-        button[data-role='dibs'].locked,button[data-role='dibs'].prewar { border-color:#975a16; background:#744210; color:#fefcbf; }
-        button[data-role='dibs'].unknown { border-color:#9b2c2c; background:#742a2a; color:#fff5f5; }
-        button[data-role='dibs'].unavailable,button[data-role='dibs'].blocked { border-color:#4a5568; background:#171923; color:#94a3b8; }
+        button[data-role='dibs'].locked,button[data-role='dibs'].prewar { border-color:#444444; background:#222222; color:#e4bd58; }
+        button[data-role='dibs'].unknown { border-color:#444444; background:#222222; color:#e4bd58; }
+        button[data-role='dibs'].unavailable,button[data-role='dibs'].blocked { border-color:#444444; background:#222222; color:#dddddd; }
+        button[data-role='dibs'].blocked { color:#999999; }
         button[data-role='dibs'].claimed { border-color:#3182ce; background:#2a4365; color:#ebf8ff; }
-        button[data-role='dibs'].shared { border-color:#805ad5; background:#44337a; color:#faf5ff; }
-        button[data-role='dibs'].working { border-color:#0ea5e9; background:#0c4a6e; color:#e0f2fe; }
+        button[data-role='dibs'].shared { border-color:#444444; background:#222222; color:#ee6666; }
+        button[data-role='dibs'].working { border-color:#999999; background:#222222; color:#ffffff; }
         button[data-role='dibs'].cleanup { border-color:#dc2626; background:#7f1d1d; color:#fff1f2; }
         button[data-role='dibs']:disabled { opacity:.7; }
         .label,.sub { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .sub { margin-top:1px; font-size:6.5px; opacity:.94; }
-        .panel { box-sizing:border-box; width:100%; padding:7px 10px 6px; border:1px solid rgba(100,116,139,.55); border-radius:8px; background:rgba(15,23,42,.96); color:#dbe5f1; font-family:system-ui,sans-serif; pointer-events:auto; }
+        .panel { box-sizing:border-box; width:100%; padding:7px 10px 6px; border:1px solid #222222; border-radius:5px; background:#333333; color:#dddddd; font-family:Arial,sans-serif; pointer-events:auto; }
         .top { display:flex; justify-content:space-between; align-items:center; gap:8px; }
-        .brand { font:850 10px/1.2 system-ui,sans-serif; color:#f8fafc; }
-        .version { font:750 8px/1.2 system-ui,sans-serif; color:#8fa0b4; }
+        .brand { font:850 10px/1.2 Arial,sans-serif; color:#ffffff; }
+        .version { font:750 8px/1.2 Arial,sans-serif; color:#c8c8c8; }
         .status-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px; margin-top:5px; }
-        .status-item { min-width:0; display:flex; align-items:center; gap:4px; padding:4px 5px; border:1px solid rgba(100,116,139,.25); border-radius:5px; background:rgba(2,6,23,.45); }
-        .dot { flex:0 0 5px; width:5px; height:5px; border-radius:50%; background:#64748b; }
-        [data-state='ready'] .dot,[data-state='online'] .dot { background:#22c55e; }
-        [data-state='upcoming'] .dot,[data-state='degraded'] .dot { background:#f59e0b; }
+        .status-item { min-width:0; display:flex; align-items:center; gap:4px; padding:4px 5px; border:1px solid #444444; border-radius:5px; background:#222222; }
+        .dot { flex:0 0 5px; width:5px; height:5px; border-radius:50%; background:#999999; }
+        [data-state='ready'] .dot,[data-state='online'] .dot { background:#82c91e; }
+        [data-state='upcoming'] .dot,[data-state='degraded'] .dot { background:#e4bd58; }
         [data-state='syncing'] .dot,[data-state='writing'] .dot { background:#38bdf8; }
-        [data-state='error'] .dot,[data-state='offline'] .dot,[data-state='unknown'] .dot,[data-state='ended'] .dot { background:#ef4444; }
-        .status { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#cbd5e1; font:700 7.7px/1.2 system-ui,sans-serif; }
-        button,a { border:0; padding:0; background:none; color:#94a3b8; font:700 8.2px/1.2 system-ui,sans-serif; text-decoration:none; cursor:pointer; }
-        button:hover,a:hover { color:#fff; text-decoration:underline; }
+        [data-state='error'] .dot,[data-state='offline'] .dot,[data-state='unknown'] .dot,[data-state='ended'] .dot { background:#ee6666; }
+        .status { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#dddddd; font:700 7.7px/1.2 Arial,sans-serif; }
+        button,a { border:0; padding:0; background:none; color:#c8c8c8; font:700 8.2px/1.2 Arial,sans-serif; text-decoration:none; cursor:pointer; }
+        button:hover,a:hover { color:#ffffff; text-decoration:underline; }
         button:disabled { opacity:.4; cursor:default; text-decoration:none; }
         button[data-role='dibs']:hover { text-decoration:none; }
         /* 1.5.196: the landing window in the Status cell, shown only where the DIBS button
-           has nothing to say. Own colours (text #e2e8f0 on #1a202c, far above 4.5:1), a
+           has nothing to say. Own colours (text #dddddd on #222222, far above 4.5:1), a
            dashed edge so it never looks like a button, and no pointer events at all. */
-        .landing { padding:0 2px; border:1px dashed #718096; border-radius:6px; background:#1a202c; color:#e2e8f0; font-family:Arial,sans-serif; pointer-events:none; text-overflow:clip; }
+        .landing { padding:0 2px; border:1px dashed #999999; border-radius:5px; background:#222222; color:#dddddd; font-family:Arial,sans-serif; pointer-events:none; text-overflow:clip; }
         .landing .label { display:block; font:900 12px/1.15 Arial,sans-serif; white-space:nowrap; text-overflow:clip; }
         .landing .sub { display:block; margin-top:1px; font:700 8px/1.1 Arial,sans-serif; opacity:.85; white-space:nowrap; text-overflow:clip; }
         /* A phone finger is about 8mm wide. Eight 9.8px text links on one line
@@ -7026,30 +7081,30 @@
            target, wrapped, with a pressed state so a tap that lands is
            visible even when the action it triggers is refused. */
         .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(100px,1fr)); gap:6px; margin-top:7px; }
-        .controls > button,.controls > a { display:flex; align-items:center; justify-content:center; min-height:44px; padding:6px 7px; border:1px solid rgba(100,116,139,.45); border-radius:8px; background:rgba(2,6,23,.5); color:#cbd5e1; font:700 9.5px/1.15 system-ui,sans-serif; text-align:center; white-space:normal; overflow-wrap:anywhere; touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
-        .controls > button:hover,.controls > a:hover { color:#fff; text-decoration:none; border-color:rgba(148,163,184,.8); }
-        .controls > button:active,.controls > a:active { background:rgba(56,189,248,.22); border-color:#38bdf8; color:#f8fafc; }
-        .controls > [aria-disabled='true'] { color:#8494a8; border-style:dashed; border-color:rgba(100,116,139,.5); background:rgba(2,6,23,.3); }
+        .controls > button,.controls > a { display:flex; align-items:center; justify-content:center; min-height:44px; padding:6px 7px; border:1px solid #222222; border-radius:5px; background:linear-gradient(#555555,#333333); color:#ffffff; font:700 9.5px/1.15 Arial,sans-serif; text-align:center; white-space:normal; overflow-wrap:anywhere; touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
+        .controls > button:hover,.controls > a:hover { color:#ffffff; text-decoration:none; border-color:#999999; }
+        .controls > button:active,.controls > a:active { background:#55691a; border-color:#82c91e; color:#ffffff; }
+        .controls > [aria-disabled='true'] { color:#999999; border-style:dashed; border-color:#444444; background:#222222; }
         .controls > button:disabled { opacity:.4; cursor:default; }
         .editor { display:none; flex-wrap:wrap; align-items:center; gap:5px; margin-top:5px; }
         .editor.open { display:flex; }
         /* Key setup A: the lock's reason, directly below the editor controls. */
-        .credential-lock-message { flex:0 0 100%; color:#fbbf24; font:600 10px/1.35 system-ui,sans-serif; white-space:normal; overflow-wrap:anywhere; }
+        .credential-lock-message { flex:0 0 100%; color:#e4bd58; font:600 10px/1.35 Arial,sans-serif; white-space:normal; overflow-wrap:anywhere; }
         /* Key setup B: Save and Cancel at both key fields are at least
            44 x 44 px. Only these four touch targets change size. */
         button[data-role='key-save'],button[data-role='key-cancel'],button[data-role='torn-key-save'],button[data-role='torn-key-cancel'] { min-width:44px; min-height:44px; flex-shrink:0; padding:6px; touch-action:manipulation; }
-        .editor input { min-width:0; flex:1 1 180px; height:28px; box-sizing:border-box; border:1px solid #64748b; border-radius:5px; background:#111827; color:#f8fafc; padding:4px 7px; font:700 10px/1 system-ui,sans-serif; outline:none; }
+        .editor input { min-width:0; flex:1 1 180px; height:28px; box-sizing:border-box; border:1px solid #999999; border-radius:5px; background:#222222; color:#ffffff; padding:4px 7px; font:700 10px/1 Arial,sans-serif; outline:none; }
         /* B: keep the larger targets inside the existing breakout grid row. */
         .controls > .editor { margin-top:0; }
         /* B: with two 44px buttons in the same cell the field was left
            22px wide. Full width puts the field on its own row; .editor
            wraps, so Save and Cancel sit below it and keep their size. */
         .controls > .editor input { flex-basis:100%; }
-        .note { margin-top:4px; color:#8794a5; font:600 7.2px/1.3 system-ui,sans-serif; }
-        .api-policy { margin-top:6px; padding-top:6px; border-top:1px solid rgba(148,163,184,.18); color:#9aa9ba; font:600 7px/1.35 system-ui,sans-serif; }
-        .api-policy strong { color:#d8e1eb; font-weight:750; }
-        .api-policy a { color:#b9d7f2; text-decoration:underline; }
-        .warning { color:#fbbf24; }
+        .note { margin-top:4px; color:#c8c8c8; font:600 7.2px/1.3 Arial,sans-serif; }
+        .api-policy { margin-top:6px; padding-top:6px; border-top:1px solid #444444; color:#c8c8c8; font:600 7px/1.35 Arial,sans-serif; }
+        .api-policy strong { color:#ffffff; font-weight:750; }
+        .api-policy a { color:#dddddd; text-decoration:underline; }
+        .warning { color:#e4bd58; }
         /* 1.5.173: normal mode is the brand row, one summary row and Settings.
            Everything else lives here, collapsed by default, a class toggle only. */
         .summary-item { margin-top:5px; }
@@ -7057,34 +7112,34 @@
         .settings-panel.open { display:block; }
         .about-panel { display:none; margin-top:5px; }
         .about-panel.open { display:block; }
-        .danger-zone { margin-top:6px; padding-top:6px; border-top:1px solid rgba(148,163,184,.18); }
-        .danger-zone-label { color:#fca5a5; font:750 7px/1.3 system-ui,sans-serif; text-transform:uppercase; letter-spacing:.04em; margin-bottom:5px; }
+        .danger-zone { margin-top:6px; padding-top:6px; border-top:1px solid #444444; }
+        .danger-zone-label { color:#ee6666; font:750 7px/1.3 Arial,sans-serif; text-transform:uppercase; letter-spacing:.04em; margin-bottom:5px; }
         /* 1.5.195: the Filters section. Own colours: text 4.5:1 and edges 3:1 or more
-           against the panel (#0f172a), controls at least 40 px high. Hidden unless open. */
-        .filters-panel { display:none; margin-top:7px; padding-top:2px; border-top:1px solid rgba(148,163,184,.18); color:#e2e8f0; font:600 12px/1.3 system-ui,sans-serif; }
+           against the panel (#333333), controls at least 40 px high. Hidden unless open. */
+        .filters-panel { display:none; margin-top:7px; padding-top:2px; border-top:1px solid #444444; color:#dddddd; font:600 12px/1.3 Arial,sans-serif; }
         .filters-panel.open { display:block; }
         .filters-panel .frow { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; margin-top:8px; }
-        .filters-panel .fname { flex:0 0 78px; color:#f1f5f9; font:750 12px/1.2 system-ui,sans-serif; }
-        .filters-panel .fsel { flex:1 1 130px; min-width:0; height:40px; box-sizing:border-box; padding:0 8px; border:1px solid #8aa0b8; border-radius:6px; background:#111827; color:#f8fafc; font:700 13px/1 system-ui,sans-serif; }
-        .filters-panel .fbtn { display:inline-flex; align-items:center; justify-content:center; min-width:44px; min-height:40px; padding:0 12px; border:1px solid #8aa0b8; border-radius:6px; background:rgba(2,6,23,.5); color:#e2e8f0; font:700 13px/1.1 system-ui,sans-serif; touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
-        .filters-panel .fbtn:hover { color:#fff; text-decoration:none; }
-        .filters-panel .fbtn:active { background:rgba(56,189,248,.22); border-color:#38bdf8; }
-        .filters-panel .fbtn:disabled { opacity:1; color:#8e9db0; border-style:dashed; }
-        .filters-panel .fcheck { display:inline-flex; align-items:center; gap:7px; min-height:40px; padding:0 6px 0 0; color:#e2e8f0; font:650 13px/1.2 system-ui,sans-serif; cursor:pointer; }
-        .filters-panel .fcheck input { appearance:none; -webkit-appearance:none; flex:0 0 22px; width:22px; height:22px; margin:0; box-sizing:border-box; border:2px solid #8aa0b8; border-radius:5px; background:#111827; display:inline-grid; place-content:center; }
-        .filters-panel .fcheck input:checked { background:#2563eb; border-color:#bfdbfe; }
+        .filters-panel .fname { flex:0 0 78px; color:#ffffff; font:750 12px/1.2 Arial,sans-serif; }
+        .filters-panel .fsel { flex:1 1 130px; min-width:0; height:40px; box-sizing:border-box; padding:0 8px; border:1px solid #999999; border-radius:5px; background:#222222; color:#ffffff; font:700 13px/1 Arial,sans-serif; }
+        .filters-panel .fbtn { display:inline-flex; align-items:center; justify-content:center; min-width:44px; min-height:40px; padding:0 12px; border:1px solid #999999; border-radius:5px; background:#222222; color:#ffffff; font:700 13px/1.1 Arial,sans-serif; touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
+        .filters-panel .fbtn:hover { color:#ffffff; text-decoration:none; }
+        .filters-panel .fbtn:active { background:#55691a; border-color:#82c91e; }
+        .filters-panel .fbtn:disabled { opacity:1; color:#999999; border-style:dashed; }
+        .filters-panel .fcheck { display:inline-flex; align-items:center; gap:7px; min-height:40px; padding:0 6px 0 0; color:#dddddd; font:650 13px/1.2 Arial,sans-serif; cursor:pointer; }
+        .filters-panel .fcheck input { appearance:none; -webkit-appearance:none; flex:0 0 22px; width:22px; height:22px; margin:0; box-sizing:border-box; border:2px solid #999999; border-radius:5px; background:#222222; display:inline-grid; place-content:center; }
+        .filters-panel .fcheck input:checked { background:#55691a; border-color:#82c91e; }
         .filters-panel .fcheck input:checked::after { content:""; width:6px; height:11px; margin-top:-2px; border:solid #fff; border-width:0 2px 2px 0; transform:rotate(45deg); }
         .filters-panel .frange { display:flex; flex:1 1 200px; gap:8px; min-width:0; }
         .filters-panel .ffield { flex:1 1 0; min-width:0; display:flex; flex-direction:column; }
-        .filters-panel .finput { width:100%; min-width:0; height:40px; box-sizing:border-box; padding:0 8px; border:1px solid #8aa0b8; border-radius:6px; background:#111827; color:#f8fafc; font:700 13px/1 system-ui,sans-serif; outline:none; }
-        .filters-panel .finput::placeholder { color:#a3b1c2; opacity:1; font-weight:600; }
-        .filters-panel .finput:focus { border-color:#7dd3fc; }
-        .filters-panel .finput.bad { border-color:#f87171; box-shadow:0 0 0 1px #f87171; }
-        .filters-panel .ferr { margin-top:2px; color:#fca5a5; font:700 11px/1.2 system-ui,sans-serif; }
+        .filters-panel .finput { width:100%; min-width:0; height:40px; box-sizing:border-box; padding:0 8px; border:1px solid #999999; border-radius:5px; background:#222222; color:#ffffff; font:700 13px/1 Arial,sans-serif; outline:none; }
+        .filters-panel .finput::placeholder { color:#999999; opacity:1; font-weight:600; }
+        .filters-panel .finput:focus { border-color:#82c91e; }
+        .filters-panel .finput.bad { border-color:#ee6666; box-shadow:0 0 0 1px #ee6666; }
+        .filters-panel .ferr { margin-top:2px; color:#ee6666; font:700 11px/1.2 Arial,sans-serif; }
         .filters-panel .ferr[hidden] { display:none; }
         .filters-panel .fsum { justify-content:space-between; }
-        .filters-panel .fshow { color:#f1f5f9; font:750 13px/1.2 system-ui,sans-serif; }
-        .filters-panel .fnote { margin-top:6px; color:#b4c0d0; font:650 12px/1.35 system-ui,sans-serif; }
+        .filters-panel .fshow { color:#ffffff; font:750 13px/1.2 Arial,sans-serif; }
+        .filters-panel .fnote { margin-top:6px; color:#c8c8c8; font:650 12px/1.35 Arial,sans-serif; }
         .filters-panel .fnote[hidden] { display:none; }
         @media (max-width:520px) { .status-grid { grid-template-columns:1fr; } .panel { padding-left:8px; padding-right:8px; } .filters-panel .fname { flex-basis:100%; } }
       </style>
@@ -7175,7 +7230,7 @@
             <div class="status-item"><span class="status" data-role="share-status">Off · nothing is sent.</span></div>
             <div class="note share-note">When on, KS War Dibs reads your own battle stats from Torn's API every 6 hours while your own war page is open and sends only the five numbers (strength, defense, speed, dexterity, total) to the KS War Room server. KS uses them only to turn Fair Fight results into stat estimates for the faction. They are never shown to anyone, inside or outside the faction. It does not change DIBS. Your key is sent to the KS War Room server only at sign-in, as for DIBS, and is never stored or logged there. Turning this off stops all sending.</div>
           </div>
-          <div class="note" data-role="note">LIVE: Hospital ≤2:00 + FF 2.00–3.40. Online targets are free for all. Low life (≤20%): FF up to 4.50. First successful DIBS wins; claimant can RELEASE.</div>
+          <div class="note" data-role="note">LIVE: Hospital ≤2:00 + FF 2.00–3.40. Online targets are free for all. Low life (≤30%): FF up to 4.50. First successful DIBS wins; claimant can RELEASE.</div>
           <div class="controls"><button type="button" data-role="about-toggle" aria-expanded="false">About — data &amp; privacy</button></div>
           <div class="about-panel" data-role="about-panel">
             <div class="api-policy">
@@ -9135,7 +9190,7 @@
     if ($("torn-key-cancel")) $("torn-key-cancel").disabled = tornChangeBusy;
     const note = $("note");
     if (note) {
-      note.textContent = "LIVE: Hospital ≤2:00 + FF 2.00–3.40. Online targets are free for all. Low life (≤20%): FF up to 4.50. First successful DIBS wins; claimant can RELEASE.";
+      note.textContent = "LIVE: Hospital ≤2:00 + FF 2.00–3.40. Online targets are free for all. Low life (≤30%): FF up to 4.50. First successful DIBS wins; claimant can RELEASE.";
     }
 
     // Relocate the FF/Torn key controls: broken out into the always-visible
