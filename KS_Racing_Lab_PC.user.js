@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KS Racing Lab
 // @namespace    https://github.com/Hjunez/kingshade-leader-tools
-// @version      0.7.3
+// @version      0.7.4
 // @description  Shows the value of each racing part for the car and track you choose, on the Parts & Modifications page of Torn. Display only on the page. Two optional switches, both off until you switch them on: share your own races and cars with Kingshade, and show real race results from the KS server on Change car.
 // @author       Kingshade [4295791]
 // @updateURL    https://raw.githubusercontent.com/Hjunez/kingshade-leader-tools/main/KS_Racing_Lab_PC.user.js
@@ -3015,7 +3015,7 @@ const KSRL = (function () {
 })();
 
 /* ksrl-parts BEGIN - pure logic, no DOM, runs in Node the same way as the engine */
-const SCRIPT_VERSION = '0.7.3';
+const SCRIPT_VERSION = '0.7.4';
 // Claude choice 2026-11-09 (TUNE-LIMIT 2026-10-08: ratio/turbo differences of 0.2-0.5 % do not show in real races). Change only on owner decision.
 const EQUAL_WITHIN_PCT = 0.5;
 // 0.6.0: open for every member of faction 48039. Kingshade, Cheese and Schosetta are let in, with no extra call; anyone else is checked once with
@@ -4626,7 +4626,7 @@ function createSharer(deps) {
 }
 /* ksrl-share END */
 
-/* ksrl-views BEGIN - 0.7.0: real results per track from the KS server, on Change car. OFF by default (its own switch). No DOM and no globals here: the transports
+/* ksrl-views BEGIN - 0.7.0: real results per track from the KS server, read on Change car, Your Cars and Parts (0.7.4). OFF by default (its own switch). No DOM and no globals here: the transports
    (the KS server object, the clock, the key, the visibility of the page) are handed in, so the tests drive it in Node. It sends the Torn key to the KS server once
    per login (the same login as the sharing switch, createKsServer) and nothing else; it reads three tables with POST /views/get. */
 const VIEWS_SWITCH_STORE = 'ksrl.v1.viewsSwitch';
@@ -4634,7 +4634,7 @@ const VIEWS_CACHE_STORE = 'ksrl.v1.views';
 const VIEWS_DETAILS_STORE = 'ksrl.v1.viewsDetails';
 const SHARE_NOTICE_STORE = 'ksrl.v1.shareNotice';
 const VIEW_NAMES = ['car_track_stats', 'track_models', 'faction_builds'];
-const VIEWS_INTERVAL_MS = 15 * 60 * 1000;          // at most one read per 15 minutes while Change car is open and visible
+const VIEWS_INTERVAL_MS = 15 * 60 * 1000;          // at most one read per 15 minutes while a racing page with a panel is open and visible (0.7.4: Change car, Your Cars, Parts)
 const VIEWS_STALE_S = 43200;                       // a view older than 12 h is shown as STALE, in grey
 const VIEWS_MAX_GROUPS = 5000;
 const VIEWS_TITLE = 'Show KS faction race data';
@@ -4645,7 +4645,7 @@ const VIEWS_DISCLOSURE = [
   'Off until you switch it on. While it is off the script does not contact the KS server for this.',
   'What it does: logs in to racing.kingshadeprotocol.com (the KS Racing Lab server run by Kingshade) and reads three tables: your own race results per car and track, lap times per car model and track from all drivers in races that KS members shared (no names or IDs), and the parts and lap times of builds that KS members shared (no names or IDs).',
   'Your Torn API key is used once per login to prove who you are. The server does not store it. Nothing else is sent.',
-  'When: only on the Change car page while it is open and visible, at most every 15 minutes.',
+  "When: only on Torn's racing pages while one is open and visible, at most every 15 minutes.",
 ];
 
 function viewsEmptySwitch() { return { schemaVersion: 1, enabled: false, stop: null }; }
@@ -5105,6 +5105,21 @@ function decisionData(snap, nowMs, base) {
     out.reasons[name] = reason;
   }
   return out;
+}
+
+// 0.7.4: fail-closed. The answer "best car" rests on the view track_models; when decisionData could not use it (off, not loaded, not published, unreadable, STALE) the panels
+// SAY so instead of writing a conclusion from the model as if it were a fact. -> the end of the sentence ("is too old (STALE)", "is off", "could not be read" ...) or null when the view is there and fresh.
+function factionDataIssue(reasons) {
+  const r = reasons && typeof reasons.track_models === 'string' ? reasons.track_models : null;
+  if (r === null) return null;
+  const lead = 'KS faction data ';
+  return r.indexOf(lead) === 0 ? r.slice(lead.length) : 'cannot be used (' + r + ')';
+}
+const FACTION_NOTE_PARTS_END = ' — the best car per track cannot be checked yet.';
+const FACTION_NOTE_CARS_END = ' — Best is from the model only.';
+function factionDataNote(reasons, end) {
+  const issue = factionDataIssue(reasons);
+  return issue === null ? null : 'KS faction race data ' + issue + end;
 }
 
 function decidePctText(p, chase) { return Math.max(0, p).toFixed(chase ? 2 : 1) + ' %'; }
@@ -5569,6 +5584,7 @@ const CSS = [
   '.ksrl-ans-track{font-size:13px;margin:3px 0}',
   '.ksrl-ans-parts{font-size:14px;font-weight:bold;color:#fff}',
   '.ksrl-ans-note{margin:4px 0;font-size:12px;color:#b8b8b8}',
+  '.ksrl-facnote{margin:2px 0 6px;font-size:13px;line-height:1.4;color:#a8a8a8}',
   '.ksrl-data-toggle{display:block;margin:2px 0 4px;padding:6px 8px 6px 0;min-height:28px;border:0;background:none;font:12px Arial,Helvetica,sans-serif;color:#7ea6d6;text-decoration:underline;text-align:left;cursor:pointer}',
   '.ksrl-data[hidden]{display:none !important}',
   '.ksrl-chase[hidden]{display:none !important}',
@@ -5959,13 +5975,16 @@ function boot() {
 
   // 0.7.2: the tracks worth building THIS car for: those where its car model is BEST (decideTrack: same call, same data, same switches as Your Cars) or where it IS your best car.
   // Alphabetical. When the class or the decision cannot be had the whole list is kept (fail-open here: a list is no decision).
+  // 0.7.4: also sets ui.factionNote, the sentence that says the KS faction data could not be used (null when it could): an empty list is then NOT written as a fact (see render).
   function partsRelevantTracks(d) {
     const all = carTracksSorted(d.tracks);
+    st.ui.factionNote = null;
     try {
       const mine = d.enlistedItems.filter(function (e) { return e.is_removed !== true; });
       const allowed = classesFrom(readCarsPage(document).playerClass || highestClass(mine));
       if (allowed.length === 0) return all;
       const dd = decisionData(views.snapshot(), deps.now(), { racingCars: d.racingCars, upgrades: d.upgrades, partsClass: d.partsClass });
+      st.ui.factionNote = factionDataNote(dd.reasons, FACTION_NOTE_PARTS_END);
       const chase = settingsReadChase(gm);
       return all.filter(function (tr) {
         const dec = decideTrack(tr, null, allowed, d.enlistedItems, dd, chase);
@@ -6047,7 +6066,8 @@ function boot() {
         const catText = av ? categoriesRowText(categoryList(av, readPartsPage(document))) : null;
         if (catText) dRow(catText);
       }
-      if (ui.trackId === null) body.appendChild(row('Your ' + d.car.car_item_name + ' is not the best car on any track — there is no track to build it for.'));
+      // 0.7.4: "not the best car on any track" is a conclusion; it is only written when the KS faction data it rests on was there and fresh
+      if (ui.trackId === null) body.appendChild(row(ui.factionNote || 'Your ' + d.car.car_item_name + ' is not the best car on any track — there is no track to build it for.'));
       else {
         if (sentence) body.appendChild(ansEl(sentence.segs, 'ksrl-ans ksrl-ans-parts'));
         else body.appendChild(firstRow);
@@ -6198,6 +6218,7 @@ function boot() {
     head.appendChild(h('span', 'ksrl-ver', 'v' + SCRIPT_VERSION));
     const body = h('div', 'ksrl-body');
     const answer = opts && opts.answer ? opts.answer : null;
+    if (answer && opts.note) body.appendChild(h('div', 'ksrl-facnote', opts.note));      // 0.7.4: the KS faction data could not be used: said first, in grey (not one of the answer rows)
     const det = makeDetails();
     let data = null;       // the rows of the data (with an answer); without one the rows ARE the answer or the problem and stay outside
     const dataEls = [];
@@ -6284,7 +6305,7 @@ function boot() {
     if (sn.last) return { kind: sn.last.kind, text: sn.last.text, link: sn.last.link };
     if (sn.running) return { kind: 'CHECKING', text: 'CHECKING: reading from the KS server …', link: null };
     if (sn.cache) return { kind: 'OK', text: 'On. Last read ' + shareAgoText(Math.max(0, deps.now() - sn.cache.fetchedAt)) + '.', link: null };
-    return { kind: 'WAITING', text: 'On. Reads when Change car is open and visible.', link: null };
+    return { kind: 'WAITING', text: 'On. Reads when a racing page is open and visible.', link: null };
   }
   function viewsSection(alertSlot) {
     const box = h('div', 'ksrl-share ksrl-views');
@@ -6341,6 +6362,14 @@ function boot() {
     carsSyncBadges();
   }
   views.onChange(carsRedraw);
+  // 0.7.4: the same for the Parts panel: the track list is worked out again from what the reader has now. Never starts a read (render does not), so no read can start the next.
+  function partsRedraw() {
+    const ui = st.ui;
+    if (!st.panel || !st.panel.isConnected || ui.kind !== 'ready' || !ui.data || ui.changingKey) return;
+    ui.viewTrackId = undefined;     // a new track is picked from the new list (partsPickTrack)
+    render();
+  }
+  views.onChange(partsRedraw);
 
   function carsAgeText(ms) {
     const n = Math.floor(ms / 60000);
@@ -6385,7 +6414,13 @@ function boot() {
     carsRenderRows(['Reading your cars \u2026'], []);
   }
 
+  // 0.7.4: Your Cars reads the KS views too (as Change car did), so the panel never works from views nobody read. A redraw by the reader (redrawOnly) never starts a read.
   function carsFinish(page, data, ageMs, redrawOnly) {
+    carsDraw(page, data, ageMs);
+    if (!redrawOnly) viewsTick(false);
+  }
+
+  function carsDraw(page, data, ageMs) {
     const c = st.cars;
     c.last = { data: data };
     const footers = [CARS_NOTE, 'Your cars: Torn API data from ' + carsAgeText(ageMs) + ' ago'];
@@ -6421,8 +6456,7 @@ function boot() {
         const pageCars = page.cars.map(function (x) { return data.cars.find(function (e) { return e.id === x.id; }); }).filter(function (e) { return !!e; });
         real = realResultsRows(views.snapshot(), { trackId: track.id, trackTitle: track.title, laps: lm ? Number(lm[1]) : null, cars: pageCars }, deps.now());
       } catch (e) { real = [{ cls: 'ksrl-rr ksrl-rr-warn', segs: [{ t: 'UNKNOWN: the real results could not be shown.' }] }]; }
-      carsRenderRows(carsChangeSegs(rank, inRace ? inRace.id : null), footers, { answer: answer, real: real, withSwitch: true });
-      if (!redrawOnly) viewsTick(false);
+      carsRenderRows(carsChangeSegs(rank, inRace ? inRace.id : null), footers, { answer: answer, real: real, withSwitch: true, note: factionDataNote(dd.reasons, FACTION_NOTE_CARS_END) });
     } else {
       c.state = { badges: null };
       // 0.7.1: one row per track (the best car and yours); the sources of each row are under "Show the data". The table with the "next:" row is gone.
@@ -6430,7 +6464,7 @@ function boot() {
       let decs = null;
       try { decs = carTracksSorted(data.tracks).map(function (tr) { return decideTrack(tr, null, allowed, data.cars, dd, chase); }); } catch (e) { decs = null; }
       if (decs === null) carsRenderRows(['UNKNOWN: the answers for the tracks could not be worked out.'], footers, { withSwitch: true });
-      else carsRenderRows(listSourceLines(decs), footers, { answer: listAnswerRows(decs), withSwitch: true });
+      else carsRenderRows(listSourceLines(decs), footers, { answer: listAnswerRows(decs), withSwitch: true, note: factionDataNote(dd.reasons, FACTION_NOTE_CARS_END) });
     }
   }
 
@@ -6642,6 +6676,7 @@ function boot() {
     ui.kind = 'ready';
     ui.trackId = null; ui.view = null; ui.viewTrackId = undefined;      // the track and the view are chosen in render (partsPickTrack)
     render();
+    viewsTick(false);         // 0.7.4: the KS faction data is read where it is used (same switch, same 15 minute rule as on Change car); the reader redraws the panel when it is done (partsRedraw)
   }
 
   function signature(page) {
@@ -6761,6 +6796,7 @@ if (typeof document === 'undefined') {
     viewsDetailsOpen: viewsDetailsOpen, shareNoticePending: shareNoticePending, shareNoticeAck: shareNoticeAck,
     VIEWS_SWITCH_STORE: VIEWS_SWITCH_STORE, VIEWS_CACHE_STORE: VIEWS_CACHE_STORE, VIEWS_DETAILS_STORE: VIEWS_DETAILS_STORE, SHARE_NOTICE_STORE: SHARE_NOTICE_STORE, VIEW_NAMES: VIEW_NAMES, VIEWS_INTERVAL_MS: VIEWS_INTERVAL_MS, VIEWS_STALE_S: VIEWS_STALE_S,
     VIEWS_TITLE: VIEWS_TITLE, VIEWS_DISCLOSURE: VIEWS_DISCLOSURE, VIEWS_NOT_ALLOWED_TEXT: VIEWS_NOT_ALLOWED_TEXT, VIEWS_OFF_ROW: VIEWS_OFF_ROW, SHARE_NOTICE_TEXT: SHARE_NOTICE_TEXT,
+    factionDataNote: factionDataNote, FACTION_NOTE_PARTS_END: FACTION_NOTE_PARTS_END, FACTION_NOTE_CARS_END: FACTION_NOTE_CARS_END,
     decideTrack: decideTrack, decisionData: decisionData, classesFrom: classesFrom, highestClass: highestClass, settingsReadChase: settingsReadChase, settingsSetChase: settingsSetChase,
     changeAnswerRows: changeAnswerRows, listAnswerRows: listAnswerRows, listSourceLines: listSourceLines, partsAnswer: partsAnswer, SETTINGS_STORE: SETTINGS_STORE,
     CHASE_TITLE: CHASE_TITLE, CHASE_TEXT: CHASE_TEXT, CODE_LEGEND: CODE_LEGEND, decideSlower: decideSlower,
